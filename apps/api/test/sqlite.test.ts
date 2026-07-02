@@ -2697,6 +2697,20 @@ describe("createSqliteRepository", () => {
         ownerId: "C1"
       }
     ]);
+    expect(
+      await repository.getActivityBindingsByActivityIds(["A_CALL_NO_STAT"])
+    ).toEqual([
+      {
+        activityId: "A_CALL_NO_STAT",
+        ownerTypeId: "2",
+        ownerId: "D1"
+      },
+      {
+        activityId: "A_CALL_NO_STAT",
+        ownerTypeId: "3",
+        ownerId: "C1"
+      }
+    ]);
     expect(await repository.getAllActivityDeadlineChanges()).toEqual([
       {
         id: "A1:2026-04-08T12:00:00.000Z",

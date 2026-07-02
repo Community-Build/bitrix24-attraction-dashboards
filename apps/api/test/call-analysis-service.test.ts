@@ -185,6 +185,7 @@ function createRepository() {
         completedTime: "2026-06-09T09:05:18.000Z"
       }
     ]),
+    getActivityBindingsByActivityIds: vi.fn().mockResolvedValue([]),
     getStageAtDealTime: vi.fn().mockResolvedValue({
       id: "23841:C10:QUALIFICATION:2026-06-09T08:30:00.000Z",
       ownerId: "23841",
@@ -365,6 +366,72 @@ describe("createCallAnalysisService", () => {
     expect(repository.getCallById).toHaveBeenCalledWith("CALL1");
     expect(repository.getDealsByIds).toHaveBeenCalledWith(["23841"]);
     expect(repository.startCallAnalysisRun).not.toHaveBeenCalled();
+  });
+
+  it("resolves the deal from activity bindings when the call and activity are contact-owned", async () => {
+    const repository = createRepository();
+    repository.getCallById.mockResolvedValue({
+      id: "CALL1",
+      crmActivityId: "A1",
+      portalUserId: "7",
+      callType: "1",
+      callStartDate: "2026-06-09T09:00:00.000Z",
+      callDurationSeconds: 318,
+      crmEntityType: "CONTACT",
+      crmEntityId: "901",
+      callFailedCode: null
+    });
+    repository.getActivitiesByIds.mockResolvedValue([
+      {
+        id: "A1",
+        ownerTypeId: "3",
+        ownerId: "901",
+        typeId: "2",
+        providerId: "VOXIMPLANT_CALL",
+        responsibleId: "7",
+        createdTime: "2026-06-09T09:00:01.000Z",
+        deadline: null,
+        lastUpdated: "2026-06-09T09:05:18.000Z",
+        completed: true,
+        completedTime: "2026-06-09T09:05:18.000Z"
+      }
+    ]);
+    repository.getActivityBindingsByActivityIds.mockResolvedValue([
+      {
+        activityId: "A1",
+        ownerTypeId: "3",
+        ownerId: "901"
+      },
+      {
+        activityId: "A1",
+        ownerTypeId: "2",
+        ownerId: "23841"
+      }
+    ]);
+    const service = createCallAnalysisService({
+      repository,
+      client: {
+        listCallRecordingActivitiesByIds: vi.fn(),
+        getDiskFile: vi.fn()
+      },
+      provider: {
+        analyzeCall: vi.fn()
+      },
+      downloadRecording: vi.fn()
+    });
+
+    await expect(service.getCallAnalysisContext("CALL1")).resolves.toMatchObject({
+      attributes: {
+        callId: "CALL1",
+        crmActivityId: "A1",
+        dealId: "23841",
+        contactId: "901"
+      }
+    });
+    expect(repository.getActivityBindingsByActivityIds).toHaveBeenCalledWith([
+      "A1"
+    ]);
+    expect(repository.getDealsByIds).toHaveBeenCalledWith(["23841"]);
   });
 
   it("skips automatic full analysis when the dialogue gate finds no conversation with high confidence", async () => {
