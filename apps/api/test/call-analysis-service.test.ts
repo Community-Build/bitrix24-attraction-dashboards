@@ -434,6 +434,94 @@ describe("createCallAnalysisService", () => {
     expect(repository.getDealsByIds).toHaveBeenCalledWith(["23841"]);
   });
 
+  it("tries the next activity deal binding when the first bound deal is missing locally", async () => {
+    const repository = createRepository();
+    repository.getCallById.mockResolvedValue({
+      id: "CALL1",
+      crmActivityId: "A1",
+      portalUserId: "7",
+      callType: "1",
+      callStartDate: "2026-06-09T09:00:00.000Z",
+      callDurationSeconds: 318,
+      crmEntityType: "CONTACT",
+      crmEntityId: "901",
+      callFailedCode: null
+    });
+    repository.getActivitiesByIds.mockResolvedValue([
+      {
+        id: "A1",
+        ownerTypeId: "3",
+        ownerId: "901",
+        typeId: "2",
+        providerId: "VOXIMPLANT_CALL",
+        responsibleId: "7",
+        createdTime: "2026-06-09T09:00:01.000Z",
+        deadline: null,
+        lastUpdated: "2026-06-09T09:05:18.000Z",
+        completed: true,
+        completedTime: "2026-06-09T09:05:18.000Z"
+      }
+    ]);
+    repository.getActivityBindingsByActivityIds.mockResolvedValue([
+      {
+        activityId: "A1",
+        ownerTypeId: "2",
+        ownerId: "99999"
+      },
+      {
+        activityId: "A1",
+        ownerTypeId: "2",
+        ownerId: "23841"
+      }
+    ]);
+    repository.getDealsByIds.mockImplementation(async (dealIds: string[]) =>
+      dealIds.includes("23841")
+        ? [
+            {
+              id: "23841",
+              contactId: "901",
+              leadId: null,
+              categoryId: "10",
+              stageId: "C10:NEW",
+              stageSemanticId: "P",
+              opportunity: null,
+              assignedById: "7",
+              sourceId: "LEADGEN_US",
+              qualityValue: null,
+              dateCreate: "2026-06-01T09:00:00.000Z",
+              dateModify: "2026-06-09T09:30:00.000Z",
+              dateClosed: null,
+              utmSource: null,
+              utmMedium: null,
+              utmCampaign: null,
+              utmContent: null,
+              utmTerm: null
+            }
+          ]
+        : []
+    );
+    const service = createCallAnalysisService({
+      repository,
+      client: {
+        listCallRecordingActivitiesByIds: vi.fn(),
+        getDiskFile: vi.fn()
+      },
+      provider: {
+        analyzeCall: vi.fn()
+      },
+      downloadRecording: vi.fn()
+    });
+
+    await expect(service.getCallAnalysisContext("CALL1")).resolves.toMatchObject({
+      attributes: {
+        dealId: "23841",
+        contactId: "901",
+        dealCurrentStageId: "C10:NEW"
+      }
+    });
+    expect(repository.getDealsByIds).toHaveBeenCalledWith(["99999", "23841"]);
+  });
+
   it("skips automatic full analysis when the dialogue gate finds no conversation with high confidence", async () => {
     const repository = createRepository();
     const downloadRecording = vi.fn().mockResolvedValue({
