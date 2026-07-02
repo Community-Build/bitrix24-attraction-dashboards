@@ -111,6 +111,8 @@ export interface CreateCallAnalysisServiceInput {
   provider: CallAnalysisProvider;
   dialogueGate?: DialogueGateProvider;
   dialogueGateSkipConfidenceThreshold?: number;
+  recordingRetryDelaysMs?: number[];
+  sleep?: (delayMs: number) => Promise<void>;
   downloadRecording?: DownloadCallRecording;
   fetch?: FetchLike;
   recordingDownloadTimeoutMs?: number;
@@ -122,6 +124,12 @@ export interface CreateCallAnalysisServiceInput {
 const DEFAULT_RECORDING_DOWNLOAD_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_RECORDING_BYTES = 50 * 1024 * 1024;
 const DEFAULT_DIALOGUE_GATE_SKIP_CONFIDENCE = 0.7;
+const DEFAULT_AUTOMATIC_RECORDING_RETRY_DELAYS_MS = [
+  0,
+  30_000,
+  90_000,
+  180_000
+];
 const MAX_ANALYSIS_ERROR_MESSAGE_LENGTH = 1_000;
 
 export class CallAnalysisServiceError extends Error {
@@ -139,6 +147,9 @@ export class CallAnalysisServiceError extends Error {
 export function createCallAnalysisService(input: CreateCallAnalysisServiceInput) {
   const now = input.now ?? (() => new Date());
   const idGenerator = input.idGenerator ?? randomUUID;
+  const sleep = input.sleep ?? defaultSleep;
+  const automaticRecordingRetryDelaysMs =
+    input.recordingRetryDelaysMs ?? DEFAULT_AUTOMATIC_RECORDING_RETRY_DELAYS_MS;
   const downloadRecording =
     input.downloadRecording ??
     createDefaultRecordingDownloader(input.fetch ?? fetch, {
@@ -200,11 +211,15 @@ export function createCallAnalysisService(input: CreateCallAnalysisServiceInput)
       }
 
       let preparedRecording: PreparedCallRecording | null = null;
+      const recordingRetryDelaysMs =
+        triggerMode === "automatic" ? automaticRecordingRetryDelaysMs : [0];
       if (triggerMode === "automatic" && input.dialogueGate) {
         preparedRecording = await resolveAndDownloadCallRecording({
           client: input.client,
           call,
-          downloadRecording
+          downloadRecording,
+          retryDelaysMs: recordingRetryDelaysMs,
+          sleep
         });
         const dialogueGateResult = await input.dialogueGate.analyzeDialogue({
           callId: call.id,
@@ -256,7 +271,9 @@ export function createCallAnalysisService(input: CreateCallAnalysisServiceInput)
           (await resolveAndDownloadCallRecording({
             client: input.client,
             call,
-            downloadRecording
+            downloadRecording,
+            retryDelaysMs: recordingRetryDelaysMs,
+            sleep
           }));
         const providerResult = await input.provider.analyzeCall({
           callId: call.id,
@@ -317,28 +334,36 @@ async function resolveAndDownloadCallRecording(input: {
   client: CallRecordingResolverClient;
   call: CallSnapshot;
   downloadRecording: DownloadCallRecording;
+  retryDelaysMs: number[];
+  sleep: (delayMs: number) => Promise<void>;
 }): Promise<PreparedCallRecording> {
-  const recording = await resolveCallRecordingDownload({
-    client: input.client,
-    call: {
-      ID: input.call.id,
-      CRM_ACTIVITY_ID: input.call.crmActivityId,
-      CALL_RECORD_URL: null
+  for (const delayMs of input.retryDelaysMs) {
+    if (delayMs > 0) {
+      await input.sleep(delayMs);
     }
-  });
 
-  if (!recording) {
-    throw new CallAnalysisServiceError(
-      "CALL_RECORDING_NOT_FOUND",
-      "Call recording is not available for analysis.",
-      404
-    );
+    const recording = await resolveCallRecordingDownload({
+      client: input.client,
+      call: {
+        ID: input.call.id,
+        CRM_ACTIVITY_ID: input.call.crmActivityId,
+        CALL_RECORD_URL: null
+      }
+    });
+
+    if (recording) {
+      return {
+        recording,
+        downloaded: await input.downloadRecording(recording.url)
+      };
+    }
   }
 
-  return {
-    recording,
-    downloaded: await input.downloadRecording(recording.url)
-  };
+  throw new CallAnalysisServiceError(
+    "CALL_RECORDING_NOT_FOUND",
+    "Call recording is not available for analysis.",
+    404
+  );
 }
 
 function shouldSkipAfterDialogueGate(
@@ -718,6 +743,12 @@ function assertRecordingSize(byteLength: number, maxBytes: number) {
       413
     );
   }
+}
+
+function defaultSleep(delayMs: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, delayMs);
+  });
 }
 
 function parseContentLength(value: string | null) {

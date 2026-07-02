@@ -585,6 +585,73 @@ describe("createCallAnalysisService", () => {
     expect(repository.saveCallAnalysisResult).not.toHaveBeenCalled();
   });
 
+  it("waits for a delayed recording before running automatic dialogue gate analysis", async () => {
+    const repository = createRepository();
+    const client = {
+      listCallRecordingActivitiesByIds: vi
+        .fn()
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            ID: "A1",
+            OWNER_TYPE_ID: "2",
+            OWNER_ID: "23841",
+            PROVIDER_ID: "VOXIMPLANT_CALL",
+            FILES: [{ id: 338028, name: "call.mp3" }],
+            STORAGE_ELEMENT_IDS: []
+          }
+        ]),
+      getDiskFile: vi.fn().mockResolvedValue({
+        ID: "338028",
+        DOWNLOAD_URL: "https://bitrix.example/disk/download/call.mp3"
+      })
+    };
+    const dialogueGate = {
+      analyzeDialogue: vi.fn().mockResolvedValue({
+        ...noDialogueGateResult,
+        gate: {
+          ...noDialogueGateResult.gate,
+          hasDialogue: true,
+          evidenceType: "human_dialogue",
+          confidence: 0.91
+        }
+      } satisfies DialogueGateResult)
+    };
+    const provider = {
+      analyzeCall: vi.fn().mockResolvedValue(providerResult)
+    };
+    const sleep = vi.fn().mockResolvedValue(undefined);
+    const service = createCallAnalysisService({
+      repository,
+      client,
+      provider,
+      dialogueGate,
+      downloadRecording: vi.fn().mockResolvedValue({
+        audio: Buffer.from("mp3-bytes"),
+        audioFormat: "mp3"
+      }),
+      recordingRetryDelaysMs: [0, 25],
+      sleep,
+      idGenerator: () => "run-delayed-recording",
+      now: () => new Date("2026-06-09T12:00:00.000Z")
+    });
+
+    await expect(
+      service.analyzeCall({
+        callId: "CALL1",
+        triggerMode: "automatic"
+      })
+    ).resolves.toMatchObject({
+      status: "ready",
+      reusedExistingResult: false
+    });
+
+    expect(client.listCallRecordingActivitiesByIds).toHaveBeenCalledTimes(2);
+    expect(sleep).toHaveBeenCalledWith(25);
+    expect(dialogueGate.analyzeDialogue).toHaveBeenCalledTimes(1);
+    expect(provider.analyzeCall).toHaveBeenCalledTimes(1);
+  });
+
   it("continues automatic full analysis when the dialogue gate confidence is low", async () => {
     const repository = createRepository();
     const lowConfidenceGateResult: DialogueGateResult = {

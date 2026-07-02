@@ -13,6 +13,7 @@ import type {
   QueueAutomaticCallAnalysisInput,
   QueueAutomaticCallAnalysisResult
 } from "./call-enrichment-orchestrator.js";
+import { safeErrorMessage } from "./safe-error-message.js";
 
 export interface CallEnrichmentLiveIntakeClient {
   listCalls(input: { activityIds?: string[] }): Promise<CallRow[]>;
@@ -69,11 +70,22 @@ export function createCallEnrichmentLiveIntakeQueue(
     }
 
     if (input.client.listActivityBindings && input.repository.upsertActivityBindings) {
-      const bindingRows = await input.client.listActivityBindings([activityId]);
-      if (bindingRows.length > 0) {
-        await input.repository.upsertActivityBindings(
-          bindingRows.map(mapActivityBindingRow)
-        );
+      try {
+        const bindingRows = await input.client.listActivityBindings([activityId]);
+        if (bindingRows.length > 0) {
+          await input.repository.upsertActivityBindings(
+            bindingRows.map(mapActivityBindingRow)
+          );
+        }
+      } catch (error) {
+        if (!isMissingActivityBindingError(error)) {
+          throw error;
+        }
+
+        console.warn("call_enrichment.activity_bindings.skipped", {
+          activityId,
+          error: safeErrorMessage(error)
+        });
       }
     }
 
@@ -184,4 +196,15 @@ function defaultSleep(delayMs: number) {
   return new Promise<void>((resolve) => {
     setTimeout(resolve, delayMs);
   });
+}
+
+function isMissingActivityBindingError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.message.includes("crm.activity.binding.list") &&
+    /(NOT_FOUND|not found|Элемент не найден)/i.test(error.message)
+  );
 }

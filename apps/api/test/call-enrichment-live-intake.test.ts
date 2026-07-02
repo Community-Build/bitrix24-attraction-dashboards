@@ -128,4 +128,92 @@ describe("createCallEnrichmentLiveIntakeQueue", () => {
       occurredAt: "2026-07-02T15:48:32+03:00"
     });
   });
+
+  it("continues when live activity bindings are temporarily missing in Bitrix", async () => {
+    const consoleWarn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const client = {
+      listCalls: vi.fn().mockResolvedValue([
+        {
+          ID: "228610",
+          CALL_ID: "externalCall.abc",
+          CRM_ACTIVITY_ID: "525646",
+          PORTAL_USER_ID: "13020",
+          CALL_TYPE: "1",
+          CALL_START_DATE: "2026-07-02T15:48:32+03:00",
+          CALL_DURATION: "58",
+          CRM_ENTITY_TYPE: "DEAL",
+          CRM_ENTITY_ID: "158724",
+          CALL_FAILED_CODE: "200"
+        }
+      ]),
+      listActivitiesByIds: vi.fn().mockResolvedValue([
+        {
+          ID: "525646",
+          OWNER_TYPE_ID: "2",
+          OWNER_ID: "158724",
+          TYPE_ID: "2",
+          PROVIDER_ID: "VOXIMPLANT_CALL",
+          RESPONSIBLE_ID: "13020",
+          CREATED: "2026-07-02T15:48:32+03:00",
+          DEADLINE: null,
+          LAST_UPDATED: "2026-07-02T15:49:37+03:00",
+          COMPLETED: "Y",
+          COMPLETED_DATE: "2026-07-02T15:49:37+03:00"
+        }
+      ]),
+      listActivityBindings: vi
+        .fn()
+        .mockRejectedValue(
+          new Error(
+            "Bitrix24 crm.activity.binding.list failed at [url] Элемент не найден"
+          )
+        )
+    };
+    const repository = {
+      upsertCalls: vi.fn().mockResolvedValue(1),
+      upsertActivities: vi.fn().mockResolvedValue(1),
+      upsertActivityBindings: vi.fn().mockResolvedValue(0)
+    };
+    const queueAutomaticCallAnalysis = vi.fn().mockResolvedValue({
+      status: "queued",
+      callId: "228610"
+    });
+    const queue = createCallEnrichmentLiveIntakeQueue({
+      client,
+      repository,
+      queueAutomaticCallAnalysis
+    });
+
+    await expect(
+      queue.queueAutomaticCallAnalysis({
+        callId: "externalCall.abc",
+        activityId: "525646",
+        dealId: null,
+        contactId: null,
+        managerId: "13020",
+        durationSeconds: 58,
+        occurredAt: "2026-07-02T15:48:32+03:00"
+      })
+    ).resolves.toEqual({
+      status: "queued",
+      callId: "228610"
+    });
+
+    expect(repository.upsertCalls).toHaveBeenCalledTimes(1);
+    expect(repository.upsertActivities).toHaveBeenCalledTimes(1);
+    expect(repository.upsertActivityBindings).not.toHaveBeenCalled();
+    expect(queueAutomaticCallAnalysis).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callId: "228610",
+        activityId: "525646",
+        managerId: "13020"
+      })
+    );
+    expect(consoleWarn).toHaveBeenCalledWith(
+      "call_enrichment.activity_bindings.skipped",
+      expect.objectContaining({
+        activityId: "525646"
+      })
+    );
+  });
 });
