@@ -1289,6 +1289,7 @@ describe("createApp", () => {
   it("rejects Telegram enrichment callbacks without the configured shared secret", async () => {
     const approvalService = {
       sendProposalBatch: vi.fn().mockResolvedValue(undefined),
+      sendFollowUpNote: vi.fn().mockResolvedValue(undefined),
       handleCallback: vi.fn().mockResolvedValue(undefined)
     };
     const app = createTestApp(
@@ -1335,6 +1336,7 @@ describe("createApp", () => {
   it("passes Telegram enrichment callback payloads with native Telegram fields to the approval service", async () => {
     const approvalService = {
       sendProposalBatch: vi.fn().mockResolvedValue(undefined),
+      sendFollowUpNote: vi.fn().mockResolvedValue(undefined),
       handleCallback: vi.fn().mockResolvedValue(undefined)
     };
     const app = createTestApp(

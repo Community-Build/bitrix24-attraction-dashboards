@@ -6,6 +6,7 @@ import { createPasswordAuthService, createSqliteAuthStore } from "./server/auth.
 import { createApp } from "./server/app.js";
 import { createCallAnalysisService } from "./server/call-analysis-service.js";
 import { buildCallEnrichmentDiff } from "./server/call-enrichment-diff.js";
+import { buildCallEnrichmentFollowUpNote } from "./server/call-enrichment-follow-up-note.js";
 import { createCallEnrichmentLiveIntakeQueue } from "./server/call-enrichment-live-intake.js";
 import { createCallEnrichmentOrchestrator } from "./server/call-enrichment-orchestrator.js";
 import { createCallEnrichmentWritebackService } from "./server/call-enrichment-writeback.js";
@@ -266,9 +267,14 @@ const callEnrichmentOrchestrator =
                 deal: dealValues
               }
             });
+            const followUpNote =
+              diff.proposals.length === 0
+                ? buildCallEnrichmentFollowUpNote(analysis)
+                : null;
 
             return {
               ...diff,
+              followUpNote,
               metadata: {
                 extraction: {
                   model: extraction.model,

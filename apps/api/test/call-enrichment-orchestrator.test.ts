@@ -494,6 +494,70 @@ describe("createCallEnrichmentOrchestrator", () => {
     );
   });
 
+  it("sends an informational follow-up note when enrichment has no CRM proposals", async () => {
+    const repository = createRepository();
+    const followUpNote = {
+      classificationType: "scheduling",
+      summary: "Клиент согласовал созвон на завтра в обед.",
+      nextStep: "Перезвонить завтра в обед и отправить Zoom."
+    };
+    const pipeline = {
+      runAfterCallAnalysis: vi.fn().mockResolvedValue({
+        proposals: [],
+        skipped: [],
+        followUpNote
+      })
+    } satisfies CallEnrichmentPipeline;
+    const proposalNotifier = {
+      sendProposalBatch: vi.fn().mockResolvedValue(undefined),
+      sendFollowUpNote: vi.fn().mockResolvedValue(undefined)
+    };
+    const orchestrator = createCallEnrichmentOrchestrator({
+      analysis: createAnalysis(),
+      repository,
+      enrichmentPipeline: pipeline,
+      proposalNotifier,
+      idGenerator: vi.fn().mockReturnValueOnce("batch-1").mockReturnValueOnce("event-1"),
+      now: () => new Date("2026-06-09T12:00:00.000Z")
+    });
+
+    await expect(orchestrator.queueAutomaticCallAnalysis(callEvent)).resolves.toEqual({
+      status: "skipped",
+      callId: "CALL1",
+      reason: "NO_MATERIAL_UPDATES"
+    });
+    expect(repository.createEnrichmentProposalBatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "batch-1",
+        status: "failed",
+        proposals: []
+      })
+    );
+    expect(repository.appendEnrichmentProposalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "event-1",
+        batchId: "batch-1",
+        action: "batch.skipped",
+        reason: "NO_MATERIAL_UPDATES",
+        metadata: expect.objectContaining({
+          followUpNote
+        })
+      })
+    );
+    expect(proposalNotifier.sendProposalBatch).not.toHaveBeenCalled();
+    expect(proposalNotifier.sendFollowUpNote).toHaveBeenCalledWith({
+      batch: {
+        id: "batch-1",
+        callId: "CALL1",
+        dealId: "23841",
+        contactId: "901",
+        managerId: "7",
+        expiresAt: "2026-06-11T12:00:00.000Z"
+      },
+      note: followUpNote
+    });
+  });
+
   it("converts service active-run errors to duplicate queue responses", async () => {
     const analysis = createAnalysis({
       analyzeCall: vi.fn().mockRejectedValue(
