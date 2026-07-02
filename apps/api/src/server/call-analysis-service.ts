@@ -362,10 +362,20 @@ async function buildCallAnalysisContext(input: {
     input.repository.getStageCatalog()
   ]);
   const activity = activities[0] ?? null;
-  const dealId = resolveDealId(input.call, activity, activityBindings);
-  const deal = dealId
-    ? (await input.repository.getDealsByIds([dealId]))[0] ?? null
-    : null;
+  const dealIdCandidates = resolveDealIdCandidates(
+    input.call,
+    activity,
+    activityBindings
+  );
+  const deals =
+    dealIdCandidates.length > 0
+      ? await input.repository.getDealsByIds(dealIdCandidates)
+      : [];
+  const dealById = new Map(deals.map((nextDeal) => [nextDeal.id, nextDeal]));
+  const deal = dealIdCandidates
+    .map((dealId) => dealById.get(dealId) ?? null)
+    .find((nextDeal): nextDeal is DealSnapshot => nextDeal !== null) ?? null;
+  const dealId = deal?.id ?? dealIdCandidates[0] ?? null;
   const stageAtCall =
     dealId !== null
       ? await input.repository.getStageAtDealTime(dealId, input.call.callStartDate)
@@ -484,23 +494,30 @@ function truncateAnalysisErrorMessage(value: string) {
   return `${normalized.slice(0, MAX_ANALYSIS_ERROR_MESSAGE_LENGTH - 1)}…`;
 }
 
-function resolveDealId(
+function resolveDealIdCandidates(
   call: CallSnapshot,
   activity: ActivitySnapshot | null,
   activityBindings: ActivityBindingSnapshot[]
 ) {
-  if (isDealEntity(call.crmEntityType) && normalizeId(call.crmEntityId)) {
-    return normalizeId(call.crmEntityId);
+  const candidates: string[] = [];
+  const callDealId = normalizeId(call.crmEntityId);
+  if (isDealEntity(call.crmEntityType) && callDealId) {
+    candidates.push(callDealId);
   }
 
-  if (activity?.ownerTypeId === "2") {
-    return normalizeId(activity.ownerId);
+  const activityDealId = normalizeId(activity?.ownerId);
+  if (activity?.ownerTypeId === "2" && activityDealId) {
+    candidates.push(activityDealId);
   }
 
-  return (
-    activityBindings.find((binding) => binding.ownerTypeId === "2")?.ownerId ??
-    null
-  );
+  for (const binding of activityBindings) {
+    const bindingDealId = normalizeId(binding.ownerId);
+    if (binding.ownerTypeId === "2" && bindingDealId) {
+      candidates.push(bindingDealId);
+    }
+  }
+
+  return Array.from(new Set(candidates));
 }
 
 function resolveManagerId(
