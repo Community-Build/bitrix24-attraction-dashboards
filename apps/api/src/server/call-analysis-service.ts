@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import type {
   ActivitySnapshot,
+  ActivityBindingSnapshot,
   CallSnapshot,
   DealSnapshot,
   ManagerDirectoryEntry,
@@ -66,6 +67,7 @@ export interface CallAnalysisRepository
     | "getCallById"
     | "getDealsByIds"
     | "getActivitiesByIds"
+    | "getActivityBindingsByActivityIds"
     | "getStageAtDealTime"
     | "getManagerDirectory"
     | "getStageCatalog"
@@ -351,13 +353,16 @@ async function buildCallAnalysisContext(input: {
   call: CallSnapshot;
 }) {
   const activityId = normalizeId(input.call.crmActivityId);
-  const [activities, managers, stageCatalog] = await Promise.all([
+  const [activities, activityBindings, managers, stageCatalog] = await Promise.all([
     activityId ? input.repository.getActivitiesByIds([activityId]) : Promise.resolve([]),
+    activityId
+      ? input.repository.getActivityBindingsByActivityIds([activityId])
+      : Promise.resolve([]),
     input.repository.getManagerDirectory(),
     input.repository.getStageCatalog()
   ]);
   const activity = activities[0] ?? null;
-  const dealId = resolveDealId(input.call, activity);
+  const dealId = resolveDealId(input.call, activity, activityBindings);
   const deal = dealId
     ? (await input.repository.getDealsByIds([dealId]))[0] ?? null
     : null;
@@ -479,7 +484,11 @@ function truncateAnalysisErrorMessage(value: string) {
   return `${normalized.slice(0, MAX_ANALYSIS_ERROR_MESSAGE_LENGTH - 1)}…`;
 }
 
-function resolveDealId(call: CallSnapshot, activity: ActivitySnapshot | null) {
+function resolveDealId(
+  call: CallSnapshot,
+  activity: ActivitySnapshot | null,
+  activityBindings: ActivityBindingSnapshot[]
+) {
   if (isDealEntity(call.crmEntityType) && normalizeId(call.crmEntityId)) {
     return normalizeId(call.crmEntityId);
   }
@@ -488,7 +497,10 @@ function resolveDealId(call: CallSnapshot, activity: ActivitySnapshot | null) {
     return normalizeId(activity.ownerId);
   }
 
-  return null;
+  return (
+    activityBindings.find((binding) => binding.ownerTypeId === "2")?.ownerId ??
+    null
+  );
 }
 
 function resolveManagerId(

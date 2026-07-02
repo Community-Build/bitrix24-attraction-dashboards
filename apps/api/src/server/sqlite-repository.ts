@@ -485,6 +485,9 @@ export interface SqliteRepository {
   ): Promise<string[]>;
   getDealsByIds(dealIds: string[]): Promise<DealSnapshot[]>;
   getActivitiesByIds(activityIds: string[]): Promise<ActivitySnapshot[]>;
+  getActivityBindingsByActivityIds(
+    activityIds: string[]
+  ): Promise<ActivityBindingSnapshot[]>;
   getCallById(callId: string): Promise<CallSnapshot | null>;
   getStageAtDealTime(
     dealId: string,
@@ -4712,6 +4715,27 @@ export function createSqliteRepository(
           ORDER BY activity_id ASC, owner_type_id ASC, owner_id ASC`
         )
         .all() as ActivityBindingSnapshot[];
+    },
+
+    async getActivityBindingsByActivityIds(activityIds) {
+      if (activityIds.length === 0) {
+        return [];
+      }
+
+      return chunkValues(Array.from(new Set(activityIds))).flatMap((chunk) => {
+        const placeholders = chunk.map(() => "?").join(", ");
+        return database
+          .prepare(
+            `SELECT
+              activity_id AS activityId,
+              owner_type_id AS ownerTypeId,
+              owner_id AS ownerId
+            FROM activity_binding_snapshots
+            WHERE activity_id IN (${placeholders})
+            ORDER BY activity_id ASC, owner_type_id ASC, owner_id ASC`
+          )
+          .all(...chunk) as ActivityBindingSnapshot[];
+      });
     },
 
     async getAllActivityDeadlineChanges() {
