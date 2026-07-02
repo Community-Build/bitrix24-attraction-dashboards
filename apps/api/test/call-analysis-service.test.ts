@@ -716,6 +716,78 @@ describe("createCallAnalysisService", () => {
     );
   });
 
+  it("continues automatic full analysis when the dialogue gate returns invalid JSON", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const repository = createRepository();
+    const dialogueGate = {
+      analyzeDialogue: vi
+        .fn()
+        .mockRejectedValue(
+          new Error("OpenRouter message content is not valid JSON")
+        )
+    };
+    const provider = {
+      analyzeCall: vi.fn().mockResolvedValue(providerResult)
+    };
+    const downloadRecording = vi.fn().mockResolvedValue({
+      audio: Buffer.from("mp3-bytes"),
+      audioFormat: "mp3"
+    });
+    const service = createCallAnalysisService({
+      repository,
+      client: {
+        listCallRecordingActivitiesByIds: vi.fn().mockResolvedValue([
+          {
+            ID: "A1",
+            OWNER_TYPE_ID: "2",
+            OWNER_ID: "23841",
+            PROVIDER_ID: "VOXIMPLANT_CALL",
+            FILES: [{ id: 338028, name: "call.mp3" }],
+            STORAGE_ELEMENT_IDS: []
+          }
+        ]),
+        getDiskFile: vi.fn().mockResolvedValue({
+          ID: "338028",
+          DOWNLOAD_URL: "https://bitrix.example/disk/download/call.mp3"
+        })
+      },
+      provider,
+      dialogueGate,
+      downloadRecording,
+      idGenerator: () => "run-gate-fallback",
+      now: () => new Date("2026-06-09T12:00:00.000Z")
+    });
+
+    await expect(
+      service.analyzeCall({
+        callId: "CALL1",
+        triggerMode: "automatic"
+      })
+    ).resolves.toMatchObject({
+      status: "ready",
+      reusedExistingResult: false
+    });
+
+    expect(dialogueGate.analyzeDialogue).toHaveBeenCalledTimes(1);
+    expect(downloadRecording).toHaveBeenCalledTimes(1);
+    expect(provider.analyzeCall).toHaveBeenCalledWith({
+      callId: "CALL1",
+      audio: Buffer.from("mp3-bytes"),
+      audioFormat: "mp3"
+    });
+    expect(repository.startCallAnalysisRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "run-gate-fallback",
+        triggerMode: "automatic",
+        status: "analyzing"
+      })
+    );
+    expect(console.warn).toHaveBeenCalledWith(
+      "call_analysis.dialogue_gate.failed",
+      expect.stringContaining("OpenRouter message content is not valid JSON")
+    );
+  });
+
   it("does not run the dialogue gate for manual analysis", async () => {
     const repository = createRepository();
     const dialogueGate = {

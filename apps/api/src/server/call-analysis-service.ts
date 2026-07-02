@@ -221,28 +221,35 @@ export function createCallAnalysisService(input: CreateCallAnalysisServiceInput)
           retryDelaysMs: recordingRetryDelaysMs,
           sleep
         });
-        const dialogueGateResult = await input.dialogueGate.analyzeDialogue({
-          callId: call.id,
-          audio: preparedRecording.downloaded.audio,
-          audioFormat: preparedRecording.downloaded.audioFormat,
-          metadata: {
-            durationSeconds: call.callDurationSeconds,
-            callFailedCode: call.callFailedCode
-          }
-        });
-
-        if (
-          shouldSkipAfterDialogueGate(
-            dialogueGateResult,
-            input.dialogueGateSkipConfidenceThreshold
-          )
-        ) {
-          return {
-            status: "skipped",
-            reusedExistingResult: false,
+        try {
+          const dialogueGateResult = await input.dialogueGate.analyzeDialogue({
             callId: call.id,
-            dialogueGate: dialogueGateResult
-          };
+            audio: preparedRecording.downloaded.audio,
+            audioFormat: preparedRecording.downloaded.audioFormat,
+            metadata: {
+              durationSeconds: call.callDurationSeconds,
+              callFailedCode: call.callFailedCode
+            }
+          });
+
+          if (
+            shouldSkipAfterDialogueGate(
+              dialogueGateResult,
+              input.dialogueGateSkipConfidenceThreshold
+            )
+          ) {
+            return {
+              status: "skipped",
+              reusedExistingResult: false,
+              callId: call.id,
+              dialogueGate: dialogueGateResult
+            };
+          }
+        } catch (error) {
+          logDialogueGateFailure({
+            callId: call.id,
+            cause: error
+          });
         }
       }
 
@@ -488,6 +495,17 @@ function logCallAnalysisFailure(input: {
       callId: input.callId,
       errorCode: input.error.code,
       errorMessage: input.error.message,
+      causeName: getErrorName(input.cause),
+      causeMessage: getSafeErrorMessage(input.cause)
+    })
+  );
+}
+
+function logDialogueGateFailure(input: { callId: string; cause: unknown }) {
+  console.warn(
+    "call_analysis.dialogue_gate.failed",
+    JSON.stringify({
+      callId: input.callId,
       causeName: getErrorName(input.cause),
       causeMessage: getSafeErrorMessage(input.cause)
     })
