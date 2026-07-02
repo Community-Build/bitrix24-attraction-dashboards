@@ -1612,6 +1612,59 @@ describe("createApp", () => {
     });
   });
 
+  it("queues a form-encoded native Bitrix call end webhook for automatic analysis", async () => {
+    const queueAutomaticCallAnalysis = vi.fn().mockResolvedValue({
+      status: "queued",
+      callId: "externalCall.form"
+    });
+    const app = createTestApp(
+      {},
+      {
+        callEnrichmentIntake: {
+          enabled: true,
+          secret: "bitrix-call-event-secret-with-32-characters"
+        },
+        callAnalysis: {
+          analyzeCall: vi.fn(),
+          queueAutomaticCallAnalysis
+        }
+      }
+    );
+
+    await request(app)
+      .post("/api/calls/events/bitrix")
+      .type("form")
+      .send({
+        event: "ONVOXIMPLANTCALLEND",
+        event_handler_id: "1061",
+        "data[CALL_ID]": " externalCall.form ",
+        "data[PORTAL_USER_ID]": "13020",
+        "data[CALL_DURATION]": "58",
+        "data[CALL_START_DATE]": "2026-07-02T15:48:32+03:00",
+        "data[CRM_ACTIVITY_ID]": "525646",
+        "auth[application_token]":
+          "bitrix-call-event-secret-with-32-characters"
+      })
+      .expect(202)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          status: "queued",
+          callId: "externalCall.form"
+        });
+      });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(queueAutomaticCallAnalysis).toHaveBeenCalledWith({
+      callId: "externalCall.form",
+      activityId: "525646",
+      dealId: null,
+      contactId: null,
+      managerId: "13020",
+      durationSeconds: 58,
+      occurredAt: "2026-07-02T15:48:32+03:00"
+    });
+  });
+
   it("acknowledges non-end native Bitrix call webhooks without enqueueing analysis", async () => {
     const queueAutomaticCallAnalysis = vi.fn().mockResolvedValue({
       status: "queued",

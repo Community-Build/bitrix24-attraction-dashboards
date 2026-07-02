@@ -173,6 +173,7 @@ export interface DiskFileRow {
 
 export interface CallRow {
   ID: string;
+  CALL_ID?: string | number | null;
   CRM_ACTIVITY_ID: string | null;
   PORTAL_USER_ID: string | null;
   CALL_TYPE: string | null;
