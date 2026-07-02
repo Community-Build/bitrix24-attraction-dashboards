@@ -9,6 +9,7 @@ import type {
   CallEnrichmentProposalDraft,
   SkippedCallEnrichmentCandidate
 } from "./call-enrichment-diff.js";
+import type { CallEnrichmentFollowUpNote } from "./call-enrichment-follow-up-note.js";
 import type {
   CallAnalysisResultRecord,
   CreateEnrichmentProposalInput,
@@ -49,6 +50,7 @@ export interface CallEnrichmentPipeline {
 export interface CallEnrichmentPipelineResult {
   proposals: CallEnrichmentProposalDraft[];
   skipped?: SkippedCallEnrichmentCandidate[];
+  followUpNote?: CallEnrichmentFollowUpNote | null;
   metadata?: Record<string, unknown>;
 }
 
@@ -63,6 +65,17 @@ export interface CallEnrichmentProposalNotifier {
       expiresAt: string;
     };
     proposals: CreateEnrichmentProposalInput[];
+  }): Promise<void>;
+  sendFollowUpNote?(input: {
+    batch: {
+      id: string;
+      callId: string;
+      dealId: string;
+      contactId: string | null;
+      managerId: string;
+      expiresAt: string;
+    };
+    note: CallEnrichmentFollowUpNote;
   }): Promise<void>;
 }
 
@@ -188,7 +201,7 @@ export function createCallEnrichmentOrchestrator(
       });
 
       if (enrichmentResult.proposals.length === 0) {
-        await recordSkippedBatch({
+        const skippedBatch = await recordSkippedBatch({
           callEvent,
           context,
           dealId,
@@ -197,9 +210,18 @@ export function createCallEnrichmentOrchestrator(
           callAnalysisRunId: analysisResult.result.runId,
           metadata: {
             skippedCandidates: enrichmentResult.skipped ?? [],
+            ...(enrichmentResult.followUpNote
+              ? { followUpNote: enrichmentResult.followUpNote }
+              : {}),
             ...(enrichmentResult.metadata ?? {})
           }
         });
+        if (enrichmentResult.followUpNote) {
+          await input.proposalNotifier?.sendFollowUpNote?.({
+            batch: skippedBatch.batch,
+            note: enrichmentResult.followUpNote
+          });
+        }
         return { status: "skipped", callId, reason: "NO_MATERIAL_UPDATES" };
       }
 
@@ -278,6 +300,18 @@ export function createCallEnrichmentOrchestrator(
       metadata: inputData.metadata ?? null,
       createdAt
     });
+    return {
+      batch: {
+        id: batchId,
+        callId: inputData.callEvent.callId,
+        dealId: inputData.dealId,
+        contactId: normalizeId(
+          inputData.context.attributes.contactId ?? inputData.callEvent.contactId
+        ),
+        managerId: inputData.managerId,
+        expiresAt: new Date(Date.parse(createdAt) + proposalTtlMs).toISOString()
+      }
+    };
   }
 
   async function recordPendingBatch(inputData: {

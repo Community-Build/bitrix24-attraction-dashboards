@@ -247,6 +247,70 @@ describe("telegram enrichment approval", () => {
     );
   });
 
+  it("sends informational follow-up notes without approval buttons to every configured chat", async () => {
+    const repository = createRepository();
+    const sender = createSender();
+    const service = createTelegramEnrichmentApprovalService({
+      repository,
+      sender,
+      decisionService: createDecisionService(),
+      managerChatIds: {
+        "78": ["chat-78", "chat-owner"]
+      },
+      idGenerator: vi.fn().mockReturnValueOnce("event-1").mockReturnValueOnce("event-2"),
+      now: () => new Date("2026-06-28T10:00:00.000Z")
+    });
+
+    await service.sendFollowUpNote({
+      batch,
+      note: {
+        classificationType: "scheduling",
+        summary:
+          "Клиент согласовал созвон. Телефон +7 999 111-22-33, email test@example.com.",
+        nextStep: "Перезвонить завтра в обед и отправить Zoom."
+      }
+    });
+
+    expect(repository.createTelegramEnrichmentActionToken).not.toHaveBeenCalled();
+    expect(sender.sendMessage).toHaveBeenCalledTimes(2);
+    expect(sender.sendMessage).toHaveBeenNthCalledWith(1, {
+      chatId: "chat-78",
+      text: expect.stringContaining("После звонка есть следующий шаг."),
+      replyMarkup: undefined
+    });
+    expect(sender.sendMessage).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ chatId: "chat-owner", replyMarkup: undefined })
+    );
+    const [message] = vi.mocked(sender.sendMessage).mock.calls[0] ?? [];
+    expect(message?.text).toContain("Тип: scheduling");
+    expect(message?.text).toContain("Перезвонить завтра в обед");
+    expect(message?.text).not.toMatch(/\+7 999|test@example\.com/);
+    expect(repository.updateEnrichmentProposalBatchTelegramMessage).toHaveBeenCalledTimes(
+      1
+    );
+    expect(repository.updateEnrichmentProposalBatchTelegramMessage).toHaveBeenCalledWith({
+      batchId: "batch-1",
+      telegramChatId: "chat-78",
+      telegramMessageId: "42",
+      updatedAt: "2026-06-28T10:00:00.000Z"
+    });
+    expect(repository.appendEnrichmentProposalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "event-1",
+        action: "batch.followup_note_sent",
+        metadata: expect.objectContaining({ telegramChatId: "chat-78" })
+      })
+    );
+    expect(repository.appendEnrichmentProposalEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "event-2",
+        action: "batch.followup_note_sent",
+        metadata: expect.objectContaining({ telegramChatId: "chat-owner" })
+      })
+    );
+  });
+
   it("records an audit event instead of sending when manager chat is missing", async () => {
     const repository = createRepository();
     const sender = createSender();

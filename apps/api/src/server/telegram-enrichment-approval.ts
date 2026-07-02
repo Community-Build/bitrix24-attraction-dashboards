@@ -12,6 +12,7 @@ import type {
   CallEnrichmentWritebackResult,
   CallEnrichmentWritebackService
 } from "./call-enrichment-writeback.js";
+import type { CallEnrichmentFollowUpNote } from "./call-enrichment-follow-up-note.js";
 
 export interface TelegramEnrichmentBatchInput {
   id: string;
@@ -52,6 +53,10 @@ export interface TelegramEnrichmentApprovalService {
   sendProposalBatch(input: {
     batch: TelegramEnrichmentBatchInput;
     proposals: CreateEnrichmentProposalInput[];
+  }): Promise<void>;
+  sendFollowUpNote(input: {
+    batch: TelegramEnrichmentBatchInput;
+    note: CallEnrichmentFollowUpNote;
   }): Promise<void>;
   handleCallback(input: TelegramEnrichmentCallbackInput): Promise<void>;
 }
@@ -122,6 +127,62 @@ export function createTelegramEnrichmentApprovalService(
       } catch (error) {
         await appendBatchEvent(sendInput.batch, {
           action: "batch.telegram_failed",
+          reason: "TELEGRAM_SEND_FAILED",
+          metadata: {
+            telegramChatId: chatId,
+            error: error instanceof Error ? error.message : "unknown"
+          }
+        });
+      }
+    }
+  }
+
+  async function sendFollowUpNote(sendInput: {
+    batch: TelegramEnrichmentBatchInput;
+    note: CallEnrichmentFollowUpNote;
+  }) {
+    const chatIds = input.managerChatIds[sendInput.batch.managerId] ?? [];
+    if (chatIds.length === 0) {
+      await appendBatchEvent(sendInput.batch, {
+        action: "batch.followup_note_skipped",
+        reason: "TELEGRAM_CHAT_NOT_CONFIGURED",
+        metadata: null
+      });
+      return;
+    }
+
+    const message = buildTelegramFollowUpNoteMessage(sendInput);
+    let primaryDeliveryStored = false;
+    for (const chatId of chatIds) {
+      try {
+        const sentMessage = await input.sender.sendMessage({
+          chatId,
+          text: message.text,
+          replyMarkup: undefined
+        });
+        if (!primaryDeliveryStored) {
+          await input.repository.updateEnrichmentProposalBatchTelegramMessage({
+            batchId: sendInput.batch.id,
+            telegramChatId: chatId,
+            telegramMessageId: sentMessage.messageId,
+            updatedAt: now().toISOString()
+          });
+          primaryDeliveryStored = true;
+        }
+        await appendBatchEvent(sendInput.batch, {
+          action: "batch.followup_note_sent",
+          reason: null,
+          metadata: {
+            telegramChatId: chatId,
+            telegramMessageId: sentMessage.messageId,
+            classificationType: sendInput.note.classificationType,
+            hasSummary: Boolean(sendInput.note.summary),
+            hasNextStep: Boolean(sendInput.note.nextStep)
+          }
+        });
+      } catch (error) {
+        await appendBatchEvent(sendInput.batch, {
+          action: "batch.followup_note_failed",
           reason: "TELEGRAM_SEND_FAILED",
           metadata: {
             telegramChatId: chatId,
@@ -287,6 +348,7 @@ export function createTelegramEnrichmentApprovalService(
 
   return {
     sendProposalBatch,
+    sendFollowUpNote,
     handleCallback
   };
 }
@@ -338,6 +400,31 @@ export function buildTelegramEnrichmentApprovalMessage(input: {
   };
 }
 
+export function buildTelegramFollowUpNoteMessage(input: {
+  batch: TelegramEnrichmentBatchInput;
+  note: CallEnrichmentFollowUpNote;
+}) {
+  const lines = [
+    "После звонка есть следующий шаг.",
+    `Сделка: ${input.batch.dealId}`,
+    `Контакт: ${input.batch.contactId ?? "не определен"}`,
+    ...(input.note.classificationType
+      ? [`Тип: ${formatFollowUpText(input.note.classificationType)}`]
+      : []),
+    "",
+    ...(input.note.summary
+      ? ["Заметка:", formatFollowUpText(input.note.summary), ""]
+      : []),
+    ...(input.note.nextStep
+      ? ["Следующий шаг:", formatFollowUpText(input.note.nextStep)]
+      : [])
+  ];
+
+  return {
+    text: lines.join("\n").trim()
+  };
+}
+
 export function parseCallbackToken(callbackData: string) {
   return callbackData.startsWith(CALLBACK_PREFIX)
     ? callbackData.slice(CALLBACK_PREFIX.length)
@@ -364,6 +451,10 @@ function formatEvidence(value: string | null) {
   return value
     ? truncate(redactSensitiveText(value), MAX_EVIDENCE_LENGTH)
     : "нет фрагмента";
+}
+
+function formatFollowUpText(value: string) {
+  return truncate(redactSensitiveText(value), MAX_MESSAGE_VALUE_LENGTH);
 }
 
 function truncate(value: string, maxLength: number) {
