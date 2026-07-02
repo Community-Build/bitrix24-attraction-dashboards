@@ -6,6 +6,7 @@ import { createPasswordAuthService, createSqliteAuthStore } from "./server/auth.
 import { createApp } from "./server/app.js";
 import { createCallAnalysisService } from "./server/call-analysis-service.js";
 import { buildCallEnrichmentDiff } from "./server/call-enrichment-diff.js";
+import { createCallEnrichmentLiveIntakeQueue } from "./server/call-enrichment-live-intake.js";
 import { createCallEnrichmentOrchestrator } from "./server/call-enrichment-orchestrator.js";
 import { createCallEnrichmentWritebackService } from "./server/call-enrichment-writeback.js";
 import { createLeadgenService } from "./server/leadgen-service.js";
@@ -282,6 +283,15 @@ const callEnrichmentOrchestrator =
         }
       })
     : undefined;
+const callEnrichmentLiveIntakeQueue =
+  callEnrichmentOrchestrator && env.bitrixEnabled
+    ? createCallEnrichmentLiveIntakeQueue({
+        client,
+        repository: attractionRepository,
+        queueAutomaticCallAnalysis:
+          callEnrichmentOrchestrator.queueAutomaticCallAnalysis
+      })
+    : undefined;
 const authStore =
   env.AUTH_MODE === "password"
     ? createSqliteAuthStore({
@@ -369,6 +379,7 @@ const app = createApp(service, {
           ...(callEnrichmentOrchestrator
             ? {
                 queueAutomaticCallAnalysis:
+                  callEnrichmentLiveIntakeQueue?.queueAutomaticCallAnalysis ??
                   callEnrichmentOrchestrator.queueAutomaticCallAnalysis
               }
             : {})

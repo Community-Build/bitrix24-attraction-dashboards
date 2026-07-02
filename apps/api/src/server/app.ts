@@ -2222,6 +2222,12 @@ export function createApp(
     })
   );
   app.use(express.json({ limit: config.jsonBodyLimit ?? "256kb" }));
+  app.use(
+    express.urlencoded({
+      extended: true,
+      limit: config.jsonBodyLimit ?? "256kb"
+    })
+  );
 
   registerTelegramEnrichmentRoutes(app, config.telegramEnrichment ?? {});
 
