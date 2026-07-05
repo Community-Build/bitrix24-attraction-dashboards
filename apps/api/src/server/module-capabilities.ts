@@ -20,6 +20,7 @@ export interface AttractionCapabilityService {
   getDashboard?: unknown;
   getSourceQualityConversionReport?: unknown;
   getActivitiesWorkloadReport?: unknown;
+  getOperationalDashboardReport?: unknown;
   getAcquisitionOutcomesReport?: unknown;
   getTargetGroupConversionReport?: unknown;
   getManagerActionOutcomeReport?: unknown;
@@ -72,6 +73,11 @@ const attractionCapabilityReportAvailability: Array<
     route: "/api/reports/activities-workload",
     isAvailable: (service) =>
       typeof service.getActivitiesWorkloadReport === "function"
+  },
+  {
+    route: "/api/reports/operational-dashboard",
+    isAvailable: (service) =>
+      typeof service.getOperationalDashboardReport === "function"
   },
   {
     route: "/api/reports/acquisition-outcomes",
@@ -214,6 +220,17 @@ export function createAttractionCapabilityManifest(): ModuleCapabilityManifest {
         route: "/api/reports/activities-workload",
         inputSchemaId: "attraction.report-range-with-filters.v1",
         outputSchemaId: "attraction.activities-workload.v1",
+        status: "available",
+        agentReadable: true
+      },
+      {
+        id: "operational-dashboard",
+        title: "Операционный дашборд",
+        description:
+          "Attraction-owned operational report for risks, sales, SLA, plans and open deals over cached local data.",
+        route: "/api/reports/operational-dashboard",
+        inputSchemaId: "attraction.report-range-with-filters.v1",
+        outputSchemaId: "attraction.operational-dashboard.v1",
         status: "available",
         agentReadable: true
       },

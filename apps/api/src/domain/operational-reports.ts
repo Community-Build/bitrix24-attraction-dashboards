@@ -32,6 +32,7 @@ import type {
   ManagerActionOutcomeStatus,
   ManagerActionOutcomeStatusRow,
   ManagerDirectoryEntry,
+  OperationalSlaBusinessHours,
   ReportRange,
   SlaMetric,
   SourceQualityConversionReport,
@@ -84,6 +85,7 @@ interface AcquisitionOutcomesInput {
 interface ActivitiesWorkloadInput {
   range: ReportRange;
   slaAsOf?: string;
+  slaBusinessHours?: OperationalSlaBusinessHours;
   deals: DealSnapshot[];
   stageCatalog: StageCatalogEntry[];
   stageHistory: StageHistorySnapshot[];
@@ -94,6 +96,17 @@ interface ActivitiesWorkloadInput {
   eventVisitFacts?: EventVisitFactSnapshot[];
   dealTouchpointFacts?: DealTouchpointFactSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
+}
+
+export interface SlaMetricsInput {
+  range: ReportRange;
+  slaAsOf?: string;
+  slaBusinessHours?: OperationalSlaBusinessHours;
+  deals: DealSnapshot[];
+  stageCatalog: StageCatalogEntry[];
+  stageHistory: StageHistorySnapshot[];
+  activities: ActivitySnapshot[];
+  calls?: CallSnapshot[];
 }
 
 interface CallsWorkloadInput {
@@ -1160,7 +1173,10 @@ function recordDealSlaOutcomes(input: {
   stageHistoryMap: Map<string, StageHistorySnapshot[]>;
   callsByDeal: Map<string, CallSnapshot[]>;
   evaluationToMs: number;
+  slaBusinessHours?: OperationalSlaBusinessHours;
 }) {
+  const slaBusinessHours =
+    input.slaBusinessHours ?? SLA_THRESHOLDS_BUSINESS_HOURS;
   const historyRows = input.stageHistoryMap.get(input.deal.id) ?? [];
   const introEntry = findFirstMatchingStageEntry(historyRows, (row) =>
     isIntroCallStage(row.stageId, input.stageLookup.get(row.stageId)?.stageName)
@@ -1187,7 +1203,7 @@ function recordDealSlaOutcomes(input: {
       accumulator: input.accumulatorSet.sla1,
       start: baseEnteredAt,
       end: introEntry.row.createdTime,
-      maxBusinessHours: SLA_THRESHOLDS_BUSINESS_HOURS.sla1
+      maxBusinessHours: slaBusinessHours.sla1
     });
   } else if (firstNonBaseStageEntry) {
     recordSlaOutcome(
@@ -1199,7 +1215,7 @@ function recordDealSlaOutcomes(input: {
     recordPendingBusinessSlaOutcome({
       accumulator: input.accumulatorSet.sla1,
       start: baseEnteredAt,
-      maxBusinessHours: SLA_THRESHOLDS_BUSINESS_HOURS.sla1,
+      maxBusinessHours: slaBusinessHours.sla1,
       asOfMs: input.evaluationToMs
     });
   }
@@ -1222,13 +1238,13 @@ function recordDealSlaOutcomes(input: {
       accumulator: input.accumulatorSet.sla2,
       start: input.deal.dateCreate,
       end: firstCallAt,
-      maxBusinessHours: SLA_THRESHOLDS_BUSINESS_HOURS.sla2
+      maxBusinessHours: slaBusinessHours.sla2
     });
   } else {
     recordPendingBusinessSlaOutcome({
       accumulator: input.accumulatorSet.sla2,
       start: input.deal.dateCreate,
-      maxBusinessHours: SLA_THRESHOLDS_BUSINESS_HOURS.sla2,
+      maxBusinessHours: slaBusinessHours.sla2,
       asOfMs: input.evaluationToMs
     });
   }
@@ -1245,7 +1261,7 @@ function recordDealSlaOutcomes(input: {
       recordPendingBusinessSlaOutcome({
         accumulator: input.accumulatorSet.sla3,
         start: baseEnteredAt,
-        maxBusinessHours: SLA_THRESHOLDS_BUSINESS_HOURS.sla3,
+        maxBusinessHours: slaBusinessHours.sla3,
         asOfMs: input.evaluationToMs
       });
     }
@@ -1296,13 +1312,13 @@ function recordDealSlaOutcomes(input: {
       accumulator: input.accumulatorSet.sla3,
       start: introEntry.row.createdTime,
       end: completionAt,
-      maxBusinessHours: SLA_THRESHOLDS_BUSINESS_HOURS.sla3
+      maxBusinessHours: slaBusinessHours.sla3
     });
   } else {
     recordPendingBusinessSlaOutcome({
       accumulator: input.accumulatorSet.sla3,
       start: introEntry.row.createdTime,
-      maxBusinessHours: SLA_THRESHOLDS_BUSINESS_HOURS.sla3,
+      maxBusinessHours: slaBusinessHours.sla3,
       asOfMs: input.evaluationToMs
     });
   }
@@ -1320,15 +1336,7 @@ function isDealInSlaScope(
   );
 }
 
-function buildSlaMetricsByManager(input: {
-  range: ReportRange;
-  slaAsOf?: string;
-  deals: DealSnapshot[];
-  stageCatalog: StageCatalogEntry[];
-  stageHistory: StageHistorySnapshot[];
-  activities: ActivitySnapshot[];
-  calls: CallSnapshot[];
-}) {
+function buildSlaMetricsContext(input: SlaMetricsInput) {
   const fromMs = Date.parse(input.range.from);
   const toMs = Date.parse(input.range.to);
   const rawEvaluationToMs = Date.parse(input.slaAsOf ?? input.range.to);
@@ -1341,7 +1349,29 @@ function buildSlaMetricsByManager(input: {
   const stageHistoryMap = buildStageHistoryMap(
     input.stageHistory.filter((row) => dealMap.has(row.ownerId))
   );
-  const callsByDeal = buildCallsByDeal(input.calls, input.activities, dealMap);
+  const callsByDeal = buildCallsByDeal(input.calls ?? [], input.activities, dealMap);
+
+  return {
+    fromMs,
+    toMs,
+    evaluationToMs,
+    stageLookup,
+    sourceLabels,
+    stageHistoryMap,
+    callsByDeal
+  };
+}
+
+export function buildSlaMetricsByManager(input: SlaMetricsInput) {
+  const {
+    fromMs,
+    toMs,
+    evaluationToMs,
+    stageLookup,
+    sourceLabels,
+    stageHistoryMap,
+    callsByDeal
+  } = buildSlaMetricsContext(input);
   const rows = new Map<string, SlaAccumulatorSet>();
 
   for (const deal of input.deals) {
@@ -1360,7 +1390,10 @@ function buildSlaMetricsByManager(input: {
       stageLookup,
       stageHistoryMap,
       callsByDeal,
-      evaluationToMs
+      evaluationToMs,
+      ...(input.slaBusinessHours !== undefined
+        ? { slaBusinessHours: input.slaBusinessHours }
+        : {})
     });
 
     rows.set(managerId, accumulatorSet);
@@ -1372,6 +1405,42 @@ function buildSlaMetricsByManager(input: {
       toSlaMetrics(accumulatorSet)
     ])
   );
+}
+
+export function buildSlaSummaryMetrics(input: SlaMetricsInput): SlaMetric[] {
+  const {
+    fromMs,
+    toMs,
+    evaluationToMs,
+    stageLookup,
+    sourceLabels,
+    stageHistoryMap,
+    callsByDeal
+  } = buildSlaMetricsContext(input);
+  const accumulatorSet = createSlaAccumulatorSet();
+
+  for (const deal of input.deals) {
+    if (!isWithinRange(deal.dateCreate, fromMs, toMs)) {
+      continue;
+    }
+    if (!isDealInSlaScope(deal, sourceLabels)) {
+      continue;
+    }
+
+    recordDealSlaOutcomes({
+      deal,
+      accumulatorSet,
+      stageLookup,
+      stageHistoryMap,
+      callsByDeal,
+      evaluationToMs,
+      ...(input.slaBusinessHours !== undefined
+        ? { slaBusinessHours: input.slaBusinessHours }
+        : {})
+    });
+  }
+
+  return toSlaMetrics(accumulatorSet);
 }
 function buildSourceQualityStageProgressionLookups(
   deals: DealSnapshot[],
@@ -2207,6 +2276,9 @@ export function buildActivitiesWorkloadReport(
   const slaMetricsByManager = buildSlaMetricsByManager({
     range: input.range,
     ...(input.slaAsOf !== undefined ? { slaAsOf: input.slaAsOf } : {}),
+    ...(input.slaBusinessHours !== undefined
+      ? { slaBusinessHours: input.slaBusinessHours }
+      : {}),
     deals,
     stageCatalog: input.stageCatalog,
     stageHistory: input.stageHistory,

@@ -30,6 +30,7 @@ import type {
   LeadgenFunnelReport,
   ManagerWhitelistSettingsInput,
   MetaResponse,
+  OperationalThresholdSettingsInput,
   SalesPlanQuarterDraftRow,
   SnapshotStats,
   SyncChangeSummary,
@@ -105,6 +106,9 @@ const LazyPlaybookScene = lazy(() =>
 const LazyRevenueVelocityScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.RevenueVelocityScene })),
 )
+const LazyOperationsScene = lazy(() =>
+  import('@/proto/scenes').then((module) => ({ default: module.OperationsScene })),
+)
 const LazySourceCohortsScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.SourceCohortsScene })),
 )
@@ -122,6 +126,7 @@ const lazySceneComponents: Record<
   string,
   LazyExoticComponent<ComponentType<SceneComponentProps>>
 > = {
+  operations: LazyOperationsScene,
   sales: LazySalesScene,
   'sales-plan': LazySalesPlanScene,
   'activities-calls': LazyActivitiesScene,
@@ -243,6 +248,9 @@ function resetAttractionReportData(
     sourceOptions: runtimeData.sourceOptions,
     ...(runtimeData.pricingSettings !== undefined
       ? { pricingSettings: runtimeData.pricingSettings }
+      : {}),
+    ...(runtimeData.operationalThresholdSettings !== undefined
+      ? { operationalThresholdSettings: runtimeData.operationalThresholdSettings }
       : {}),
     ...(runtimeData.conversionEventTypeSettings !== undefined
       ? { conversionEventTypeSettings: runtimeData.conversionEventTypeSettings }
@@ -1840,6 +1848,12 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
   const [pricingSettingsLoading, setPricingSettingsLoading] = useState(false)
   const [pricingSettingsSaving, setPricingSettingsSaving] = useState(false)
   const [pricingSettingsSaveError, setPricingSettingsSaveError] = useState<string | null>(null)
+  const [operationalThresholdSettingsLoading, setOperationalThresholdSettingsLoading] =
+    useState(false)
+  const [operationalThresholdSettingsSaving, setOperationalThresholdSettingsSaving] =
+    useState(false)
+  const [operationalThresholdSettingsSaveError, setOperationalThresholdSettingsSaveError] =
+    useState<string | null>(null)
   const [conversionEventTypeSettingsLoading, setConversionEventTypeSettingsLoading] = useState(false)
   const [conversionEventTypeSettingsSaving, setConversionEventTypeSettingsSaving] = useState(false)
   const [conversionEventTypeSettingsSaveError, setConversionEventTypeSettingsSaveError] = useState<string | null>(null)
@@ -2446,6 +2460,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
         setLeadgenWorkloadError(null)
         setLeadgenWorkloadFilterKey(null)
         setPricingSettingsLoading(true)
+        setOperationalThresholdSettingsLoading(true)
         setConversionEventTypeSettingsLoading(true)
         setUnitEconomicsSettingsLoading(true)
         setManagerWhitelistSettingsLoading(true)
@@ -2453,6 +2468,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
         const [
           meta,
           pricingSettings,
+          operationalThresholdSettings,
           conversionEventTypeSettings,
           unitEconomicsSettings,
           managerWhitelistSettings,
@@ -2462,6 +2478,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
         ] = await Promise.all([
           apiClient.getMeta(activeModuleId),
           apiClient.getPricingSettings(),
+          apiClient.getOperationalThresholdSettings(),
           apiClient.getConversionEventTypeSettings(),
           apiClient.getUnitEconomicsSettings(),
           apiClient.getManagerWhitelistSettings(),
@@ -2484,6 +2501,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
           return
         }
         setPricingSettingsLoading(false)
+        setOperationalThresholdSettingsLoading(false)
         setConversionEventTypeSettingsLoading(false)
         setUnitEconomicsSettingsLoading(false)
         setManagerWhitelistSettingsLoading(false)
@@ -2516,6 +2534,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
             ...(current.salesPlanMonth ? { salesPlanMonth: current.salesPlanMonth } : {}),
             ...(current.salesPlanQuarter ? { salesPlanQuarter: current.salesPlanQuarter } : {}),
             pricingSettings,
+            operationalThresholdSettings,
             conversionEventTypeSettings,
             unitEconomicsSettings,
             managerWhitelistSettings: shouldUseFetchedManagerWhitelistSettings
@@ -2565,6 +2584,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
           )
         }
         setPricingSettingsLoading(false)
+        setOperationalThresholdSettingsLoading(false)
         setConversionEventTypeSettingsLoading(false)
         setUnitEconomicsSettingsLoading(false)
         setManagerWhitelistSettingsLoading(false)
@@ -3117,6 +3137,32 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
       )
     } finally {
       setPricingSettingsSaving(false)
+    }
+  }
+
+  async function handleSaveOperationalThresholdSettings(
+    input: OperationalThresholdSettingsInput,
+  ) {
+    if (operationalThresholdSettingsLoading) {
+      return
+    }
+
+    setOperationalThresholdSettingsSaving(true)
+    setOperationalThresholdSettingsSaveError(null)
+
+    try {
+      const saved = await apiClient.saveOperationalThresholdSettings(input)
+      setRuntimeData((current) => ({
+        ...current,
+        operationalThresholdSettings: saved,
+      }))
+      setAppliedFilters((current) => cloneFilters(current))
+    } catch (error) {
+      setOperationalThresholdSettingsSaveError(
+        error instanceof Error ? error.message : 'Не удалось сохранить пороги',
+      )
+    } finally {
+      setOperationalThresholdSettingsSaving(false)
     }
   }
 
@@ -3920,12 +3966,18 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
             <ModuleSettingsPanel
               canEdit={canManageModuleSettings}
               pricingSettings={runtimeData.pricingSettings}
+              operationalThresholdSettings={runtimeData.operationalThresholdSettings}
               conversionEventTypeSettings={runtimeData.conversionEventTypeSettings}
               unitEconomicsSettings={runtimeData.unitEconomicsSettings}
               managerWhitelistSettings={runtimeData.managerWhitelistSettings}
               pricingSettingsLoading={pricingSettingsLoading}
               pricingSettingsSaving={pricingSettingsSaving}
               pricingSettingsSaveError={pricingSettingsSaveError}
+              operationalThresholdSettingsLoading={operationalThresholdSettingsLoading}
+              operationalThresholdSettingsSaving={operationalThresholdSettingsSaving}
+              operationalThresholdSettingsSaveError={
+                operationalThresholdSettingsSaveError
+              }
               conversionEventTypeSettingsLoading={conversionEventTypeSettingsLoading}
               conversionEventTypeSettingsSaving={conversionEventTypeSettingsSaving}
               conversionEventTypeSettingsSaveError={conversionEventTypeSettingsSaveError}
@@ -3939,6 +3991,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
               managerWhitelistDraft={managerWhitelistDraft}
               onManagerWhitelistDraftChange={setManagerWhitelistDraft}
               onPricingSettingsSave={handleSavePricingSettings}
+              onOperationalThresholdSettingsSave={handleSaveOperationalThresholdSettings}
               onConversionEventTypeSettingsSave={handleSaveConversionEventTypeSettings}
               onUnitEconomicsCostRulesSave={handleSaveUnitEconomicsCostRules}
               onManagerWhitelistSettingsSave={handleSaveManagerWhitelistSettings}
@@ -4877,6 +4930,15 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                 pricingSettingsSaving={pricingSettingsSaving}
                 pricingSettingsSaveError={pricingSettingsSaveError}
                 onPricingSettingsSave={handleSavePricingSettings}
+                operationalThresholdSettings={runtimeData.operationalThresholdSettings}
+                operationalThresholdSettingsLoading={operationalThresholdSettingsLoading}
+                operationalThresholdSettingsSaving={operationalThresholdSettingsSaving}
+                operationalThresholdSettingsSaveError={
+                  operationalThresholdSettingsSaveError
+                }
+                onOperationalThresholdSettingsSave={
+                  handleSaveOperationalThresholdSettings
+                }
                 onSceneNavigate={handleSceneNavigate}
                 conversionEventTypeSettings={runtimeData.conversionEventTypeSettings}
                 conversionEventTypeSettingsLoading={conversionEventTypeSettingsLoading}

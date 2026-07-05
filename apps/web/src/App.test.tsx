@@ -7,6 +7,7 @@ import type {
   ConversionEventTypeSettingsInput,
   DealPricingRuleInput,
   ManagerActionOutcomeReport,
+  OperationalThresholdSettingsInput,
   RevenueVelocityReport,
   SalesPlanQuarterInput,
   SourceCohortConversionReport,
@@ -160,6 +161,189 @@ vi.mock('@/lib/api-client', () => ({
       ],
       comparisons: [],
     })),
+    getOperationalDashboardReport: vi.fn(async () => ({
+      range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
+      generatedAt: '2026-06-01T09:00:00.000Z',
+      createdDeals: 37,
+      meetingsHeld: {
+        total: 54,
+        bySlot: [
+          { slotIndex: 1, slotLabel: 'Встреча 1', count: 28 },
+          { slotIndex: 2, slotLabel: 'Встреча 2', count: 17 },
+          { slotIndex: 3, slotLabel: 'Встреча 3', count: 9 },
+        ],
+      },
+      sales: {
+        total: 6,
+        byClub: [
+          {
+            targetGroupKey: 'clubfirst-russia',
+            targetGroupLabel: 'ClubFirst Russia',
+            wonDeals: 4,
+            averageDaysToWin: 41,
+          },
+          {
+            targetGroupKey: 'clubfirst-one',
+            targetGroupLabel: 'ClubFirst One',
+            wonDeals: 2,
+            averageDaysToWin: 28,
+          },
+        ],
+      },
+      lostDeals: 12,
+      openDeals: 215,
+      riskSummary: {
+        total: 3,
+        critical: 1,
+        risk: 2,
+        byRule: [
+          { rule: 'stage_aging', label: 'Застряли на этапе', count: 1 },
+          { rule: 'no_open_activity', label: 'Нет запланированных дел', count: 1 },
+          { rule: 'no_recent_calls', label: 'Нет звонков', count: 1 },
+        ],
+        byStage: [
+          { stageId: 'C10:PREPARATION', stageName: 'Звонок-знакомство', count: 1 },
+          { stageId: 'C10:UC_9E0XYG', stageName: 'Встреча-знакомство', count: 2 },
+        ],
+      },
+      stageWip: [
+        {
+          stageId: 'C10:PREPARATION',
+          stageName: 'Звонок-знакомство',
+          openDeals: 56,
+          riskDeals: 1,
+        },
+        {
+          stageId: 'C10:UC_9E0XYG',
+          stageName: 'Встреча-знакомство',
+          openDeals: 29,
+          riskDeals: 2,
+        },
+      ],
+      sla: [
+        {
+          slaKey: 'sla2',
+          label: 'Первый контакт',
+          thresholdBusinessHours: 5,
+          onTimeCount: 21,
+          lateCount: 9,
+          noTouchCount: 7,
+          medianHours: 3.2,
+        },
+      ],
+      planned: {
+        meetingsToday: [
+          { slotIndex: 1, slotLabel: 'Встреча 1', count: 3 },
+          { slotIndex: 2, slotLabel: 'Встреча 2', count: 2 },
+          { slotIndex: 3, slotLabel: 'Встреча 3', count: 2 },
+        ],
+        meetingsTomorrow: [
+          { slotIndex: 1, slotLabel: 'Встреча 1', count: 2 },
+          { slotIndex: 2, slotLabel: 'Встреча 2', count: 2 },
+          { slotIndex: 3, slotLabel: 'Встреча 3', count: 1 },
+        ],
+        tasksToday: 23,
+        tasksTomorrow: 18,
+      },
+      managers: [
+        {
+          managerId: '13020',
+          managerName: 'Какулия Илья',
+          createdDeals: 9,
+          meetingsBySlot: [
+            { slotIndex: 1, slotLabel: 'Встреча 1', count: 8 },
+            { slotIndex: 2, slotLabel: 'Встреча 2', count: 4 },
+            { slotIndex: 3, slotLabel: 'Встреча 3', count: 2 },
+          ],
+          wonDeals: 1,
+          slaLateCount: 4,
+          slaNoTouchCount: 2,
+          openDeals: 75,
+          riskDeals: 1,
+        },
+        {
+          managerId: '6994',
+          managerName: 'Кузнецова Анастасия',
+          createdDeals: 7,
+          meetingsBySlot: [
+            { slotIndex: 1, slotLabel: 'Встреча 1', count: 6 },
+            { slotIndex: 2, slotLabel: 'Встреча 2', count: 4 },
+            { slotIndex: 3, slotLabel: 'Встреча 3', count: 2 },
+          ],
+          wonDeals: 2,
+          slaLateCount: 1,
+          slaNoTouchCount: 1,
+          openDeals: 31,
+          riskDeals: 2,
+        },
+      ],
+      risks: [
+        {
+          dealId: '48213',
+          dealUrl: 'https://example.bitrix24.ru/crm/deal/details/48213/',
+          managerId: '13020',
+          managerName: 'Какулия Илья',
+          stageId: 'C10:PREPARATION',
+          stageName: 'Звонок-знакомство',
+          daysOnStage: 21,
+          stageMaxDays: 3,
+          sourceLabel: 'Лидген УС',
+          customerClubLabel: 'ClubFirst One',
+          flags: [
+            {
+              rule: 'stage_aging',
+              label: 'застрял: 21 дн · порог 3',
+              severity: 'critical',
+            },
+          ],
+          severity: 'critical',
+          overdueRatio: 7,
+        },
+        {
+          dealId: '48544',
+          dealUrl: 'https://example.bitrix24.ru/crm/deal/details/48544/',
+          managerId: '6994',
+          managerName: 'Кузнецова Анастасия',
+          stageId: 'C10:UC_9E0XYG',
+          stageName: 'Встреча-знакомство',
+          daysOnStage: 8,
+          stageMaxDays: 14,
+          sourceLabel: 'Лидген УС',
+          customerClubLabel: 'ClubFirst Future',
+          flags: [
+            {
+              rule: 'no_open_activity',
+              label: 'нет запланированных дел',
+              severity: 'risk',
+            },
+          ],
+          severity: 'risk',
+          overdueRatio: 0.57,
+        },
+        {
+          dealId: '48671',
+          dealUrl: 'https://example.bitrix24.ru/crm/deal/details/48671/',
+          managerId: '6994',
+          managerName: 'Кузнецова Анастасия',
+          stageId: 'C10:UC_9E0XYG',
+          stageName: 'Встреча-знакомство',
+          daysOnStage: 2,
+          stageMaxDays: 14,
+          sourceLabel: 'Самостоятельно',
+          customerClubLabel: 'Без клуба',
+          flags: [
+            {
+              rule: 'no_recent_calls',
+              label: 'нет звонков 7+ дн',
+              severity: 'risk',
+            },
+          ],
+          severity: 'risk',
+          overdueRatio: 0.14,
+        },
+      ],
+      thresholdsUpdatedAt: null,
+    })),
     getPricingSettings: vi.fn(async () => ({
       rules: [
         {
@@ -186,6 +370,46 @@ vi.mock('@/lib/api-client', () => ({
       })),
       updatedAt: '2026-04-10T12:05:00.000Z',
     })),
+    getOperationalThresholdSettings: vi.fn(async () => ({
+      stageAging: [
+        {
+          stageId: 'C10:NEW',
+          stageName: 'База входящая',
+          maxDaysOnStage: 1,
+        },
+        {
+          stageId: 'C10:PREPARATION',
+          stageName: 'Звонок-знакомство',
+          maxDaysOnStage: 3,
+        },
+      ],
+      noCallsMaxDays: 7,
+      noActivityMaxDays: 5,
+      slaBusinessHours: {
+        sla1: 24,
+        sla2: 5,
+        sla3: 72,
+      },
+      updatedAt: null,
+    })),
+    saveOperationalThresholdSettings: vi.fn(
+      async (input: OperationalThresholdSettingsInput) => ({
+        stageAging: input.stageAging.map((row) => ({
+          stageId: row.stageId,
+          stageName:
+            row.stageId === 'C10:NEW'
+              ? 'База входящая'
+              : row.stageId === 'C10:PREPARATION'
+                ? 'Звонок-знакомство'
+                : row.stageId,
+          maxDaysOnStage: row.maxDaysOnStage,
+        })),
+        noCallsMaxDays: input.noCallsMaxDays,
+        noActivityMaxDays: input.noActivityMaxDays,
+        slaBusinessHours: input.slaBusinessHours,
+        updatedAt: '2026-04-10T12:05:00.000Z',
+      }),
+    ),
     getConversionEventTypeSettings: vi.fn(async () => ({
       options: [],
       settings: [],
@@ -1259,6 +1483,58 @@ describe('App', () => {
     expect(screen.getByText(/Контрактация -> На передаче: 67% · 2 сдел/i)).toBeInTheDocument()
     expect(screen.getByText(/На передаче -> Передано в клуб: 100% · 2 сдел/i)).toBeInTheDocument()
     expect(document.querySelectorAll('rect[fill="#ecfdf5"]').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('renders the operational dashboard tab with risks, SLA and filters', async () => {
+    render(<App />)
+    await waitForDashboardShell()
+
+    const analyticsTabs = document.querySelector('[aria-label="Аналитические дашборды"]')
+    expect(analyticsTabs?.querySelector('button')?.textContent).toBe('Операционный')
+
+    fireEvent.click(await screen.findByRole('button', { name: /операционный/i }))
+
+    await waitFor(() =>
+      expect(apiClient.getOperationalDashboardReport).toHaveBeenCalledWith(
+        expect.objectContaining({ preset: 'custom' }),
+      ),
+    )
+    expect(screen.getAllByText('Создано').length).toBeGreaterThan(0)
+    expect(screen.getByText('37')).toBeInTheDocument()
+    expect(screen.getAllByText('Встреча 1').length).toBeGreaterThan(0)
+    expect(screen.getByText('28')).toBeInTheDocument()
+    expect(screen.getByText('ClubFirst Russia')).toBeInTheDocument()
+    expect(screen.getByText(/Порог 5 ч из настроек/i)).toBeInTheDocument()
+    const criticalRiskChip = screen.getByRole('button', { name: /Критично · 1/i })
+    expect(criticalRiskChip).toBeInTheDocument()
+    expect(criticalRiskChip).not.toHaveAttribute('title')
+    const slaHintButton = screen.getByRole('button', {
+      name: /Как считается: SLA первого касания/i,
+    })
+    expect(slaHintButton).toBeInTheDocument()
+    expect(slaHintButton).not.toHaveAttribute('title')
+    expect(screen.getByText(/CRM-активность - дело\/активность в карточке сделки/i)).toBeInTheDocument()
+
+    const dealLink = screen.getByRole('link', { name: /Сделка #48213/i })
+    expect(dealLink).toHaveAttribute(
+      'href',
+      'https://example.bitrix24.ru/crm/deal/details/48213/',
+    )
+
+    for (const blockId of [
+      'attraction-operations-summary',
+      'attraction-operations-flow',
+      'attraction-operations-sla-planned',
+      'attraction-operations-stage-wip',
+      'attraction-operations-risks',
+      'attraction-operations-managers',
+    ]) {
+      expect(document.querySelector(`[data-comment-block-id="${blockId}"]`)).toBeInTheDocument()
+    }
+
+    fireEvent.click(screen.getByRole('button', { name: /Без дел · 1/i }))
+    expect(screen.queryByText(/Сделка #48213/i)).not.toBeInTheDocument()
+    expect(screen.getByText(/Сделка #48544/i)).toBeInTheDocument()
   })
 
   it('renders the source cohort conversion tab with month selector and manager breakdown', async () => {

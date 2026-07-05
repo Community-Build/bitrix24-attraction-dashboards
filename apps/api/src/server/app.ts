@@ -20,7 +20,10 @@ import type {
   ModuleCapabilityManifest,
   ModuleCapabilityManifestListResponse,
   ModuleCapabilityManifestResponse,
+  OperationalDashboardReport,
   OntologySourceDocumentResponse,
+  OperationalThresholdSettings,
+  OperationalThresholdSettingsInput,
   RevenueVelocityDimension,
   RevenueVelocityReport,
   RevenueVelocityView,
@@ -173,6 +176,9 @@ interface AppService {
   getActivitiesWorkloadReport(
     input: RangeRequest
   ): Promise<ActivitiesWorkloadReport>;
+  getOperationalDashboardReport(
+    input: RangeRequest
+  ): Promise<OperationalDashboardReport>;
   getAcquisitionOutcomesReport(
     input: RangeRequest
   ): Promise<AcquisitionOutcomesReport>;
@@ -212,6 +218,10 @@ interface AppService {
   }): Promise<SalesPlanData>;
   getPricingSettings(): Promise<DealPricingSettings>;
   replacePricingSettings(input: DealPricingSettingsInput): Promise<DealPricingSettings>;
+  getOperationalThresholdSettings(): Promise<OperationalThresholdSettings>;
+  replaceOperationalThresholdSettings(
+    input: OperationalThresholdSettingsInput
+  ): Promise<OperationalThresholdSettings>;
   getAttractionOntology?(): Promise<AttractionOntologyResponse>;
   getAttractionOntologySourceDocument?(
     sourceId: string
@@ -692,6 +702,24 @@ const pricingSettingsBodySchema = z.object({
       sortOrder: z.number().int().nonnegative().nullable().optional()
     })
   )
+});
+
+const operationalThresholdSettingsBodySchema = z.object({
+  stageAging: z
+    .array(
+      z.object({
+        stageId: z.string().trim().min(1),
+        maxDaysOnStage: z.number().int().positive()
+      })
+    )
+    .min(1),
+  noCallsMaxDays: z.number().int().positive(),
+  noActivityMaxDays: z.number().int().positive(),
+  slaBusinessHours: z.object({
+    sla1: z.number().int().positive(),
+    sla2: z.number().int().positive(),
+    sla3: z.number().int().positive()
+  })
 });
 
 const unitEconomicsCostRulesBodySchema = z.object({
@@ -3206,6 +3234,29 @@ export function createApp(
             }))
           })
         );
+      } catch (error) {
+        next(error);
+      }
+    },
+    getOperationalThresholdSettings: async (_request, response, next) => {
+      if (denyIfMissingAttractionAccess(response)) {
+        return;
+      }
+
+      try {
+        response.json(await service.getOperationalThresholdSettings());
+      } catch (error) {
+        next(error);
+      }
+    },
+    replaceOperationalThresholdSettings: async (request, response, next) => {
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+
+      try {
+        const payload = operationalThresholdSettingsBodySchema.parse(request.body);
+        response.json(await service.replaceOperationalThresholdSettings(payload));
       } catch (error) {
         next(error);
       }

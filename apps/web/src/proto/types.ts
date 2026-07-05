@@ -13,6 +13,8 @@ import type {
   HourlyWeekdayWorkloadHeatmap,
   ManagerWhitelistSettingsData,
   ManagerActionOutcomeReport,
+  OperationalThresholdSettings,
+  OperationalThresholdSettingsInput,
   RevenueVelocityReport,
   SalesPlanData,
   SalesPlanQuarterData,
@@ -431,11 +433,18 @@ export interface SceneComponentProps {
   onSalesPlanQuarterChange?: (quarter: { year: number; quarter: number }) => void
   onSalesPlanSave?: (rows: SalesPlanQuarterDraftRow[]) => Promise<void>
   pricingSettings?: DealPricingSettings | undefined
+  operationalThresholdSettings?: OperationalThresholdSettings | undefined
   conversionEventTypeSettings?: ConversionEventTypeSettingsData | undefined
   pricingSettingsLoading?: boolean
   pricingSettingsSaving?: boolean
   pricingSettingsSaveError?: string | null | undefined
   onPricingSettingsSave?: (rows: DealPricingRuleInput[]) => Promise<void>
+  operationalThresholdSettingsLoading?: boolean
+  operationalThresholdSettingsSaving?: boolean
+  operationalThresholdSettingsSaveError?: string | null | undefined
+  onOperationalThresholdSettingsSave?: (
+    input: OperationalThresholdSettingsInput,
+  ) => Promise<void>
   conversionEventTypeSettingsLoading?: boolean
   conversionEventTypeSettingsSaving?: boolean
   conversionEventTypeSettingsSaveError?: string | null | undefined
@@ -472,6 +481,7 @@ export interface ProtoRuntimeData {
   salesPlanQuarter?: SalesPlanQuarterData
   salesPlanQuarterDashboard?: DashboardData
   pricingSettings?: DealPricingSettings
+  operationalThresholdSettings?: OperationalThresholdSettings
   conversionEventTypeSettings?: ConversionEventTypeSettingsData
   unitEconomicsSettings?: UnitEconomicsSettings
   managerWhitelistSettings?: ManagerWhitelistSettingsData

@@ -11,6 +11,7 @@ export interface AttractionRouteHandlers {
   getSourceQualityConversionReport: ApiRouteHandler;
   getSourceCohortConversionReport: ApiRouteHandler;
   getActivitiesWorkloadReport: ApiRouteHandler;
+  getOperationalDashboardReport: ApiRouteHandler;
   getAcquisitionOutcomesReport: ApiRouteHandler;
   getTargetGroupConversionReport: ApiRouteHandler;
   getManagerActionOutcomeReport: ApiRouteHandler;
@@ -34,6 +35,8 @@ export interface AttractionRouteHandlers {
   getEffectiveSalesPlan: ApiRouteHandler;
   getPricingSettings: ApiRouteHandler;
   replacePricingSettings: ApiRouteHandler;
+  getOperationalThresholdSettings: ApiRouteHandler;
+  replaceOperationalThresholdSettings: ApiRouteHandler;
   getUnitEconomicsSettings: ApiRouteHandler;
   replaceUnitEconomicsCostRules: ApiRouteHandler;
   getConversionEventTypeSettings: ApiRouteHandler;
@@ -84,6 +87,7 @@ export type AttractionReportRouteHandlers = Pick<
   | "getSourceQualityConversionReport"
   | "getSourceCohortConversionReport"
   | "getActivitiesWorkloadReport"
+  | "getOperationalDashboardReport"
   | "getAcquisitionOutcomesReport"
   | "getTargetGroupConversionReport"
   | "getManagerActionOutcomeReport"
@@ -116,6 +120,7 @@ export function registerAttractionReportRoutes(
     handlers.getSourceCohortConversionReport
   );
   app.get("/api/reports/activities-workload", handlers.getActivitiesWorkloadReport);
+  app.get("/api/reports/operational-dashboard", handlers.getOperationalDashboardReport);
   app.get("/api/reports/acquisition-outcomes", handlers.getAcquisitionOutcomesReport);
   app.get(
     "/api/reports/target-group-conversion",
@@ -152,6 +157,8 @@ export type AttractionSettingsRouteHandlers = Pick<
   | "getEffectiveSalesPlan"
   | "getPricingSettings"
   | "replacePricingSettings"
+  | "getOperationalThresholdSettings"
+  | "replaceOperationalThresholdSettings"
   | "getUnitEconomicsSettings"
   | "replaceUnitEconomicsCostRules"
   | "getConversionEventTypeSettings"
@@ -172,6 +179,14 @@ export function registerAttractionSettingsRoutes(
   app.get("/api/sales-plan/effective", handlers.getEffectiveSalesPlan);
   app.get("/api/settings/pricing", handlers.getPricingSettings);
   app.put("/api/settings/pricing", handlers.replacePricingSettings);
+  app.get(
+    "/api/settings/operational-thresholds",
+    handlers.getOperationalThresholdSettings
+  );
+  app.put(
+    "/api/settings/operational-thresholds",
+    handlers.replaceOperationalThresholdSettings
+  );
   app.get("/api/settings/unit-economics", handlers.getUnitEconomicsSettings);
   app.put(
     "/api/settings/unit-economics/cost-rules",

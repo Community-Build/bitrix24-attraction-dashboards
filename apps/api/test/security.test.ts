@@ -1,4 +1,5 @@
 import type {
+  OperationalDashboardReport,
   RevenueVelocityReport,
   SourceCohortConversionReport,
   UnitEconomicsCostRulesInput,
@@ -23,6 +24,34 @@ import {
   CALL_ENRICHMENT_DEAL_FIELD_CODES
 } from "../src/server/call-enrichment-fields";
 import { createApp } from "../src/server/app";
+
+const operationalThresholdSettingsService = {
+  getOperationalThresholdSettings: async () => ({
+    stageAging: [],
+    noCallsMaxDays: 7,
+    noActivityMaxDays: 5,
+    slaBusinessHours: {
+      sla1: 24,
+      sla2: 5,
+      sla3: 72
+    },
+    updatedAt: null
+  }),
+  replaceOperationalThresholdSettings: async (input) => ({
+    stageAging: input.stageAging.map((threshold) => ({
+      stageId: threshold.stageId,
+      stageName: threshold.stageId,
+      maxDaysOnStage: threshold.maxDaysOnStage
+    })),
+    noCallsMaxDays: input.noCallsMaxDays,
+    noActivityMaxDays: input.noActivityMaxDays,
+    slaBusinessHours: input.slaBusinessHours,
+    updatedAt: "2026-04-10T12:00:00.000Z"
+  })
+} satisfies Pick<
+  Parameters<typeof createApp>[0],
+  "getOperationalThresholdSettings" | "replaceOperationalThresholdSettings"
+>;
 
 function getPlaybookInlineScriptHash() {
   const playbookHtml = readFileSync(
@@ -123,6 +152,57 @@ function createEmptyRevenueVelocityReport(): RevenueVelocityReport {
     rows: [],
     formulaTooltips: [],
     warnings: []
+  };
+}
+
+function createEmptyOperationalDashboardReport(): OperationalDashboardReport {
+  return {
+    range: {
+      from: "2026-04-01T00:00:00.000Z",
+      to: "2026-04-30T23:59:59.999Z"
+    },
+    generatedAt: "2026-04-30T12:00:00.000Z",
+    createdDeals: 0,
+    meetingsHeld: {
+      total: 0,
+      bySlot: [
+        { slotIndex: 1, slotLabel: "Встреча 1", count: 0 },
+        { slotIndex: 2, slotLabel: "Встреча 2", count: 0 },
+        { slotIndex: 3, slotLabel: "Встреча 3", count: 0 }
+      ]
+    },
+    sales: {
+      total: 0,
+      byClub: []
+    },
+    lostDeals: 0,
+    openDeals: 0,
+    riskSummary: {
+      total: 0,
+      critical: 0,
+      risk: 0,
+      byRule: [],
+      byStage: []
+    },
+    stageWip: [],
+    sla: [],
+    planned: {
+      meetingsToday: [
+        { slotIndex: 1, slotLabel: "Встреча 1", count: 0 },
+        { slotIndex: 2, slotLabel: "Встреча 2", count: 0 },
+        { slotIndex: 3, slotLabel: "Встреча 3", count: 0 }
+      ],
+      meetingsTomorrow: [
+        { slotIndex: 1, slotLabel: "Встреча 1", count: 0 },
+        { slotIndex: 2, slotLabel: "Встреча 2", count: 0 },
+        { slotIndex: 3, slotLabel: "Встреча 3", count: 0 }
+      ],
+      tasksToday: 0,
+      tasksTomorrow: 0
+    },
+    managers: [],
+    risks: [],
+    thresholdsUpdatedAt: null
   };
 }
 
@@ -239,6 +319,8 @@ function createCorsTestApp(config?: {
         managerRows: [],
         comparisons: []
       }),
+      getOperationalDashboardReport: async () =>
+        createEmptyOperationalDashboardReport(),
       getCallsWorkloadReport: async () => ({
         range: {
           from: "2026-04-01T00:00:00.000Z",
@@ -433,6 +515,7 @@ function createCorsTestApp(config?: {
         rules: [],
         updatedAt: "2026-04-10T12:00:00.000Z"
       }),
+      ...operationalThresholdSettingsService,
       getMeta: async () => ({
         stageCatalog: [],
         managerCatalog: [],

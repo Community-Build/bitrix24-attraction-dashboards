@@ -113,6 +113,13 @@ const activityKpis: ProtoKpi[] = [
 
 export const sceneMetadata: ProtoSceneMetadata[] = [
   {
+    id: 'operations',
+    label: 'Операционный',
+    description: 'Сводка дня: поток, встречи, продажи, SLA и риски по зависшим сделкам.',
+    focus: 'Поток / риски / SLA',
+    kpis: [],
+  },
+  {
     id: 'sales',
     label: 'Отчет по продажам',
     description: 'Источники, качество и проход по ключевым этапам после статуса “Готов ко встрече”.',

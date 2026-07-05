@@ -11,6 +11,7 @@ import type {
   ModuleCapabilityManifest,
   ModuleCapabilityManifestListResponse,
   ModuleCapabilityManifestResponse,
+  OperationalDashboardReport,
   RevenueVelocityReport,
   SalesPlanData,
   SalesPlanQuarterData,
@@ -107,6 +108,34 @@ function createLeadgenModuleService(): Partial<Parameters<typeof createApp>[0]> 
     getCallsWorkloadReport: async () => createEmptyCallsWorkloadReport()
   };
 }
+
+const operationalThresholdSettingsService = {
+  getOperationalThresholdSettings: async () => ({
+    stageAging: [],
+    noCallsMaxDays: 7,
+    noActivityMaxDays: 5,
+    slaBusinessHours: {
+      sla1: 24,
+      sla2: 5,
+      sla3: 72
+    },
+    updatedAt: null
+  }),
+  replaceOperationalThresholdSettings: async (input) => ({
+    stageAging: input.stageAging.map((threshold) => ({
+      stageId: threshold.stageId,
+      stageName: threshold.stageId,
+      maxDaysOnStage: threshold.maxDaysOnStage
+    })),
+    noCallsMaxDays: input.noCallsMaxDays,
+    noActivityMaxDays: input.noActivityMaxDays,
+    slaBusinessHours: input.slaBusinessHours,
+    updatedAt: "2026-04-10T12:00:00.000Z"
+  })
+} satisfies Pick<
+  Parameters<typeof createApp>[0],
+  "getOperationalThresholdSettings" | "replaceOperationalThresholdSettings"
+>;
 
 function createCustomModuleManifest(): ModuleCapabilityManifest {
   return {
@@ -414,6 +443,59 @@ function createEmptyActivitiesWorkloadReport(
   };
 }
 
+function createEmptyOperationalDashboardReport(
+  range = {
+    from: "2026-04-01T00:00:00.000Z",
+    to: "2026-04-30T23:59:59.999Z"
+  }
+): OperationalDashboardReport {
+  return {
+    range,
+    generatedAt: "2026-04-30T12:00:00.000Z",
+    createdDeals: 0,
+    meetingsHeld: {
+      total: 0,
+      bySlot: [
+        { slotIndex: 1, slotLabel: "Встреча 1", count: 0 },
+        { slotIndex: 2, slotLabel: "Встреча 2", count: 0 },
+        { slotIndex: 3, slotLabel: "Встреча 3", count: 0 }
+      ]
+    },
+    sales: {
+      total: 0,
+      byClub: []
+    },
+    lostDeals: 0,
+    openDeals: 0,
+    riskSummary: {
+      total: 0,
+      critical: 0,
+      risk: 0,
+      byRule: [],
+      byStage: []
+    },
+    stageWip: [],
+    sla: [],
+    planned: {
+      meetingsToday: [
+        { slotIndex: 1, slotLabel: "Встреча 1", count: 0 },
+        { slotIndex: 2, slotLabel: "Встреча 2", count: 0 },
+        { slotIndex: 3, slotLabel: "Встреча 3", count: 0 }
+      ],
+      meetingsTomorrow: [
+        { slotIndex: 1, slotLabel: "Встреча 1", count: 0 },
+        { slotIndex: 2, slotLabel: "Встреча 2", count: 0 },
+        { slotIndex: 3, slotLabel: "Встреча 3", count: 0 }
+      ],
+      tasksToday: 0,
+      tasksTomorrow: 0
+    },
+    managers: [],
+    risks: [],
+    thresholdsUpdatedAt: null
+  };
+}
+
 function createEmptyCallsWorkloadReport(
   range = {
     from: "2026-06-04T00:00:00.000+03:00",
@@ -682,6 +764,7 @@ function createTestApp(
       managerRows: [],
       comparisons: []
     }),
+    getOperationalDashboardReport: async () => createEmptyOperationalDashboardReport(),
     getConversionEventsReport: async () => ({
       range: {
         from: "2026-04-01T00:00:00.000Z",
@@ -875,6 +958,51 @@ function createTestApp(
         sortOrder: rule.sortOrder ?? index * 10,
         updatedAt: "2026-04-29T10:00:00.000Z"
       })),
+      updatedAt: "2026-04-29T10:00:00.000Z"
+    }),
+    getOperationalThresholdSettings: async () => ({
+      stageAging: [
+        {
+          stageId: "C10:NEW",
+          stageName: "База входящая",
+          maxDaysOnStage: 1
+        },
+        {
+          stageId: "C10:PREPARATION",
+          stageName: "Звонок-знакомство",
+          maxDaysOnStage: 3
+        }
+      ],
+      noCallsMaxDays: 7,
+      noActivityMaxDays: 5,
+      slaBusinessHours: {
+        sla1: 24,
+        sla2: 5,
+        sla3: 72
+      },
+      updatedAt: null
+    }),
+    replaceOperationalThresholdSettings: async (input) => ({
+      stageAging: [
+        {
+          stageId: "C10:NEW",
+          stageName: "База входящая",
+          maxDaysOnStage:
+            input.stageAging.find((threshold) => threshold.stageId === "C10:NEW")
+              ?.maxDaysOnStage ?? 1
+        },
+        {
+          stageId: "C10:PREPARATION",
+          stageName: "Звонок-знакомство",
+          maxDaysOnStage:
+            input.stageAging.find(
+              (threshold) => threshold.stageId === "C10:PREPARATION"
+            )?.maxDaysOnStage ?? 3
+        }
+      ],
+      noCallsMaxDays: input.noCallsMaxDays,
+      noActivityMaxDays: input.noActivityMaxDays,
+      slaBusinessHours: input.slaBusinessHours,
       updatedAt: "2026-04-29T10:00:00.000Z"
     }),
     getAttractionOntology: async () => emptyAttractionOntology,
@@ -1148,6 +1276,13 @@ describe("createApp", () => {
 
     await request(app)
       .get("/api/modules/leadgen/capabilities")
+      .expect(401)
+      .expect(({ body }) => {
+        expect(body.code).toBe("UNAUTHORIZED");
+      });
+
+    await request(app)
+      .get("/api/reports/operational-dashboard")
       .expect(401)
       .expect(({ body }) => {
         expect(body.code).toBe("UNAUTHORIZED");
@@ -2532,6 +2667,102 @@ describe("createApp", () => {
     });
   });
 
+  it("reads and saves operational threshold settings", async () => {
+    const app = createTestApp();
+
+    const readResponse = await request(app)
+      .get("/api/settings/operational-thresholds")
+      .expect(200);
+
+    expect(readResponse.body).toMatchObject({
+      noCallsMaxDays: 7,
+      noActivityMaxDays: 5,
+      slaBusinessHours: {
+        sla1: 24,
+        sla2: 5,
+        sla3: 72
+      }
+    });
+    expect(readResponse.body.stageAging).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining(
+          {
+            stageId: "C10:NEW",
+            stageName: "База входящая",
+            maxDaysOnStage: 1
+          }
+        )
+      ])
+    );
+
+    const updateResponse = await request(app)
+      .put("/api/settings/operational-thresholds")
+      .send({
+        stageAging: [
+          {
+            stageId: "C10:NEW",
+            maxDaysOnStage: 2
+          }
+        ],
+        noCallsMaxDays: 6,
+        noActivityMaxDays: 4,
+        slaBusinessHours: {
+          sla1: 20,
+          sla2: 6,
+          sla3: 60
+        }
+      })
+      .expect(200);
+
+    expect(updateResponse.body).toMatchObject({
+      noCallsMaxDays: 6,
+      noActivityMaxDays: 4,
+      slaBusinessHours: {
+        sla1: 20,
+        sla2: 6,
+        sla3: 60
+      },
+      updatedAt: "2026-04-29T10:00:00.000Z"
+    });
+    expect(updateResponse.body.stageAging).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stageId: "C10:NEW",
+          stageName: "База входящая",
+          maxDaysOnStage: 2
+        }),
+        expect.objectContaining({
+          stageId: "C10:PREPARATION",
+          stageName: "Звонок-знакомство",
+          maxDaysOnStage: 3
+        })
+      ])
+    );
+  });
+
+  it("rejects non-positive operational threshold settings", async () => {
+    const app = createTestApp();
+
+    await request(app)
+      .put("/api/settings/operational-thresholds")
+      .send({
+        stageAging: [
+          {
+            stageId: "C10:NEW",
+            maxDaysOnStage: 0
+          }
+        ],
+        noCallsMaxDays: 7,
+        noActivityMaxDays: 5,
+        slaBusinessHours: {
+          sla1: 24,
+          sla2: 5,
+          sla3: 72
+        }
+      })
+      .expect(400);
+  });
+
   it("reads and saves unit economics cost rules", async () => {
     const app = createTestApp();
 
@@ -3291,6 +3522,7 @@ describe("createApp", () => {
 
   it("returns dashboard data, settings and sync status from the local API", async () => {
     let receivedActivitiesInput: unknown = null;
+    let receivedOperationalDashboardInput: unknown = null;
     let receivedCohortInput: unknown = null;
     let receivedRevenueVelocityInput: unknown = null;
     let receivedLeadgenFunnelInput: unknown = null;
@@ -3364,6 +3596,35 @@ describe("createApp", () => {
             conversionEventRows: [],
             managerRows: []
           }
+        }
+      ]
+    };
+    const operationalDashboardReport: OperationalDashboardReport = {
+      ...createEmptyOperationalDashboardReport(),
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      createdDeals: 6,
+      riskSummary: {
+        ...createEmptyOperationalDashboardReport().riskSummary,
+        total: 2
+      },
+      managers: [
+        {
+          managerId: "7",
+          managerName: "Manager 7",
+          createdDeals: 2,
+          meetingsBySlot: [
+            { slotIndex: 1, slotLabel: "Встреча 1", count: 1 },
+            { slotIndex: 2, slotLabel: "Встреча 2", count: 0 },
+            { slotIndex: 3, slotLabel: "Встреча 3", count: 0 }
+          ],
+          wonDeals: 1,
+          slaLateCount: 1,
+          slaNoTouchCount: 0,
+          openDeals: 1,
+          riskDeals: 1
         }
       ]
     };
@@ -3529,6 +3790,10 @@ describe("createApp", () => {
         receivedActivitiesInput = input;
         return activitiesReport;
       },
+      getOperationalDashboardReport: async (input: unknown) => {
+        receivedOperationalDashboardInput = input;
+        return operationalDashboardReport;
+      },
       getCallsWorkloadReport: async () => callsReport,
       getCallAnalysisQueue: async () => createEmptyCallAnalysisQueue(),
       getCohortConversionReport: async (input: unknown) => {
@@ -3605,6 +3870,7 @@ describe("createApp", () => {
         rules: [],
         updatedAt: "2026-04-10T12:00:00.000Z"
       }),
+      ...operationalThresholdSettingsService,
       getAttractionOntology: async () => emptyAttractionOntology,
       getAttractionOntologySourceDocument: async () =>
         emptyAttractionOntologySourceDocument,
@@ -3788,6 +4054,39 @@ describe("createApp", () => {
           to: "2026-03-31T23:59:59.999Z"
         }
       ]
+    });
+
+    const operationalDashboardResponse = await request(app)
+      .get("/api/reports/operational-dashboard")
+      .query({
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z",
+        managerIds: "7,9",
+        sourceKeys: "WEB"
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.createdDeals).toBe(6);
+        expect(body.riskSummary.total).toBe(2);
+        expect(body.managers).toHaveLength(1);
+        expect(body.managers[0].meetingsBySlot[0]).toEqual({
+          slotIndex: 1,
+          slotLabel: "Встреча 1",
+          count: 1
+        });
+      });
+    expect(operationalDashboardResponse.headers["cache-control"]).toContain(
+      "no-store"
+    );
+    expect(receivedOperationalDashboardInput).toEqual({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      filters: {
+        managerIds: ["7", "9"],
+        sourceKeys: ["WEB"]
+      }
     });
 
     await request(app)
@@ -4461,6 +4760,7 @@ describe("createApp", () => {
         managerRows: [],
         comparisons: []
       }),
+      getOperationalDashboardReport: async () => createEmptyOperationalDashboardReport(),
       getCallsWorkloadReport: async () => ({
         range: {
           from: "2026-04-01T00:00:00.000Z",
@@ -4602,6 +4902,7 @@ describe("createApp", () => {
         rules: [],
         updatedAt: "2026-04-10T12:00:00.000Z"
       }),
+      ...operationalThresholdSettingsService,
       getMeta: async () => ({
         stageCatalog: [],
         managerCatalog: [],
@@ -5082,6 +5383,7 @@ describe("createApp", () => {
         conversionEventRows: [],
         managerRows: []
       }),
+      getOperationalDashboardReport: async () => createEmptyOperationalDashboardReport(),
       getCallsWorkloadReport: async () => ({
         range: {
           from: "2026-04-01T00:00:00.000Z",
@@ -5219,6 +5521,7 @@ describe("createApp", () => {
         rules: [],
         updatedAt: "2026-04-10T12:00:00.000Z"
       }),
+      ...operationalThresholdSettingsService,
       getMeta: async () => ({
         stageCatalog: [],
         managerCatalog: [],

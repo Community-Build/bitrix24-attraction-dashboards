@@ -129,6 +129,34 @@ function withReportingRepositoryDefaults(
     replaceSalesPlanPeriods: async () => undefined,
     getPricingRules: async () => DEFAULT_PRICING_RULES,
     replacePricingRules: async () => [],
+    getOperationalThresholdSettings: async () => ({
+      stageAging: [
+        {
+          stageId: "C10:NEW",
+          stageName: "База входящая",
+          maxDaysOnStage: 1
+        }
+      ],
+      noCallsMaxDays: 7,
+      noActivityMaxDays: 5,
+      slaBusinessHours: {
+        sla1: 24,
+        sla2: 5,
+        sla3: 72
+      },
+      updatedAt: null
+    }),
+    replaceOperationalThresholdSettings: async (input) => ({
+      stageAging: input.stageAging.map((threshold) => ({
+        stageId: threshold.stageId,
+        stageName: threshold.stageId,
+        maxDaysOnStage: threshold.maxDaysOnStage
+      })),
+      noCallsMaxDays: input.noCallsMaxDays,
+      noActivityMaxDays: input.noActivityMaxDays,
+      slaBusinessHours: input.slaBusinessHours,
+      updatedAt: input.updatedAt
+    }),
     getUnitEconomicsCostArticles: async () => [],
     getUnitEconomicsCostRules: async () => [],
     replaceUnitEconomicsCostRules: async () => [],

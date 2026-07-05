@@ -1,10 +1,11 @@
 import { Fragment, useEffect, useMemo, useState, type ComponentType, type ReactNode } from 'react'
-import { ArrowDown01Icon, ArrowRight01Icon } from '@hugeicons/core-free-icons'
+import { ArrowDown01Icon, ArrowRight01Icon, InformationCircleIcon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
 
 import type {
   ActivitiesWorkloadReport,
   AcquisitionOutcomesReport,
+  DashboardQuery,
   ConversionEventsReport,
   DashboardData,
   DealEventSummary,
@@ -15,6 +16,10 @@ import type {
   HourlyWeekdayWorkloadHeatmap,
   ManagerActionOutcomeDealDetail,
   ManagerActionOutcomeReport,
+  OperationalDashboardReport,
+  OperationalMeetingSlotCount,
+  OperationalRiskDeal,
+  OperationalRiskRuleKey,
   RevenueVelocityDimension,
   RevenueVelocityFormulaBreakdown,
   RevenueVelocityReport,
@@ -43,6 +48,7 @@ import {
   formatShortDate,
 } from '@/lib/formatters'
 import { revenueVelocityTooltips } from '@/lib/revenue-velocity-tooltips'
+import { cn } from '@/lib/utils'
 import { buildDashboardQueryFromProtoFilters } from '@/proto/live-reporting'
 import { managerOptions, sceneMetadata, sourceOptions } from '@/proto/scene-registry'
 import type {
@@ -1911,21 +1917,46 @@ function PanelHeading({
   id,
   title,
   description,
+  hint,
   right,
 }: {
   id?: string
   title: string
   description?: string
+  hint?: string
   right?: ReactNode
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h3 id={id} className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">{title}</h3>
+        <div className="flex items-center gap-2">
+          <h3 id={id} className="text-sm font-semibold uppercase tracking-[0.14em] text-slate-600">{title}</h3>
+          {hint ? <CalculationHint text={hint} /> : null}
+        </div>
         {description ? <p className="mt-1 text-sm text-slate-600">{description}</p> : null}
       </div>
       {right}
     </div>
+  )
+}
+
+function CalculationHint({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-label={`Как считается: ${text}`}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition hover:border-slate-300 hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-300"
+      >
+        <HugeiconsIcon icon={InformationCircleIcon} strokeWidth={2} className="h-3.5 w-3.5" />
+      </button>
+      <span
+        role="tooltip"
+        className="pointer-events-none absolute left-1/2 top-6 z-30 hidden w-60 max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold leading-relaxed text-slate-600 shadow-lg group-hover:block group-focus-within:block"
+      >
+        {text}
+      </span>
+    </span>
   )
 }
 
@@ -7183,6 +7214,787 @@ function SourceCohortManagerDetails({ manager }: { manager: SourceCohortManagerV
   )
 }
 
+type OperationalRiskFilter = 'all' | 'critical' | OperationalRiskRuleKey
+
+const operationalRiskRuleOrder: OperationalRiskRuleKey[] = [
+  'stage_aging',
+  'no_open_activity',
+  'no_recent_calls',
+  'no_recent_activity',
+]
+
+const operationalRiskRuleLabels: Record<OperationalRiskRuleKey, string> = {
+  stage_aging: 'Застрял на этапе',
+  no_open_activity: 'Без дел',
+  no_recent_calls: 'Без звонков',
+  no_recent_activity: 'Без активностей',
+}
+
+const operationalCalculationHints = {
+  meetings:
+    'Считаются встречи В1/В2/В3 по слотам сделки, если дата встречи попадает в выбранный период.',
+  sales:
+    'Считаются выигранные сделки за период. Клуб берется из таргет-группы продажи, цикл - от создания сделки до закрытия.',
+  sla:
+    'SLA первого касания: от создания сделки до первого контакта в бизнес-часах. Порог берется из настроек.',
+  planned:
+    'Считаются открытые дела и встречи с дедлайном сегодня или завтра. Встречи берутся только В1/В2/В3.',
+  stages:
+    'Открытые сделки группируются по текущему этапу. Клик по этапу фильтрует ленту рисков.',
+  risks:
+    'В ленте только открытые сделки с хотя бы одним флагом: застрял на этапе, нет открытого дела, нет любого звонка за порог или нет свежей CRM-активности.',
+  managers:
+    'Строка менеджера собирает созданные сделки, встречи, продажи, SLA, открытые сделки и риски за текущий срез. Клик фильтрует ленту.',
+}
+
+const operationalRiskFilterHints: Record<OperationalRiskFilter, string> = {
+  all: 'Все рисковые открытые сделки в текущем срезе.',
+  critical: 'Критично, если хотя бы один флаг критический. Для этапа это срок в два раза выше порога.',
+  stage_aging: 'Сделка находится на текущем этапе дольше порога этого этапа из настроек.',
+  no_open_activity: 'По сделке нет ни одного открытого CRM-дела.',
+  no_recent_calls: 'Последний любой привязанный звонок по сделке старше порога из настроек. Учитываются входящие, исходящие, успешные и неуспешные звонки с датой.',
+  no_recent_activity:
+    'CRM-активность - дело/активность в карточке сделки: задача, встреча, звонок как Bitrix activity. Берется самая поздняя дата created, completed или updated. Отдельная телефония считается правилом "Без звонков".',
+}
+
+function formatOperationalDays(value: number | null | undefined) {
+  return `${formatOneDecimal(value ?? 0)} дн`
+}
+
+function formatOperationalHours(value: number | null | undefined) {
+  return `${formatOneDecimal(value ?? 0)} ч`
+}
+
+function sumOperationalSlots(slots: OperationalMeetingSlotCount[]) {
+  return slots.reduce((total, slot) => total + slot.count, 0)
+}
+
+function formatOperationalSlotSummary(slots: OperationalMeetingSlotCount[]) {
+  return slots
+    .map((slot) => `${slot.slotLabel.replace('Встреча ', 'В')}: ${formatInteger(slot.count)}`)
+    .join(' · ')
+}
+
+function formatManagerMeetingSlots(slots: OperationalMeetingSlotCount[]) {
+  return slots.map((slot) => formatInteger(slot.count)).join('/')
+}
+
+function countOperationalRisksByRule(
+  risks: OperationalRiskDeal[],
+  rule: OperationalRiskRuleKey,
+) {
+  return risks.filter((risk) => risk.flags.some((flag) => flag.rule === rule)).length
+}
+
+function formatOperationalRiskFlags(flags: OperationalRiskDeal['flags']) {
+  return flags.map((flag) => flag.label || operationalRiskRuleLabels[flag.rule]).join(' · ')
+}
+
+function getOperationalRiskRowTone(severity: 'risk' | 'critical') {
+  return severity === 'critical'
+    ? {
+        row: 'border-l-rose-300 bg-gradient-to-r from-rose-50/45 via-white to-white',
+        pill: 'border-rose-100 bg-white/90 text-rose-700',
+      }
+    : {
+        row: 'border-l-amber-300 bg-gradient-to-r from-amber-50/45 via-white to-white',
+        pill: 'border-amber-100 bg-white/90 text-amber-700',
+      }
+}
+
+function getOperationalSla2(report: OperationalDashboardReport) {
+  return (
+    report.sla.find((row) => row.slaKey === 'sla2') ??
+    report.sla[0] ?? {
+      slaKey: 'sla2' as const,
+      label: 'Первый контакт',
+      thresholdBusinessHours: 0,
+      onTimeCount: 0,
+      lateCount: 0,
+      noTouchCount: 0,
+      medianHours: 0,
+    }
+  )
+}
+
+function matchesOperationalRiskFilter(
+  risk: OperationalRiskDeal,
+  ruleFilter: OperationalRiskFilter,
+  stageFilter: string | null,
+  managerFilter: string | null,
+) {
+  if (ruleFilter === 'critical' && risk.severity !== 'critical') {
+    return false
+  }
+
+  if (
+    ruleFilter !== 'all' &&
+    ruleFilter !== 'critical' &&
+    !risk.flags.some((flag) => flag.rule === ruleFilter)
+  ) {
+    return false
+  }
+
+  if (stageFilter && risk.stageId !== stageFilter) {
+    return false
+  }
+
+  if (managerFilter && risk.managerId !== managerFilter) {
+    return false
+  }
+
+  return true
+}
+
+function OperationListRow({
+  label,
+  value,
+  note,
+}: {
+  label: string
+  value: ReactNode
+  note?: string
+}) {
+  return (
+    <div className="flex min-w-0 items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-b-0">
+      <span className="min-w-0 truncate text-sm text-slate-700">{label}</span>
+      <span className="shrink-0 text-right text-sm font-bold text-slate-900">
+        {value}
+        {note ? <span className="ml-1 text-xs font-semibold text-slate-400">{note}</span> : null}
+      </span>
+    </div>
+  )
+}
+
+function OperationalRiskChip({
+  active,
+  children,
+  onClick,
+  tooltip,
+}: {
+  active: boolean
+  children: ReactNode
+  onClick: () => void
+  tooltip?: string
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={
+        active
+          ? 'group relative inline-flex items-center gap-1.5 rounded-full bg-slate-900 px-3 py-1.5 text-xs font-bold text-white'
+          : 'group relative inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:border-slate-300 hover:text-slate-900'
+      }
+    >
+      <span>{children}</span>
+      {tooltip ? (
+        <span
+          aria-hidden="true"
+          className={cn(
+            'inline-flex h-4 w-4 items-center justify-center rounded-full border text-[10px] leading-none',
+            active ? 'border-white/30 text-white/75' : 'border-slate-200 text-slate-400',
+          )}
+        >
+          ?
+        </span>
+      ) : null}
+      {tooltip ? (
+        <span
+          role="tooltip"
+          className="pointer-events-none absolute left-1/2 top-full z-30 mt-2 hidden w-72 -translate-x-1/2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-xs font-semibold leading-relaxed text-slate-600 shadow-lg group-hover:block group-focus-within:block"
+        >
+          {tooltip}
+        </span>
+      ) : null}
+    </button>
+  )
+}
+
+export function OperationsScene({ filters }: SceneComponentProps) {
+  const requestKey = useMemo(
+    () => JSON.stringify(buildDashboardQueryFromProtoFilters(filters)),
+    [filters],
+  )
+  const query = useMemo(() => JSON.parse(requestKey) as DashboardQuery, [requestKey])
+  const [reportState, setReportState] = useState<{
+    requestKey: string
+    report: OperationalDashboardReport
+  } | null>(null)
+  const [errorState, setErrorState] = useState<{
+    requestKey: string
+    message: string
+  } | null>(null)
+  const [ruleFilter, setRuleFilter] = useState<OperationalRiskFilter>('all')
+  const [stageFilter, setStageFilter] = useState<string | null>(null)
+  const [managerFilter, setManagerFilter] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+
+    apiClient
+      .getOperationalDashboardReport(query)
+      .then((nextReport) => {
+        if (cancelled) {
+          return
+        }
+
+        setReportState({ requestKey, report: nextReport })
+        setErrorState(null)
+      })
+      .catch((nextError: unknown) => {
+        if (cancelled) {
+          return
+        }
+
+        setErrorState({
+          requestKey,
+          message:
+            nextError instanceof Error
+              ? nextError.message
+              : 'Не удалось загрузить операционный дашборд',
+        })
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [query, requestKey])
+
+  const report = reportState?.requestKey === requestKey ? reportState.report : null
+  const errorMessage = errorState?.requestKey === requestKey ? errorState.message : null
+  const isLoading = reportState?.requestKey !== requestKey && !errorMessage
+  const scopedRisks = useMemo(
+    () =>
+      (report?.risks ?? []).filter((risk) =>
+        matchesOperationalRiskFilter(risk, 'all', stageFilter, managerFilter),
+      ),
+    [managerFilter, report?.risks, stageFilter],
+  )
+  const filteredRisks = useMemo(
+    () =>
+      scopedRisks.filter((risk) =>
+        matchesOperationalRiskFilter(risk, ruleFilter, null, null),
+      ),
+    [ruleFilter, scopedRisks],
+  )
+  const visibleRisks = filteredRisks
+  const stageNameById = useMemo(
+    () => new Map((report?.stageWip ?? []).map((stage) => [stage.stageId, stage.stageName])),
+    [report?.stageWip],
+  )
+  const managerNameById = useMemo(
+    () =>
+      new Map(
+        (report?.managers ?? []).map((manager) => [manager.managerId, manager.managerName]),
+      ),
+    [report?.managers],
+  )
+  const criticalRisksByStage = useMemo(() => {
+    const rows = new Map<string, number>()
+    for (const risk of report?.risks ?? []) {
+      if (risk.severity === 'critical') {
+        rows.set(risk.stageId, (rows.get(risk.stageId) ?? 0) + 1)
+      }
+    }
+    return rows
+  }, [report?.risks])
+
+  if (isLoading && !report) {
+    return (
+      <section className="panel p-5" role="status">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+          <span className="btn-spinner" aria-hidden="true" />
+          Загружаю операционный дашборд
+        </div>
+      </section>
+    )
+  }
+
+  if (errorMessage && !report) {
+    return (
+      <section
+        role="alert"
+        className="panel border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"
+      >
+        {errorMessage}
+      </section>
+    )
+  }
+
+  if (!report) {
+    return null
+  }
+
+  const sla2 = getOperationalSla2(report)
+  const activeStageLabel = stageFilter ? stageNameById.get(stageFilter) ?? stageFilter : null
+  const activeManagerLabel = managerFilter
+    ? managerNameById.get(managerFilter) ?? managerFilter
+    : null
+  const toggleManagerFilter = (managerId: string) =>
+    setManagerFilter((current) => (current === managerId ? null : managerId))
+  const loadedRiskTotal = report.risks.length
+  const isRiskListCapped = report.riskSummary.total > loadedRiskTotal
+  const riskDescription =
+    isRiskListCapped
+      ? `Всего рисков: ${formatInteger(report.riskSummary.total)}. В список загружены первые ${formatInteger(loadedRiskTotal)} по приоритету.`
+      : `Всего рисков: ${formatInteger(report.riskSummary.total)}.`
+  const riskFilterButtons: Array<{
+    key: OperationalRiskFilter
+    label: string
+    count: number
+  }> = [
+    { key: 'all', label: isRiskListCapped ? 'В списке' : 'Все', count: scopedRisks.length },
+    {
+      key: 'critical',
+      label: 'Критично',
+      count: scopedRisks.filter((risk) => risk.severity === 'critical').length,
+    },
+    ...operationalRiskRuleOrder.map((rule) => ({
+      key: rule,
+      label: operationalRiskRuleLabels[rule],
+      count: countOperationalRisksByRule(scopedRisks, rule),
+    })),
+  ]
+
+  return (
+    <div className="grid min-w-0 gap-6">
+      {isLoading ? (
+        <div
+          role="status"
+          className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-500"
+        >
+          <span className="btn-spinner" aria-hidden="true" />
+          Обновляю
+        </div>
+      ) : null}
+
+      {errorMessage ? (
+        <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          {errorMessage}
+        </div>
+      ) : null}
+
+      <section
+        className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-6"
+        data-comment-block-id="attraction-operations-summary"
+        data-comment-block-label="Операционный дашборд — сводка"
+      >
+        {[
+          ['Создано', formatInteger(report.createdDeals), 'новых сделок'],
+          [
+            'Встречи',
+            formatInteger(report.meetingsHeld.total),
+            formatOperationalSlotSummary(report.meetingsHeld.bySlot),
+          ],
+          ['Продажи', formatInteger(report.sales.total), 'по клубам ниже'],
+          ['Проиграно', formatInteger(report.lostDeals), 'за период'],
+          ['В работе', formatInteger(report.openDeals), 'открытых сделок'],
+          [
+            'Рисков',
+            formatInteger(report.riskSummary.total),
+            `${formatInteger(report.riskSummary.critical)} критично · ${formatInteger(report.riskSummary.risk)} риск`,
+          ],
+        ].map(([label, value, note]) => {
+          const isRisk = label === 'Рисков'
+          return (
+              <div
+                key={label}
+                className={cn(
+                  'metric min-w-0 p-4',
+                isRisk && 'border-slate-300 bg-white/95 border-t-2 border-t-slate-300',
+                )}
+              >
+                <p className="subtle-label">{label}</p>
+                <p className="mt-1 text-2xl font-bold text-slate-900">
+                  {value}
+                </p>
+                <p className="truncate text-xs font-medium text-slate-500">{note}</p>
+              </div>
+          )
+        })}
+      </section>
+
+        <section className="grid min-w-0 items-start gap-6 xl:grid-cols-[minmax(0,0.9fr)_minmax(30rem,1.15fr)]">
+          <div className="grid min-w-0 gap-6">
+            <section
+              className="grid min-w-0 gap-6 2xl:grid-cols-2"
+            data-comment-block-id="attraction-operations-flow"
+            data-comment-block-label="Операционный дашборд — поток"
+          >
+            <div className="panel min-w-0 p-5">
+              <PanelHeading
+                title="Встречи за период"
+                hint={operationalCalculationHints.meetings}
+                right={<span className="badge-chip badge-neutral">{formatInteger(report.meetingsHeld.total)}</span>}
+              />
+              <div className="grid gap-1">
+                {report.meetingsHeld.bySlot.map((slot) => (
+                  <OperationListRow
+                    key={slot.slotIndex}
+                    label={slot.slotLabel}
+                    value={formatInteger(slot.count)}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="panel min-w-0 p-5">
+              <PanelHeading
+                title="Продажи за период"
+                hint={operationalCalculationHints.sales}
+                right={<span className="badge-chip badge-green">{formatInteger(report.sales.total)}</span>}
+              />
+              <div className="grid gap-1">
+                {report.sales.byClub.length > 0 ? (
+                  report.sales.byClub.map((club) => (
+                    <OperationListRow
+                      key={club.targetGroupKey}
+                      label={club.targetGroupLabel}
+                      value={formatInteger(club.wonDeals)}
+                      note={`· цикл ${formatOperationalDays(club.averageDaysToWin)}`}
+                    />
+                  ))
+                ) : (
+                  <OperationListRow label="Продаж нет" value="—" />
+                )}
+              </div>
+            </div>
+          </section>
+
+            <section
+              className="grid min-w-0 gap-6 2xl:grid-cols-2"
+            data-comment-block-id="attraction-operations-sla-planned"
+            data-comment-block-label="Операционный дашборд — SLA и планы"
+          >
+            <div className="panel min-w-0 p-5">
+              <PanelHeading
+                title="SLA первого касания"
+                description={`Порог ${formatInteger(sla2.thresholdBusinessHours)} ч из настроек`}
+                hint={operationalCalculationHints.sla}
+              />
+              <div className="grid gap-2 [grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr))]">
+                {[
+                  ['Вовремя', sla2.onTimeCount, 'bg-emerald-500'],
+                  ['С опозданием', sla2.lateCount, 'bg-rose-500'],
+                  ['Без касания', sla2.noTouchCount, 'bg-rose-500'],
+                ].map(([label, value, dotClass]) => (
+                  <div key={label} className="min-w-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dotClass)} />
+                      <span className="min-w-0 truncate text-[11px] font-bold uppercase text-slate-500">
+                        {label}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xl font-bold text-slate-900">{formatInteger(Number(value))}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-sm font-medium text-slate-500">
+                Медиана до первого контакта: <span className="text-slate-900">{formatOperationalHours(sla2.medianHours)}</span>
+              </p>
+            </div>
+
+            <div className="panel min-w-0 p-5">
+              <PanelHeading title="Запланировано" hint={operationalCalculationHints.planned} />
+              <div className="grid gap-1">
+                <OperationListRow
+                  label="Сегодня: встречи"
+                  value={formatInteger(sumOperationalSlots(report.planned.meetingsToday))}
+                  note={`· ${formatOperationalSlotSummary(report.planned.meetingsToday)}`}
+                />
+                <OperationListRow
+                  label="Сегодня: дела"
+                  value={formatInteger(report.planned.tasksToday)}
+                />
+                <OperationListRow
+                  label="Завтра: встречи"
+                  value={formatInteger(sumOperationalSlots(report.planned.meetingsTomorrow))}
+                  note={`· ${formatOperationalSlotSummary(report.planned.meetingsTomorrow)}`}
+                />
+                <OperationListRow
+                  label="Завтра: дела"
+                  value={formatInteger(report.planned.tasksTomorrow)}
+                />
+              </div>
+            </div>
+          </section>
+
+          <section
+            className="panel min-w-0 p-5"
+            data-comment-block-id="attraction-operations-stage-wip"
+            data-comment-block-label="Операционный дашборд — в работе по этапам"
+          >
+            <PanelHeading
+              title="В работе по этапам"
+              hint={operationalCalculationHints.stages}
+              right={<span className="badge-chip badge-neutral">{formatInteger(report.openDeals)} открыто</span>}
+            />
+            <div className="grid gap-1">
+              {report.stageWip.length > 0 ? (
+                report.stageWip.map((stage) => {
+                  const hasCritical = (criticalRisksByStage.get(stage.stageId) ?? 0) > 0
+                  return (
+                      <button
+                        key={stage.stageId}
+                        type="button"
+                        aria-label={`Фильтр по этапу ${stage.stageName}`}
+                        aria-pressed={stageFilter === stage.stageId}
+                        onClick={() =>
+                          setStageFilter((current) =>
+                            current === stage.stageId ? null : stage.stageId,
+                          )
+                        }
+                        className={cn(
+                          'flex min-w-0 cursor-pointer items-center justify-between gap-3 rounded-xl border border-transparent px-3 py-2 text-left transition hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-300',
+                          stageFilter === stage.stageId && 'border-slate-400 bg-slate-100/80',
+                        )}
+                      >
+                        <span className="min-w-0 truncate text-sm font-semibold text-slate-700">{stage.stageName}</span>
+                        <span className="flex shrink-0 items-center gap-2">
+                          <span className="text-sm font-bold text-slate-900">{formatInteger(stage.openDeals)}</span>
+                          {stage.riskDeals > 0 ? (
+                            <span
+                              className={cn(
+                                'rounded-full border px-2 py-0.5 text-[11px] font-bold',
+                                hasCritical
+                                  ? 'border-slate-300 bg-slate-50 text-slate-700'
+                                  : 'border-slate-200 bg-white text-slate-500',
+                              )}
+                            >
+                              {formatInteger(stage.riskDeals)} в риске
+                            </span>
+                          ) : null}
+                          <span
+                            className={cn(
+                              'rounded-full border px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.08em]',
+                              stageFilter === stage.stageId
+                                ? 'border-slate-500 bg-slate-900 text-white'
+                                : 'border-slate-200 bg-white text-slate-500',
+                            )}
+                          >
+                            {stageFilter === stage.stageId ? 'Активен' : 'Фильтр'}
+                          </span>
+                        </span>
+                      </button>
+                    )
+                  })
+              ) : (
+                <OperationListRow label="Открытых этапов нет" value="—" />
+              )}
+            </div>
+          </section>
+        </div>
+
+        <section
+          className="panel min-w-0 p-5"
+          data-comment-block-id="attraction-operations-risks"
+          data-comment-block-label="Операционный дашборд — лента рисков"
+          >
+          <PanelHeading
+            title="Лента рисков"
+              description={riskDescription}
+              hint={operationalCalculationHints.risks}
+              right={
+                <span className="badge-chip badge-neutral">
+                  {formatInteger(filteredRisks.length)} сделок
+                </span>
+              }
+            />
+          <div className="mb-3 flex min-w-0 flex-wrap gap-2">
+            {riskFilterButtons.map((chip) => (
+              <OperationalRiskChip
+                key={chip.key}
+                active={ruleFilter === chip.key}
+                onClick={() => setRuleFilter(chip.key)}
+                tooltip={operationalRiskFilterHints[chip.key]}
+              >
+                {chip.label} · {formatInteger(chip.count)}
+              </OperationalRiskChip>
+            ))}
+          </div>
+
+          {activeStageLabel || activeManagerLabel ? (
+            <div className="mb-3 flex min-w-0 flex-wrap gap-2">
+              {activeStageLabel ? (
+                <button
+                  type="button"
+                  onClick={() => setStageFilter(null)}
+                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"
+                >
+                  Этап: {activeStageLabel} ×
+                </button>
+              ) : null}
+              {activeManagerLabel ? (
+                <button
+                  type="button"
+                  onClick={() => setManagerFilter(null)}
+                  className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-700"
+                >
+                  Менеджер: {activeManagerLabel} ×
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="grid max-h-[44rem] gap-2 overflow-y-auto pr-1">
+            {visibleRisks.length > 0 ? (
+              visibleRisks.map((risk) => {
+                const rowTone = getOperationalRiskRowTone(risk.severity)
+                return (
+                  <article
+                    key={risk.dealId}
+                    className={cn(
+                      'rounded-lg border border-l-[3px] border-slate-200 px-3 py-2 shadow-[0_1px_3px_rgba(15,23,42,0.03)]',
+                      rowTone.row,
+                    )}
+                  >
+                    <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start sm:gap-3">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+                          {risk.dealUrl ? (
+                            <a
+                              href={risk.dealUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="shrink-0 text-sm font-bold text-blue-700 hover:text-blue-900"
+                            >
+                              Сделка #{risk.dealId} ↗
+                            </a>
+                          ) : (
+                            <span className="shrink-0 text-sm font-bold text-slate-900">
+                              Сделка #{risk.dealId}
+                            </span>
+                          )}
+                          <span className="min-w-0 truncate text-sm font-semibold text-slate-700">
+                            {risk.stageName} · {risk.managerName}
+                          </span>
+                        </div>
+                        <div className="mt-1 flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs font-medium text-slate-500">
+                          <span className="min-w-0 truncate">
+                            {risk.sourceLabel} · {risk.customerClubLabel}
+                          </span>
+                          <span className="min-w-0 truncate">
+                            {formatOperationalRiskFlags(risk.flags)}
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded-full border px-2 py-1 text-right text-xs font-bold',
+                          rowTone.pill,
+                        )}
+                      >
+                        {formatInteger(risk.daysOnStage)} дн
+                        {risk.stageMaxDays ? ` / ${formatInteger(risk.stageMaxDays)}` : ''}
+                      </span>
+                    </div>
+                  </article>
+                )
+              })
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-500">
+                Рисков по выбранным фильтрам нет.
+              </div>
+            )}
+          </div>
+
+        </section>
+      </section>
+
+      <section
+        className="panel min-w-0 overflow-hidden p-5"
+        data-comment-block-id="attraction-operations-managers"
+        data-comment-block-label="Операционный дашборд — менеджеры"
+      >
+          <PanelHeading
+            title="Менеджеры за период"
+            hint={operationalCalculationHints.managers}
+            right={<span className="badge-chip badge-neutral">{formatInteger(report.managers.length)} менеджеров</span>}
+          />
+        <div className="overflow-x-auto">
+          <table className="min-w-[820px] w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.12em] text-slate-500">
+                <th className="py-2 pr-3">Менеджер</th>
+                <th className="py-2 pr-3 text-right">Создано</th>
+                <th className="py-2 pr-3 text-right">Встречи В1/В2/В3</th>
+                <th className="py-2 pr-3 text-right">Продажи</th>
+                <th className="py-2 pr-3 text-right">SLA поздно/без кас.</th>
+                <th className="py-2 pr-3 text-right">В работе</th>
+                <th className="py-2 text-right">Рисков</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.managers.length > 0 ? (
+                report.managers.map((manager) => (
+                  <tr
+                    key={manager.managerId}
+                    onClick={() => toggleManagerFilter(manager.managerId)}
+                    className={cn(
+                      'cursor-pointer border-b border-slate-100 transition hover:bg-slate-50',
+                      managerFilter === manager.managerId && 'bg-slate-50',
+                    )}
+                  >
+                    <td className="py-2.5 pr-3">
+                        <button
+                          type="button"
+                          aria-label={`Фильтр по менеджеру ${manager.managerName}`}
+                          aria-pressed={managerFilter === manager.managerId}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            toggleManagerFilter(manager.managerId)
+                          }}
+                          className="flex w-full min-w-0 cursor-pointer items-center gap-2 text-left font-semibold text-slate-900 outline-none transition hover:text-blue-700 focus:text-blue-700"
+                        >
+                          <span className="min-w-0 truncate">{manager.managerName}</span>
+                          <span
+                            className={cn(
+                              'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.08em]',
+                              managerFilter === manager.managerId
+                                ? 'border-slate-500 bg-slate-900 text-white'
+                                : 'border-slate-200 bg-white text-slate-500',
+                            )}
+                          >
+                            {managerFilter === manager.managerId ? 'Активен' : 'Фильтр'}
+                          </span>
+                        </button>
+                      </td>
+                    <td className="py-2.5 pr-3 text-right text-slate-700">{formatInteger(manager.createdDeals)}</td>
+                    <td className="py-2.5 pr-3 text-right text-slate-700">{formatManagerMeetingSlots(manager.meetingsBySlot)}</td>
+                    <td className="py-2.5 pr-3 text-right text-slate-700">{formatInteger(manager.wonDeals)}</td>
+                    <td className="py-2.5 pr-3 text-right text-slate-700">
+                      {formatInteger(manager.slaLateCount)} / {formatInteger(manager.slaNoTouchCount)}
+                    </td>
+                    <td className="py-2.5 pr-3 text-right text-slate-700">{formatInteger(manager.openDeals)}</td>
+                    <td
+                        className={cn(
+                          'py-2.5 text-right font-bold',
+                          manager.riskDeals > 0
+                            ? 'rounded-l-lg bg-rose-50/60 px-2 text-rose-700'
+                            : 'text-slate-500',
+                        )}
+                    >
+                      {formatInteger(manager.riskDeals)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td className="py-4 text-sm text-slate-500" colSpan={7}>
+                    Нет данных по менеджерам за выбранный период.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export function SourceCohortsScene({ filters }: SceneComponentProps) {
   const { compareRanges, managers, rangeEnd, rangeStart, sources } = filters
   const filterMonth = getSourceCohortFilterMonth(filters)
@@ -8918,6 +9730,7 @@ export function UnitEconomicsScene({ filters, runtimeData }: SceneComponentProps
 }
 
 const sceneComponents: Record<string, ComponentType<SceneComponentProps>> = {
+  operations: OperationsScene,
   sales: SalesScene,
   'sales-plan': SalesPlanScene,
   'activities-calls': ActivitiesScene,

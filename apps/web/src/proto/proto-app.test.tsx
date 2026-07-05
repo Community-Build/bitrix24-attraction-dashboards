@@ -11,6 +11,7 @@ import type {
   DealPricingRuleInput,
   ManagerWhitelistSettingsInput,
   MetaResponse,
+  OperationalThresholdSettingsInput,
   SalesPlanData,
   SalesPlanInput,
   SalesPlanQuarterData,
@@ -41,6 +42,18 @@ function formatExpectedDateTime(value: string) {
 
 async function openAccountTab(name: RegExp) {
   await userEvent.click(await screen.findByRole('tab', { name }))
+}
+
+async function openSalesScene() {
+  await userEvent.click(await screen.findByRole('button', { name: /^отчет по продажам$/i }))
+}
+
+function renderProtoAppAt(value: string) {
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date(value))
+  const result = render(<ProtoApp />)
+  vi.useRealTimers()
+  return result
 }
 
 vi.mock('@/lib/api-client', () => ({
@@ -168,6 +181,46 @@ vi.mock('@/lib/api-client', () => ({
       })),
       updatedAt: '2026-04-10T12:05:00.000Z',
     })),
+    getOperationalThresholdSettings: vi.fn(async () => ({
+      stageAging: [
+        {
+          stageId: 'C10:NEW',
+          stageName: 'База входящая',
+          maxDaysOnStage: 1,
+        },
+        {
+          stageId: 'C10:PREPARATION',
+          stageName: 'Звонок-знакомство',
+          maxDaysOnStage: 3,
+        },
+      ],
+      noCallsMaxDays: 7,
+      noActivityMaxDays: 5,
+      slaBusinessHours: {
+        sla1: 24,
+        sla2: 5,
+        sla3: 72,
+      },
+      updatedAt: null,
+    })),
+    saveOperationalThresholdSettings: vi.fn(
+      async (input: OperationalThresholdSettingsInput) => ({
+        stageAging: input.stageAging.map((row) => ({
+          stageId: row.stageId,
+          stageName:
+            row.stageId === 'C10:NEW'
+              ? 'База входящая'
+              : row.stageId === 'C10:PREPARATION'
+                ? 'Звонок-знакомство'
+                : row.stageId,
+          maxDaysOnStage: row.maxDaysOnStage,
+        })),
+        noCallsMaxDays: input.noCallsMaxDays,
+        noActivityMaxDays: input.noActivityMaxDays,
+        slaBusinessHours: input.slaBusinessHours,
+        updatedAt: '2026-04-10T12:05:00.000Z',
+      }),
+    ),
     getConversionEventTypeSettings: vi.fn(async () => ({
       options: [
         {
@@ -370,6 +423,64 @@ vi.mock('@/lib/api-client', () => ({
         updatedAt: '2026-04-10T12:05:00.000Z',
       })),
       updatedAt: '2026-04-10T12:05:00.000Z',
+    })),
+    getOperationalDashboardReport: vi.fn(async () => ({
+      range: {
+        from: '2026-04-01T00:00:00.000+03:00',
+        to: '2026-04-30T23:59:59.999+03:00',
+      },
+      generatedAt: '2026-04-30T12:00:00.000Z',
+      createdDeals: 0,
+      meetingsHeld: {
+        total: 0,
+        bySlot: [
+          { slotIndex: 1, slotLabel: 'Встреча 1', count: 0 },
+          { slotIndex: 2, slotLabel: 'Встреча 2', count: 0 },
+          { slotIndex: 3, slotLabel: 'Встреча 3', count: 0 },
+        ],
+      },
+      sales: {
+        total: 0,
+        byClub: [],
+      },
+      lostDeals: 0,
+      openDeals: 0,
+      riskSummary: {
+        total: 0,
+        critical: 0,
+        risk: 0,
+        byRule: [],
+        byStage: [],
+      },
+      stageWip: [],
+      sla: [
+        {
+          slaKey: 'sla2',
+          label: 'Первый контакт',
+          thresholdBusinessHours: 5,
+          onTimeCount: 0,
+          lateCount: 0,
+          noTouchCount: 0,
+          medianHours: 0,
+        },
+      ],
+      planned: {
+        meetingsToday: [
+          { slotIndex: 1, slotLabel: 'Встреча 1', count: 0 },
+          { slotIndex: 2, slotLabel: 'Встреча 2', count: 0 },
+          { slotIndex: 3, slotLabel: 'Встреча 3', count: 0 },
+        ],
+        meetingsTomorrow: [
+          { slotIndex: 1, slotLabel: 'Встреча 1', count: 0 },
+          { slotIndex: 2, slotLabel: 'Встреча 2', count: 0 },
+          { slotIndex: 3, slotLabel: 'Встреча 3', count: 0 },
+        ],
+        tasksToday: 0,
+        tasksTomorrow: 0,
+      },
+      managers: [],
+      risks: [],
+      thresholdsUpdatedAt: null,
     })),
     getActivitiesWorkloadReport: vi.fn(async () => ({
       range: { from: '2026-04-01T00:00:00.000Z', to: '2026-04-30T23:59:59.999Z' },
@@ -2033,6 +2144,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     await userEvent.click(
       await screen.findByRole('button', { name: /уведомления команды разработки/i }),
@@ -2090,6 +2202,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     await userEvent.click(
       await screen.findByRole('button', { name: /уведомления команды разработки/i }),
@@ -2176,6 +2289,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     await userEvent.click(await screen.findByRole('button', { name: /^комментарии$/i }))
     await userEvent.click(await screen.findByRole('button', { name: /проверить историю команды/i }))
@@ -2273,6 +2387,7 @@ describe('ProtoApp', () => {
     )
 
     render(<ProtoApp currentUser={leader} />)
+    await openSalesScene()
 
     await userEvent.click(await screen.findByRole('button', { name: /^комментарии$/i }))
     await userEvent.click(await screen.findByRole('button', { name: /дата встречи не видна/i }))
@@ -2382,6 +2497,7 @@ describe('ProtoApp', () => {
     await userEvent.click(screen.getByRole('button', { name: /к дашборду/i }))
 
     expect(window.location.pathname).toBe('/')
+    await openSalesScene()
     expect(await screen.findByText(/sales report live/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^настройки$/i })).not.toBeInTheDocument()
     unmount()
@@ -2686,6 +2802,77 @@ describe('ProtoApp', () => {
             unitPrice: 6000,
           }),
         ]),
+      }),
+    )
+  })
+
+  it('lets module leaders edit and save operational threshold settings', async () => {
+    const leader: AuthUser = {
+      id: 1,
+      login: 'leader@example.com',
+      firstName: 'Мария',
+      lastName: 'Потапова',
+      role: 'admin' as const,
+      modules: [
+        {
+          id: 'attraction',
+          slug: 'attraction',
+          name: 'Привлечение',
+          role: 'leader' as const,
+          permissions: [
+            'comments:create',
+            'comments:update',
+            'comments:archive',
+            'module-users:manage',
+          ],
+          paperclipCompanyId: null,
+          paperclipProjectId: null,
+          paperclipGoalId: null,
+          paperclipTriageAgentId: null,
+        },
+      ],
+    }
+
+    render(<ProtoApp currentUser={leader} />)
+
+    await userEvent.click(
+      await screen.findByRole('button', { name: /^личный кабинет$/i }),
+    )
+
+    const baseStageInput = await screen.findByRole('spinbutton', {
+      name: /порог этапа база входящая/i,
+    })
+    expect(baseStageInput).toHaveValue(1)
+
+    await userEvent.clear(baseStageInput)
+    await userEvent.type(baseStageInput, '2')
+
+    const sla2Input = screen.getByRole('spinbutton', { name: /sla2, часов/i })
+    expect(sla2Input).toHaveValue(5)
+    await userEvent.clear(sla2Input)
+    await userEvent.type(sla2Input, '6')
+
+    await userEvent.click(screen.getByRole('button', { name: /сохранить пороги/i }))
+
+    await waitFor(() =>
+      expect(apiClient.saveOperationalThresholdSettings).toHaveBeenCalledWith({
+        stageAging: expect.arrayContaining([
+          {
+            stageId: 'C10:NEW',
+            maxDaysOnStage: 2,
+          },
+          {
+            stageId: 'C10:PREPARATION',
+            maxDaysOnStage: 3,
+          },
+        ]),
+        noCallsMaxDays: 7,
+        noActivityMaxDays: 5,
+        slaBusinessHours: {
+          sla1: 24,
+          sla2: 6,
+          sla3: 72,
+        },
       }),
     )
   })
@@ -4070,6 +4257,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     const salesSection = (await screen.findByRole('heading', { name: /продажи по менеджерам/i }))
       .closest('section')
@@ -4214,6 +4402,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     const salesSection = (await screen.findByRole('heading', { name: /продажи по менеджерам/i }))
       .closest('section')
@@ -4364,6 +4553,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     const salesSection = (await screen.findByRole('heading', { name: /продажи по менеджерам/i }))
       .closest('section')
@@ -4469,6 +4659,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     const salesSection = (await screen.findByRole('heading', { name: /продажи по менеджерам/i }))
       .closest('section')
@@ -4593,6 +4784,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     const salesSection = (await screen.findByRole('heading', { name: /продажи по менеджерам/i }))
       .closest('section')
@@ -4841,6 +5033,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     const salesSection = (await screen.findByRole('heading', { name: /продажи по менеджерам/i }))
       .closest('section')
@@ -4926,6 +5119,7 @@ describe('ProtoApp', () => {
     )
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     const kpiSection = screen.getByLabelText('KPI продаж')
     expect(await within(kpiSection).findByText('План месяца')).toBeInTheDocument()
@@ -5064,9 +5258,10 @@ describe('ProtoApp', () => {
       ]),
     )
 
-    render(<ProtoApp />)
+    renderProtoAppAt('2026-04-10T12:00:00+03:00')
+    await openSalesScene()
 
-    const expectedDefaultFilters = createDefaultFilters()
+    const expectedDefaultFilters = createDefaultFilters(new Date('2026-04-10T12:00:00+03:00'))
     await waitFor(() => {
       expect(apiClient.getEffectiveSalesPlan).toHaveBeenCalledWith({
         from: `${expectedDefaultFilters.rangeStart}T00:00:00.000+03:00`,
@@ -5172,6 +5367,7 @@ describe('ProtoApp', () => {
     vi.mocked(apiClient.getSalesPlanQuarter).mockResolvedValueOnce(createQuarterSalesPlan())
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     await userEvent.click(await screen.findByRole('button', { name: /^План продаж$/i }))
 
@@ -5232,7 +5428,7 @@ describe('ProtoApp', () => {
       )
       .mockImplementationOnce(async () => nextPlanPromise)
 
-    render(<ProtoApp />)
+    renderProtoAppAt('2026-04-10T12:00:00+03:00')
 
     await userEvent.click(await screen.findByRole('button', { name: /^План продаж$/i }))
     expect(
@@ -5639,6 +5835,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     await screen.findByRole('heading', { name: /продажи по менеджерам/i })
     expect(screen.queryByRole('heading', { name: /действия → результат/i })).not.toBeInTheDocument()
@@ -6075,6 +6272,7 @@ describe('ProtoApp', () => {
     vi.mocked(apiClient.getDashboard).mockRejectedValueOnce(new Error('Тестовый сбой live-данных'))
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     expect(
       await screen.findAllByText('Тестовый сбой live-данных'),
@@ -6086,6 +6284,7 @@ describe('ProtoApp', () => {
 
   it('uses the refresh button to synchronize Bitrix without applying draft filters', async () => {
     render(<ProtoApp />)
+    await openSalesScene()
 
     expect(await screen.findByText('В выбранном периоде нет выигранных сделок.')).toBeInTheDocument()
     vi.mocked(apiClient.getDashboard).mockClear()
@@ -6152,6 +6351,7 @@ describe('ProtoApp', () => {
     vi.mocked(apiClient.getSyncRuns).mockRejectedValueOnce(new Error('Журнал недоступен'))
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     expect(await screen.findByText('В выбранном периоде нет выигранных сделок.')).toBeInTheDocument()
     const journalToggle = screen.getByRole('button', { name: /журнал синхронизаций/i })
@@ -6374,6 +6574,7 @@ describe('ProtoApp', () => {
     })
 
     render(<ProtoApp />)
+    await openSalesScene()
 
     expect(
       (await screen.findAllByText('Нет подтвержденного покрытия локального snapshot.')).length,
@@ -6398,7 +6599,7 @@ describe('ProtoApp', () => {
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /^Менеджер \/ команда$/i }))
-    await userEvent.click(screen.getByText('Егоров Андрей'))
+    await userEvent.click(screen.getAllByText('Егоров Андрей').at(-1)!)
 
     expect(
       within(cohortSection as HTMLElement).getByText('Срез: все менеджеры / все источники'),

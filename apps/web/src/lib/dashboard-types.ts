@@ -205,6 +205,152 @@ export interface DealPricingSettingsInput {
   rules: DealPricingRuleInput[]
 }
 
+export interface OperationalStageAgingThreshold {
+  stageId: string
+  stageName: string
+  maxDaysOnStage: number
+}
+
+export interface OperationalSlaBusinessHours {
+  sla1: number
+  sla2: number
+  sla3: number
+}
+
+export interface OperationalThresholdSettings {
+  stageAging: OperationalStageAgingThreshold[]
+  noCallsMaxDays: number
+  noActivityMaxDays: number
+  slaBusinessHours: OperationalSlaBusinessHours
+  updatedAt: string | null
+}
+
+export interface OperationalStageAgingThresholdInput {
+  stageId: string
+  maxDaysOnStage: number
+}
+
+export interface OperationalThresholdSettingsInput {
+  stageAging: OperationalStageAgingThresholdInput[]
+  noCallsMaxDays: number
+  noActivityMaxDays: number
+  slaBusinessHours: OperationalSlaBusinessHours
+}
+
+export type OperationalRiskRuleKey =
+  | 'stage_aging'
+  | 'no_open_activity'
+  | 'no_recent_calls'
+  | 'no_recent_activity'
+
+export interface OperationalRiskFlag {
+  rule: OperationalRiskRuleKey
+  label: string
+  severity: 'risk' | 'critical'
+}
+
+export interface OperationalRiskDeal {
+  dealId: string
+  dealUrl: string | null
+  managerId: string
+  managerName: string
+  stageId: string
+  stageName: string
+  daysOnStage: number
+  stageMaxDays: number | null
+  sourceLabel: string
+  customerClubLabel: string
+  flags: OperationalRiskFlag[]
+  severity: 'risk' | 'critical'
+  overdueRatio: number
+}
+
+export interface OperationalMeetingSlotCount {
+  slotIndex: 1 | 2 | 3
+  slotLabel: string
+  count: number
+}
+
+export interface OperationalSaleByClub {
+  targetGroupKey: string
+  targetGroupLabel: string
+  wonDeals: number
+  averageDaysToWin: number
+}
+
+export interface OperationalStageWip {
+  stageId: string
+  stageName: string
+  openDeals: number
+  riskDeals: number
+}
+
+export interface OperationalPlannedBlock {
+  meetingsToday: OperationalMeetingSlotCount[]
+  meetingsTomorrow: OperationalMeetingSlotCount[]
+  tasksToday: number
+  tasksTomorrow: number
+}
+
+export interface OperationalSlaSummary {
+  slaKey: 'sla1' | 'sla2' | 'sla3'
+  label: string
+  thresholdBusinessHours: number
+  onTimeCount: number
+  lateCount: number
+  noTouchCount: number
+  medianHours: number
+}
+
+export interface OperationalManagerRow {
+  managerId: string
+  managerName: string
+  createdDeals: number
+  meetingsBySlot: OperationalMeetingSlotCount[]
+  wonDeals: number
+  slaLateCount: number
+  slaNoTouchCount: number
+  openDeals: number
+  riskDeals: number
+}
+
+export interface OperationalDashboardReport {
+  range: ReportRange
+  generatedAt: string
+  createdDeals: number
+  meetingsHeld: {
+    total: number
+    bySlot: OperationalMeetingSlotCount[]
+  }
+  sales: {
+    total: number
+    byClub: OperationalSaleByClub[]
+  }
+  lostDeals: number
+  openDeals: number
+  riskSummary: {
+    total: number
+    critical: number
+    risk: number
+    byRule: Array<{
+      rule: OperationalRiskRuleKey
+      label: string
+      count: number
+    }>
+    byStage: Array<{
+      stageId: string
+      stageName: string
+      count: number
+    }>
+  }
+  stageWip: OperationalStageWip[]
+  sla: OperationalSlaSummary[]
+  planned: OperationalPlannedBlock
+  managers: OperationalManagerRow[]
+  risks: OperationalRiskDeal[]
+  thresholdsUpdatedAt: string | null
+}
+
 export interface DealCohortContext {
   createdMonth: string
   cohortCreatedDeals: number
