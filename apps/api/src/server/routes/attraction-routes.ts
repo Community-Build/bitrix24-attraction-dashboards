@@ -9,6 +9,7 @@ export interface AttractionRouteHandlers {
   getCallAnalysis: ApiRouteHandler;
   getDashboard: ApiRouteHandler;
   getSourceQualityConversionReport: ApiRouteHandler;
+  getSourceCohortConversionReport: ApiRouteHandler;
   getActivitiesWorkloadReport: ApiRouteHandler;
   getAcquisitionOutcomesReport: ApiRouteHandler;
   getTargetGroupConversionReport: ApiRouteHandler;
@@ -81,6 +82,7 @@ export type AttractionReportRouteHandlers = Pick<
   AttractionRouteHandlers,
   | "getDashboard"
   | "getSourceQualityConversionReport"
+  | "getSourceCohortConversionReport"
   | "getActivitiesWorkloadReport"
   | "getAcquisitionOutcomesReport"
   | "getTargetGroupConversionReport"
@@ -108,6 +110,10 @@ export function registerAttractionReportRoutes(
   app.get(
     "/api/reports/source-quality-conversion",
     handlers.getSourceQualityConversionReport
+  );
+  app.get(
+    "/api/reports/source-cohort-conversion",
+    handlers.getSourceCohortConversionReport
   );
   app.get("/api/reports/activities-workload", handlers.getActivitiesWorkloadReport);
   app.get("/api/reports/acquisition-outcomes", handlers.getAcquisitionOutcomesReport);

@@ -34,6 +34,7 @@ export type RevenueVelocityRequest = RangeRequest & {
 export interface AttractionReportRouteService {
   getDashboard(input: RangeRequest): Promise<unknown>;
   getSourceQualityConversionReport(input: RangeRequest): Promise<unknown>;
+  getSourceCohortConversionReport(input: RangeRequest): Promise<unknown>;
   getActivitiesWorkloadReport(input: RangeRequest): Promise<unknown>;
   getAcquisitionOutcomesReport(input: RangeRequest): Promise<unknown>;
   getTargetGroupConversionReport(input: RangeRequest): Promise<unknown>;
@@ -182,6 +183,23 @@ export function createAttractionReportRouteHandlers({
         route: "source-quality-conversion",
         handler: async () =>
           service.getSourceQualityConversionReport(
+            await parseScopedRangeRequest(request, response)
+          )
+      });
+    },
+    getSourceCohortConversionReport: async (request, response, next) => {
+      if (denyIfMissingAttractionAccess(response)) {
+        return;
+      }
+
+      await sendTimedJson({
+        request,
+        response,
+        next,
+        moduleId: "attraction",
+        route: "source-cohort-conversion",
+        handler: async () =>
+          service.getSourceCohortConversionReport(
             await parseScopedRangeRequest(request, response)
           )
       });

@@ -1,0 +1,160 @@
+<h2>Операционный дашборд — утверждённый прототип (v3)</h2>
+<p class="subtitle">Создано вместо передано · встречи по слотам «Встреча 1/2/3» · продажи по клубам · SLA с настраиваемым порогом · сегодня/завтра · риски четырёх типов. «В работе по этапам» оставил компактной строкой — скажи, если убрать совсем.</p>
+
+<style>
+  .od { font-family: -apple-system, "Segoe UI", sans-serif; background: #f1f5f9; border-radius: 10px; padding: 14px; display: grid; gap: 12px; color: #0f172a; }
+  .od .panel-w { background: rgba(255,255,255,0.92); border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; }
+  .od .lbl { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
+  .od .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .od .kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 10px; border-top: 2px solid #4d7cff; }
+  .od .kpi b { display: block; font-size: 18px; margin: 2px 0; }
+  .od .kpi small { color: #64748b; font-size: 10px; }
+  .od .kpi.risk { border-top-color: #e11d48; background: #fff7f7; }
+  .od .kpi.risk b { color: #be123c; }
+  .od .cols { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; align-items: start; }
+  .od .duo { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .od .li { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
+  .od .li:last-child { border-bottom: none; }
+  .od .li b { font-size: 12px; }
+  .od .li .sub { color: #64748b; font-size: 10px; }
+  .od table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 6px; }
+  .od th { text-align: left; font-size: 9px; text-transform: uppercase; color: #64748b; padding: 4px 6px; border-bottom: 1px solid #e2e8f0; }
+  .od td { padding: 5px 6px; border-bottom: 1px solid #f1f5f9; }
+  .od .rchip { display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: 10px; font-weight: 700; margin: 0 4px 4px 0; border: 1px solid #e2e8f0; background: #fff; color: #475569; }
+  .od .rchip.on { background: #0f172a; color: #fff; border-color: #0f172a; }
+  .od .risk-card { border: 1px solid #e2e8f0; border-left: 3px solid #e11d48; border-radius: 8px; background: #fff; padding: 8px 10px; margin-top: 6px; font-size: 11px; display: grid; gap: 4px; }
+  .od .risk-card.warn { border-left-color: #f59e0b; }
+  .od .risk-card .top { display: flex; justify-content: space-between; gap: 8px; }
+  .od .risk-card .deal { font-weight: 700; color: #1d4ed8; }
+  .od .risk-card .days { font-weight: 800; color: #be123c; }
+  .od .risk-card.warn .days { color: #b45309; }
+  .od .risk-card .meta { color: #64748b; font-size: 10px; }
+  .od .flag { display: inline-block; border-radius: 5px; padding: 1px 6px; font-size: 9px; font-weight: 700; margin-right: 4px; background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+  .od .flag.amb { background: #fffbeb; color: #b45309; border-color: #fde68a; }
+  .od .mini { font-size: 10px; color: #64748b; }
+  .od .sla { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 6px; }
+  .od .sla div { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; font-size: 10px; color: #475569; }
+  .od .sla b { display: block; font-size: 14px; color: #0f172a; }
+  .od .sla .bad b { color: #be123c; }
+</style>
+
+<div class="mockup">
+  <div class="mockup-header">Аналитика → «Операционный»</div>
+  <div class="mockup-body">
+    <div class="od">
+
+      <div class="kpis">
+        <div class="kpi"><small>СОЗДАНО</small><b>37</b><small>новых сделок</small></div>
+        <div class="kpi"><small>ВСТРЕЧИ</small><b>54</b><small>проведено, 3 типа ↓</small></div>
+        <div class="kpi"><small>ПРОДАЖИ</small><b>6</b><small>по клубам ↓</small></div>
+        <div class="kpi"><small>ПРОИГРАНО</small><b>12</b><small>за период</small></div>
+        <div class="kpi"><small>В РАБОТЕ</small><b>215</b><small>открытых сделок</small></div>
+        <div class="kpi risk"><small>РИСКОВ</small><b>41</b><small>9 критично · 32 риск</small></div>
+      </div>
+
+      <div class="cols">
+        <div style="display:grid;gap:12px">
+
+          <div class="duo">
+            <div class="panel-w">
+              <div class="lbl">Встречи за период · 54</div>
+              <div class="li"><span>Встреча 1</span><span><b>28</b> <span class="sub">· 12 клубов</span></span></div>
+              <div class="li"><span>Встреча 2</span><span><b>17</b></span></div>
+              <div class="li"><span>Встреча 3</span><span><b>9</b></span></div>
+            </div>
+            <div class="panel-w">
+              <div class="lbl">Продажи за период · 6</div>
+              <div class="li"><span>ClubFirst Russia</span><span><b>3</b> <span class="sub">· цикл 41 дн</span></span></div>
+              <div class="li"><span>ClubFirst One</span><span><b>2</b> <span class="sub">· цикл 28 дн</span></span></div>
+              <div class="li"><span>ClubFirst Future</span><span><b>1</b> <span class="sub">· цикл 55 дн</span></span></div>
+            </div>
+          </div>
+
+          <div class="duo">
+            <div class="panel-w">
+              <div class="lbl">SLA первого касания · порог 5 ч (настройка)</div>
+              <div class="sla">
+                <div><b>21</b>вовремя</div>
+                <div class="bad"><b>9</b>с опозданием</div>
+                <div class="bad"><b>7</b>без касания</div>
+              </div>
+              <div class="mini" style="margin-top:6px">Медиана до первого контакта: 3,2 ч</div>
+            </div>
+            <div class="panel-w">
+              <div class="lbl">Запланировано</div>
+              <div class="li"><span>Сегодня: встречи</span><span><b>7</b> <span class="sub">· 3 В1 · 2 В2 · 2 В3</span></span></div>
+              <div class="li"><span>Сегодня: дела</span><span><b>23</b></span></div>
+              <div class="li"><span>Завтра: встречи</span><span><b>5</b></span></div>
+              <div class="li"><span>Завтра: дела</span><span><b>18</b></span></div>
+            </div>
+          </div>
+
+          <div class="panel-w">
+            <div class="lbl">В работе по этапам · компакт (кандидат на удаление)</div>
+            <div class="li"><span>База входящая</span><span><b>74</b> <span class="flag">12 в риске</span></span></div>
+            <div class="li"><span>Звонок-знакомство</span><span><b>56</b> <span class="flag">9 в риске</span></span></div>
+            <div class="li"><span>Встреча-знакомство</span><span><b>29</b> <span class="flag amb">4 в риске</span></span></div>
+            <div class="li"><span>Активация · Демонстрация · далее</span><span><b>56</b> <span class="flag amb">6 в риске</span></span></div>
+          </div>
+
+        </div>
+
+        <div class="panel-w">
+          <div class="lbl">Лента рисков · 41 сделка · худшие сверху</div>
+          <div style="margin-top:6px">
+            <span class="rchip on">Все · 41</span>
+            <span class="rchip">Критично · 9</span>
+            <span class="rchip">Застрял на этапе · 23</span>
+            <span class="rchip">Без дел · 14</span>
+            <span class="rchip">Без звонков · 11</span>
+            <span class="rchip">Без активностей · 8</span>
+          </div>
+
+          <div class="risk-card">
+            <div class="top"><span class="deal">Сделка #48213 ↗</span><span class="days">21 дн на этапе · порог 3</span></div>
+            <div><span class="flag">застрял</span><span class="flag">без дел</span><span class="flag">без звонков 14д</span></div>
+            <div>Звонок-знакомство · Какулия Илья</div>
+            <div class="meta">Лидген УС · ClubFirst One</div>
+          </div>
+          <div class="risk-card">
+            <div class="top"><span class="deal">Сделка #47990 ↗</span><span class="days">34 дн на этапе · порог 14</span></div>
+            <div><span class="flag">застрял</span><span class="flag amb">без активностей 7д</span></div>
+            <div>Встреча-знакомство · Кузнецова Анастасия</div>
+            <div class="meta">Внутренняя база · Без клуба</div>
+          </div>
+          <div class="risk-card warn">
+            <div class="top"><span class="deal">Сделка #48544 ↗</span><span class="days">на этапе 8 дн · порог 14</span></div>
+            <div><span class="flag">без дел</span></div>
+            <div>Активация · Ромашова Ольга</div>
+            <div class="meta">Лидген УС · ClubFirst Future</div>
+          </div>
+          <div class="risk-card warn">
+            <div class="top"><span class="deal">Сделка #48671 ↗</span><span class="days">на этапе 2 дн · порог 3</span></div>
+            <div><span class="flag amb">без звонков 9д</span></div>
+            <div>Звонок-знакомство · Егоров Андрей</div>
+            <div class="meta">Самостоятельно · Без клуба</div>
+          </div>
+          <div class="mini" style="margin-top:8px;text-align:center">Показать ещё 37 →</div>
+        </div>
+      </div>
+
+      <div class="panel-w">
+        <div class="lbl">Менеджеры за период</div>
+        <table>
+          <tr><th>Менеджер</th><th>Создано</th><th>Встречи (В1/В2/В3)</th><th>Продажи</th><th>SLA поздно/без кас.</th><th>В работе</th><th>Рисков</th></tr>
+          <tr><td>Какулия Илья</td><td>9</td><td>14 (8/4/2)</td><td>1</td><td>4 / 2</td><td>75</td><td style="color:#be123c;font-weight:700">14</td></tr>
+          <tr><td>Кузнецова Анастасия</td><td>7</td><td>12 (6/4/2)</td><td>2</td><td>1 / 1</td><td>31</td><td style="color:#b45309;font-weight:700">8</td></tr>
+          <tr><td>Ромашова Ольга</td><td>6</td><td>11 (5/3/3)</td><td>1</td><td>2 / 2</td><td>24</td><td>6</td></tr>
+          <tr><td>Егоров Андрей</td><td>5</td><td>9 (4/3/2)</td><td>2</td><td>2 / 2</td><td>21</td><td>4</td></tr>
+        </table>
+        <div class="mini" style="margin-top:6px">Клик по менеджеру фильтрует ленту рисков.</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Настройки в личном кабинете (один блок)</h3>
+  <p class="subtitle">Пороги этапов (База входящая 1д, Звонок-знакомство 3д, Встреча-знакомство 14д, Активация 14д, Демонстрация 14д, Проблематизация 14д, Адмиссия 7д, Контракт 7д, На передаче 5д) · гигиена (без дел — сразу риск; без звонков — 7д; без активностей — 5д) · SLA в бизнес-часах (Время в работу 24ч, Первый контакт 5ч, Обработка лида 72ч — отчёт активности начнёт использовать те же значения).</p>
+</div>

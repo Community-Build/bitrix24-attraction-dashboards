@@ -1197,6 +1197,73 @@ export interface SourceQualityConversionReport
   comparisons?: Array<ReportComparison<SourceQualityConversionReportSnapshot>>;
 }
 
+export interface SourceCohortConversionOpenStageRow {
+  stageId: string;
+  stageName: string;
+  openDeals: number;
+}
+
+export interface SourceCohortConversionManagerRow {
+  managerId: string;
+  managerName: string;
+  createdDeals: number;
+  wonDeals: number;
+  lostDeals: number;
+  openDeals: number;
+  winRate: number;
+  averageDaysToWin: number;
+  openStageBreakdown: SourceCohortConversionOpenStageRow[];
+}
+
+export interface SourceCohortConversionTargetGroupRow {
+  targetGroupKey: string;
+  targetGroupLabel: string;
+  wonDeals: number;
+  averageDaysToWin: number;
+}
+
+export interface SourceCohortConversionRow {
+  id: string;
+  sourceKey: string;
+  sourceLabel: string;
+  qualityKey: string;
+  qualityLabel: string;
+  customerKey: string;
+  customerLabel: string;
+  createdDeals: number;
+  wonDeals: number;
+  lostDeals: number;
+  openDeals: number;
+  winRate: number;
+  averageDaysToWin: number;
+  managerBreakdown: SourceCohortConversionManagerRow[];
+  openStageBreakdown: SourceCohortConversionOpenStageRow[];
+  targetGroupBreakdown: SourceCohortConversionTargetGroupRow[];
+}
+
+export interface SourceCohortConversionMonthOption {
+  cohortMonth: string;
+  cohortLabel: string;
+  totalCreatedDeals: number;
+}
+
+export interface SourceCohortConversionReportSnapshot {
+  range: ReportRange;
+  totalCreatedDeals: number;
+  totalWonDeals: number;
+  totalLostDeals: number;
+  totalOpenDeals: number;
+  winRate: number;
+  averageDaysToWin: number;
+  cohortMonths: SourceCohortConversionMonthOption[];
+  rows: SourceCohortConversionRow[];
+}
+
+export interface SourceCohortConversionReport
+  extends SourceCohortConversionReportSnapshot {
+  comparisons?: Array<ReportComparison<SourceCohortConversionReportSnapshot>>;
+}
+
 export interface StageWorkloadMetric {
   stageId: string;
   stageName: string;

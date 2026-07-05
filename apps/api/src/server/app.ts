@@ -29,6 +29,7 @@ import type {
   SalesPlanQuarterData,
   SalesPlanQuarterInput,
   SnapshotStats,
+  SourceCohortConversionReport,
   SourceCatalogEntry,
   SourceQualityConversionReport,
   StageCatalogEntry,
@@ -166,6 +167,9 @@ interface AppService {
   getSourceQualityConversionReport(
     input: RangeRequest
   ): Promise<SourceQualityConversionReport>;
+  getSourceCohortConversionReport(
+    input: RangeRequest
+  ): Promise<SourceCohortConversionReport>;
   getActivitiesWorkloadReport(
     input: RangeRequest
   ): Promise<ActivitiesWorkloadReport>;

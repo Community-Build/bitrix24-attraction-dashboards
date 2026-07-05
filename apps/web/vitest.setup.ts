@@ -11,6 +11,8 @@ vi.mock('@hugeicons/core-free-icons', () => {
     'AiSearch02Icon',
     'Alert02Icon',
     'AnalyticsUpIcon',
+    'ArrowDown01Icon',
+    'ArrowRight01Icon',
     'Calendar03Icon',
     'ChartHistogramIcon',
     'ChartUpIcon',
