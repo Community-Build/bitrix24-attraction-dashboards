@@ -43,6 +43,8 @@ import type {
   SalesPlanQuarterInput,
   SalesPlanQuarterMonth,
   SourceCatalogEntry,
+  SourceCohortConversionReport,
+  SourceCohortConversionReportSnapshot,
   SourceQualityConversionReport,
   SourceQualityConversionReportSnapshot,
   SnapshotStats,
@@ -69,6 +71,7 @@ import {
   buildCohortConversionReport,
   buildCallsWorkloadReport,
   buildManagerActionOutcomeReport,
+  buildSourceCohortConversionReport,
   buildSourceQualityConversionReport,
   buildTargetGroupConversionReport
 } from "../domain/operational-reports.js";
@@ -172,6 +175,12 @@ export interface ReportingService {
     compareRanges?: ReportRange[];
     filters?: ReportFilters;
   }): Promise<SourceQualityConversionReport>;
+  getSourceCohortConversionReport(input: {
+    periodDays?: number;
+    range?: ReportRange;
+    compareRanges?: ReportRange[];
+    filters?: ReportFilters;
+  }): Promise<SourceCohortConversionReport>;
   getActivitiesWorkloadReport(input: {
     periodDays?: number;
     range?: ReportRange;
@@ -2162,6 +2171,55 @@ export function createReportingService(
         compareRanges,
         buildSnapshot
       ) as SourceQualityConversionReport;
+    },
+
+    async getSourceCohortConversionReport({
+      periodDays,
+      range,
+      compareRanges,
+      filters
+    }) {
+      const scopedFilters = await normalizeAttractionReportFilters(filters);
+      const [deals, stageCatalog, stageHistory, wonStageIds] = await Promise.all([
+        input.repository.getAllDeals(),
+        getScopedStageCatalog(true),
+        input.repository.getAllStageHistory(),
+        input.repository.getWonStageIds()
+      ]);
+      const canonical = await loadCanonicalReportInputs({ stageHistory });
+      const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
+      const managerDirectory = await ensureManagerDirectory(
+        uniqueStrings(
+          scopedDeals.map((deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID)
+        )
+      );
+      const scopedDealIds = new Set(scopedDeals.map((deal) => deal.id));
+      const scopedStageHistory = canonical.stageHistory.filter((row) =>
+        scopedDealIds.has(row.ownerId)
+      );
+      const buildSnapshot = (
+        targetRange: ReportRange
+      ): SourceCohortConversionReportSnapshot =>
+        buildSourceCohortConversionReport({
+          range: targetRange,
+          wonStageIds,
+          deals: scopedDeals,
+          stageCatalog,
+          stageHistory: scopedStageHistory,
+          managerDirectory
+        });
+      const resolvedRange = resolveRange(
+        periodDays,
+        range,
+        input.defaultPeriodDays,
+        nowFactory()
+      );
+
+      return attachComparisons(
+        buildSnapshot(resolvedRange),
+        compareRanges,
+        buildSnapshot
+      ) as SourceCohortConversionReport;
     },
 
     async getActivitiesWorkloadReport({

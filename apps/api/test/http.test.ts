@@ -14,6 +14,7 @@ import type {
   RevenueVelocityReport,
   SalesPlanData,
   SalesPlanQuarterData,
+  SourceCohortConversionReport,
   SourceQualityConversionReport,
   StageCatalogEntry,
   TargetGroupConversionReport,
@@ -350,6 +351,24 @@ function createEmptyUnitEconomicsReport(): UnitEconomicsReport {
   };
 }
 
+function createEmptySourceCohortConversionReport(): SourceCohortConversionReport {
+  return {
+    range: {
+      from: "2026-04-01T00:00:00.000Z",
+      to: "2026-04-30T23:59:59.999Z"
+    },
+    totalCreatedDeals: 0,
+    totalWonDeals: 0,
+    totalLostDeals: 0,
+    totalOpenDeals: 0,
+    winRate: 0,
+    averageDaysToWin: 0,
+    cohortMonths: [],
+    rows: [],
+    comparisons: []
+  };
+}
+
 function createSyncSummary(
   overrides: Partial<{
     syncRunId: number;
@@ -646,6 +665,8 @@ function createTestApp(
       rows: [],
       stageSequence: []
     }),
+    getSourceCohortConversionReport: async () =>
+      createEmptySourceCohortConversionReport(),
     getActivitiesWorkloadReport: async () => ({
       range: {
         from: "2026-04-01T00:00:00.000Z",
@@ -3502,6 +3523,8 @@ describe("createApp", () => {
     const service: Parameters<typeof createApp>[0] = {
       getDashboard: async () => dashboard,
       getSourceQualityConversionReport: async () => sourceQualityReport,
+      getSourceCohortConversionReport: async () =>
+        createEmptySourceCohortConversionReport(),
       getActivitiesWorkloadReport: async (input: unknown) => {
         receivedActivitiesInput = input;
         return activitiesReport;
@@ -4421,6 +4444,8 @@ describe("createApp", () => {
         rows: [],
         stageSequence: []
       }),
+      getSourceCohortConversionReport: async () =>
+        createEmptySourceCohortConversionReport(),
       getActivitiesWorkloadReport: async () => ({
         range: {
           from: "2026-04-01T00:00:00.000Z",
@@ -5041,6 +5066,8 @@ describe("createApp", () => {
         rows: [],
         stageSequence: []
       }),
+      getSourceCohortConversionReport: async () =>
+        createEmptySourceCohortConversionReport(),
       getActivitiesWorkloadReport: async () => ({
         range: {
           from: "2026-04-01T00:00:00.000Z",

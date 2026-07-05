@@ -63,6 +63,8 @@ import {
   toMonthBucket
 } from "./report-dimensions.js";
 
+export { buildSourceCohortConversionReport } from "./source-cohort-conversion.js";
+
 interface SourceQualityConversionInput {
   range: ReportRange;
   wonStageIds: string[];

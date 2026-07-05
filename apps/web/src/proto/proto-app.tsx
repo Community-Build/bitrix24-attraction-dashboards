@@ -105,6 +105,9 @@ const LazyPlaybookScene = lazy(() =>
 const LazyRevenueVelocityScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.RevenueVelocityScene })),
 )
+const LazySourceCohortsScene = lazy(() =>
+  import('@/proto/scenes').then((module) => ({ default: module.SourceCohortsScene })),
+)
 const LazySalesPlanScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.SalesPlanScene })),
 )
@@ -123,6 +126,7 @@ const lazySceneComponents: Record<
   'sales-plan': LazySalesPlanScene,
   'activities-calls': LazyActivitiesScene,
   cohorts: LazyCohortsScene,
+  'source-cohorts': LazySourceCohortsScene,
   'revenue-velocity': LazyRevenueVelocityScene,
   'unit-economics': LazyUnitEconomicsScene,
   'funnel-flow': LazyFunnelFlowScene,

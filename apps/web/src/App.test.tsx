@@ -9,6 +9,7 @@ import type {
   ManagerActionOutcomeReport,
   RevenueVelocityReport,
   SalesPlanQuarterInput,
+  SourceCohortConversionReport,
 } from '@/lib/dashboard-types'
 
 const mockState = vi.hoisted(() => ({
@@ -97,6 +98,66 @@ vi.mock('@/lib/api-client', () => ({
         conversionRate: 0,
       },
       managerGroups: [],
+      comparisons: [],
+    })),
+    getSourceCohortConversionReport: vi.fn(async () => ({
+      range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
+      totalCreatedDeals: 77,
+      totalWonDeals: 1,
+      totalLostDeals: 22,
+      totalOpenDeals: 54,
+      winRate: 1.3,
+      averageDaysToWin: 11,
+      cohortMonths: [
+        { cohortMonth: '2024-12', cohortLabel: 'Декабрь 2024', totalCreatedDeals: 12 },
+        { cohortMonth: '2025-01', cohortLabel: 'Январь 2025', totalCreatedDeals: 25 },
+        { cohortMonth: '2026-04', cohortLabel: 'Апрель 2026', totalCreatedDeals: 42 },
+        { cohortMonth: '2026-05', cohortLabel: 'Май 2026', totalCreatedDeals: 77 },
+      ],
+      rows: [
+        {
+          id: 'LIDGEN|3.1|ClubFirst Future',
+          sourceKey: 'LIDGEN',
+          sourceLabel: 'Лидген УС',
+          qualityKey: '3.1',
+          qualityLabel: '3.1 Готов ко встрече',
+          customerKey: 'ClubFirst Future',
+          customerLabel: 'ClubFirst Future',
+          createdDeals: 38,
+          wonDeals: 1,
+          lostDeals: 16,
+          openDeals: 21,
+          winRate: 2.6,
+          averageDaysToWin: 11,
+          openStageBreakdown: [
+            { stageId: 'C10:MEETING', stageName: 'Встреча-знакомство', openDeals: 6 },
+            { stageId: 'C10:ACTIVATION', stageName: 'Активация', openDeals: 6 },
+          ],
+          targetGroupBreakdown: [
+            {
+              targetGroupKey: 'UNSPECIFIED',
+              targetGroupLabel: 'Без таргет-группы',
+              wonDeals: 1,
+              averageDaysToWin: 11,
+            },
+          ],
+          managerBreakdown: [
+            {
+              managerId: '78',
+              managerName: 'Егоров Андрей',
+              createdDeals: 20,
+              wonDeals: 1,
+              lostDeals: 8,
+              openDeals: 11,
+              winRate: 5,
+              averageDaysToWin: 11,
+              openStageBreakdown: [
+                { stageId: 'C10:MEETING', stageName: 'Встреча-знакомство', openDeals: 4 },
+              ],
+            },
+          ],
+        },
+      ],
       comparisons: [],
     })),
     getPricingSettings: vi.fn(async () => ({
@@ -590,6 +651,20 @@ vi.mock('@/lib/api-client', () => ({
         ],
       },
       comparisons: [],
+    })),
+    getAttractionOntology: vi.fn(async () => ({
+      moduleKey: 'attraction',
+      title: 'Привлечение',
+      governance: {
+        decisionRole: 'owner',
+        decisionUnit: 'module',
+      },
+      lastReviewedAt: '2026-04-10',
+      sources: [],
+      concepts: [],
+      transitions: [],
+      reportBindings: [],
+      drift: [],
     })),
     getRevenueVelocityReport: vi.fn(async () => ({
       range: { from: '2026-04-01T00:00:00.000Z', to: '2026-04-30T23:59:59.999Z' },
@@ -1184,6 +1259,158 @@ describe('App', () => {
     expect(screen.getByText(/Контрактация -> На передаче: 67% · 2 сдел/i)).toBeInTheDocument()
     expect(screen.getByText(/На передаче -> Передано в клуб: 100% · 2 сдел/i)).toBeInTheDocument()
     expect(document.querySelectorAll('rect[fill="#ecfdf5"]').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('renders the source cohort conversion tab with month selector and manager breakdown', async () => {
+    render(<App />)
+    await waitForDashboardShell()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /конверсия источников/i }),
+    )
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /конверсия источников/i }),
+      ).toBeInTheDocument(),
+    )
+    await waitFor(() =>
+      expect(apiClient.getSourceCohortConversionReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          preset: 'custom',
+          from: expect.stringMatching(/^2026-05-01/),
+          to: expect.stringMatching(/^2026-05-31/),
+        }),
+      ),
+    )
+    expect(
+      screen.getByRole('button', { name: /май 2026 · 77/i }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.getByRole('button', { name: /апрель 2026 · 42/i }),
+    ).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: '2025' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '2026' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '2024' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /декабрь 2024 · 12/i })).not.toBeInTheDocument()
+    expect(screen.getAllByText('77').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/1[,.]3%/).length).toBeGreaterThan(0)
+    expect(screen.getByText('Лидген УС')).toBeInTheDocument()
+    expect(screen.getAllByText(/ClubFirst Future/).length).toBeGreaterThan(0)
+    expect(screen.getByText(/Встреча-знакомство 6/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Без таргет-группы/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/Егоров Андрей/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /раскрыть строку/i }))
+    expect(screen.getByText(/Егоров Андрей/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /по менеджерам/i }))
+    expect(await screen.findByText(/1 разрез/i)).toBeInTheDocument()
+    expect(screen.getByText(/Егоров Андрей/i)).toBeInTheDocument()
+    expect(apiClient.getAttractionOntology).not.toHaveBeenCalled()
+  })
+
+  it('does not keep stale source cohort rows while a selected month is loading', async () => {
+    const loadedReport: SourceCohortConversionReport = {
+      range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
+      totalCreatedDeals: 77,
+      totalWonDeals: 1,
+      totalLostDeals: 22,
+      totalOpenDeals: 54,
+      winRate: 1.3,
+      averageDaysToWin: 11,
+      cohortMonths: [
+        { cohortMonth: '2026-04', cohortLabel: 'Апрель 2026', totalCreatedDeals: 42 },
+        { cohortMonth: '2026-05', cohortLabel: 'Май 2026', totalCreatedDeals: 77 },
+      ],
+      rows: [
+        {
+          id: 'LIDGEN|3.1|ClubFirst Future',
+          sourceKey: 'LIDGEN',
+          sourceLabel: 'Лидген УС',
+          qualityKey: '3.1',
+          qualityLabel: '3.1 Готов ко встрече',
+          customerKey: 'ClubFirst Future',
+          customerLabel: 'ClubFirst Future',
+          createdDeals: 38,
+          wonDeals: 1,
+          lostDeals: 16,
+          openDeals: 21,
+          winRate: 2.6,
+          averageDaysToWin: 11,
+          managerBreakdown: [],
+          openStageBreakdown: [
+            { stageId: 'C10:MEETING', stageName: 'Встреча-знакомство', openDeals: 6 },
+          ],
+          targetGroupBreakdown: [],
+        },
+      ],
+      comparisons: [],
+    }
+    vi.mocked(apiClient.getSourceCohortConversionReport).mockResolvedValue(loadedReport)
+
+    render(<App />)
+    await waitForDashboardShell()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /конверсия источников/i }),
+    )
+
+    expect(await screen.findByText('Лидген УС')).toBeInTheDocument()
+
+    const callsBeforeMonthChange = vi.mocked(apiClient.getSourceCohortConversionReport)
+      .mock.calls.length
+    vi.mocked(apiClient.getSourceCohortConversionReport).mockImplementation(
+      () => new Promise<SourceCohortConversionReport>(() => {}),
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /апрель 2026 · 42/i }))
+
+    await waitFor(() =>
+      expect(vi.mocked(apiClient.getSourceCohortConversionReport).mock.calls.length)
+        .toBeGreaterThan(callsBeforeMonthChange),
+    )
+    expect(screen.queryByText('Лидген УС')).not.toBeInTheDocument()
+    expect(screen.getByText(/считаю когорту/i)).toBeInTheDocument()
+  })
+
+  it('renders an empty state for a source cohort month without rows', async () => {
+    const emptySourceCohortReport = {
+      range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
+      totalCreatedDeals: 0,
+      totalWonDeals: 0,
+      totalLostDeals: 0,
+      totalOpenDeals: 0,
+      winRate: 0,
+      averageDaysToWin: 0,
+      cohortMonths: [
+        { cohortMonth: '2026-05', cohortLabel: 'Май 2026', totalCreatedDeals: 0 },
+      ],
+      rows: [],
+      comparisons: [],
+    }
+    vi.mocked(apiClient.getSourceCohortConversionReport)
+      .mockResolvedValueOnce(emptySourceCohortReport)
+      .mockResolvedValueOnce(emptySourceCohortReport)
+
+    render(<App />)
+    await waitForDashboardShell()
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: /конверсия источников/i }),
+    )
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('heading', { name: /конверсия источников/i }),
+      ).toBeInTheDocument(),
+    )
+    await waitFor(() =>
+      expect(apiClient.getSourceCohortConversionReport).toHaveBeenCalled(),
+    )
+    expect(
+      await screen.findByText(/за выбранный месяц нет сделок/i),
+    ).toBeInTheDocument()
   })
 
   it('renders the revenue velocity tab with KPI, sortable table, formula tooltip and conversion-event warning', async () => {

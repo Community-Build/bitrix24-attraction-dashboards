@@ -74,6 +74,8 @@ import type {
   SalesPlanInput,
   SalesPlanQuarterData,
   SalesPlanQuarterInput,
+  SourceCohortConversionReport,
+  SourceCohortConversionReportSnapshot,
   SourceQualityConversionReport,
   SourceQualityConversionReportSnapshot,
   SnapshotStats,
@@ -2126,6 +2128,104 @@ function normalizeSourceQualityConversionReport(
   }
 }
 
+function normalizeSourceCohortOpenStageRows(value: unknown) {
+  return asArray(value, (entry) => {
+    const item = isRecord(entry) ? entry : {}
+    return {
+      stageId: asString(item.stageId),
+      stageName: asString(item.stageName, asString(item.stageId)),
+      openDeals: asNumber(item.openDeals),
+    }
+  })
+}
+
+function normalizeSourceCohortConversionSnapshot(
+  value: unknown,
+): SourceCohortConversionReportSnapshot {
+  const data = isRecord(value) ? value : {}
+
+  return {
+    range: normalizeRange(data.range),
+    totalCreatedDeals: asNumber(data.totalCreatedDeals),
+    totalWonDeals: asNumber(data.totalWonDeals),
+    totalLostDeals: asNumber(data.totalLostDeals),
+    totalOpenDeals: asNumber(data.totalOpenDeals),
+    winRate: asNumber(data.winRate),
+    averageDaysToWin: asNumber(data.averageDaysToWin),
+    cohortMonths: asArray(data.cohortMonths, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        cohortMonth: asString(item.cohortMonth),
+        cohortLabel: asString(item.cohortLabel, asString(item.cohortMonth)),
+        totalCreatedDeals: asNumber(item.totalCreatedDeals),
+      }
+    }),
+    rows: asArray(data.rows, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        id: asString(item.id),
+        sourceKey: asString(item.sourceKey),
+        sourceLabel: asString(item.sourceLabel, asString(item.sourceKey)),
+        qualityKey: asString(item.qualityKey),
+        qualityLabel: asString(item.qualityLabel, asString(item.qualityKey)),
+        customerKey: asString(item.customerKey),
+        customerLabel: asString(item.customerLabel, asString(item.customerKey)),
+        createdDeals: asNumber(item.createdDeals),
+        wonDeals: asNumber(item.wonDeals),
+        lostDeals: asNumber(item.lostDeals),
+        openDeals: asNumber(item.openDeals),
+        winRate: asNumber(item.winRate),
+        averageDaysToWin: asNumber(item.averageDaysToWin),
+        managerBreakdown: asArray(item.managerBreakdown, (manager) => {
+          const row = isRecord(manager) ? manager : {}
+          return {
+            managerId: asString(row.managerId),
+            managerName: asString(row.managerName, asString(row.managerId)),
+            createdDeals: asNumber(row.createdDeals),
+            wonDeals: asNumber(row.wonDeals),
+            lostDeals: asNumber(row.lostDeals),
+            openDeals: asNumber(row.openDeals),
+            winRate: asNumber(row.winRate),
+            averageDaysToWin: asNumber(row.averageDaysToWin),
+            openStageBreakdown: normalizeSourceCohortOpenStageRows(
+              row.openStageBreakdown,
+            ),
+          }
+        }),
+        openStageBreakdown: normalizeSourceCohortOpenStageRows(
+          item.openStageBreakdown,
+        ),
+        targetGroupBreakdown: asArray(item.targetGroupBreakdown, (targetGroup) => {
+          const row = isRecord(targetGroup) ? targetGroup : {}
+          return {
+            targetGroupKey: asString(row.targetGroupKey),
+            targetGroupLabel: asString(
+              row.targetGroupLabel,
+              asString(row.targetGroupKey),
+            ),
+            wonDeals: asNumber(row.wonDeals),
+            averageDaysToWin: asNumber(row.averageDaysToWin),
+          }
+        }),
+      }
+    }),
+  }
+}
+
+function normalizeSourceCohortConversionReport(
+  value: unknown,
+): SourceCohortConversionReport {
+  const data = isRecord(value) ? value : {}
+
+  return {
+    ...normalizeSourceCohortConversionSnapshot(data),
+    comparisons: normalizeComparisons(
+      data.comparisons,
+      normalizeSourceCohortConversionSnapshot,
+    ),
+  }
+}
+
 function normalizeActivitiesWorkloadSnapshot(
   value: unknown,
 ): ActivitiesWorkloadReportSnapshot {
@@ -4108,6 +4208,13 @@ export const apiClient = {
       buildUrl('/api/reports/source-quality-conversion', buildQueryParams(query)),
       { method: 'GET' },
       normalizeSourceQualityConversionReport,
+    )
+  },
+  async getSourceCohortConversionReport(query: DashboardQuery) {
+    return requestJson(
+      buildUrl('/api/reports/source-cohort-conversion', buildQueryParams(query)),
+      { method: 'GET' },
+      normalizeSourceCohortConversionReport,
     )
   },
   async getActivitiesWorkloadReport(query: DashboardQuery) {

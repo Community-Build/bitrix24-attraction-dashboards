@@ -1,5 +1,6 @@
 import type {
   RevenueVelocityReport,
+  SourceCohortConversionReport,
   UnitEconomicsCostRulesInput,
   UnitEconomicsReport
 } from "@bitrix24-reporting/contracts";
@@ -164,6 +165,24 @@ function createEmptyUnitEconomicsReport(): UnitEconomicsReport {
   };
 }
 
+function createEmptySourceCohortConversionReport(): SourceCohortConversionReport {
+  return {
+    range: {
+      from: "2026-04-01T00:00:00.000Z",
+      to: "2026-04-30T23:59:59.999Z"
+    },
+    totalCreatedDeals: 0,
+    totalWonDeals: 0,
+    totalLostDeals: 0,
+    totalOpenDeals: 0,
+    winRate: 0,
+    averageDaysToWin: 0,
+    cohortMonths: [],
+    rows: [],
+    comparisons: []
+  };
+}
+
 function createCorsTestApp(config?: {
   webOrigin?: string;
   apiAuthToken?: string;
@@ -203,6 +222,8 @@ function createCorsTestApp(config?: {
         rows: [],
         stageSequence: []
       }),
+      getSourceCohortConversionReport: async () =>
+        createEmptySourceCohortConversionReport(),
       getActivitiesWorkloadReport: async () => ({
         range: {
           from: "2026-04-01T00:00:00.000Z",
