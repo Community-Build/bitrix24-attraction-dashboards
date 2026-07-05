@@ -1931,6 +1931,20 @@ function normalizeMeta(value: unknown): MetaResponse {
         label: asString(item.label, asString(item.key)),
       }
     }),
+    businessClubCatalog: asArray(data.businessClubCatalog, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        key: asString(item.key),
+        label: asString(item.label, asString(item.key)),
+      }
+    }),
+    targetGroupCatalog: asArray(data.targetGroupCatalog, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        key: asString(item.key),
+        label: asString(item.label, asString(item.key)),
+      }
+    }),
     defaultPeriodDays: asNumber(data.defaultPeriodDays, 30),
     lastSync: lastSync
         ? {
@@ -3784,6 +3798,8 @@ function buildQueryParams(query: DashboardQuery) {
   const sharedParams = {
     managerIds: query.managerIds,
     sourceKeys: query.sourceKeys,
+    businessClubKeys: query.businessClubKeys,
+    targetGroupKeys: query.targetGroupKeys,
     eventParticipantMode: queryWithUnitEconomics.eventParticipantMode,
     ...compareParams,
   }

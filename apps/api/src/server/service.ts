@@ -312,6 +312,8 @@ export interface ReportingService {
     stageCatalog: StageCatalogEntry[];
     managerCatalog: ManagerDirectoryEntry[];
     sourceCatalog: SourceCatalogEntry[];
+    businessClubCatalog: SourceCatalogEntry[];
+    targetGroupCatalog: SourceCatalogEntry[];
     wonStageIds: string[];
     defaultPeriodDays: number;
     lastSync: {
@@ -868,6 +870,20 @@ function sortSources(rows: SourceCatalogEntry[]) {
   });
 }
 
+function resolveBusinessClubFilterKey(deal: Pick<DealSnapshot, "businessClubValue">) {
+  const value = deal.businessClubValue?.trim();
+  return value && value.length > 0 ? value : null;
+}
+
+function resolveTargetGroupFilterKey(deal: Pick<DealSnapshot, "targetGroupValue">) {
+  const value = deal.targetGroupValue?.trim();
+  if (!value || value.length === 0) {
+    return null;
+  }
+
+  return /^\d+$/.test(value) || value === "Неизвестная таргет-группа" ? null : value;
+}
+
 function isTimestampWithinRange(value: string | null | undefined, range: ReportRange) {
   const timestamp = Date.parse(value ?? "");
   const from = Date.parse(range.from);
@@ -1089,6 +1105,8 @@ export function createReportingService(
     const sourceLabels = buildSourceLabelMap(stageCatalog);
     const managerIds = new Set(filters?.managerIds ?? []);
     const sourceKeys = new Set(filters?.sourceKeys ?? []);
+    const businessClubKeys = new Set(filters?.businessClubKeys ?? []);
+    const targetGroupKeys = new Set(filters?.targetGroupKeys ?? []);
 
     return deals.filter((deal) => {
       if (!allowedCategoryIds.has(normalizeCategoryId(deal.categoryId))) {
@@ -1105,6 +1123,20 @@ export function createReportingService(
       if (sourceKeys.size > 0) {
         const source = resolveDealSource(deal, sourceLabels);
         if (!sourceKeys.has(source.key)) {
+          return false;
+        }
+      }
+
+      if (businessClubKeys.size > 0) {
+        const businessClubKey = resolveBusinessClubFilterKey(deal);
+        if (!businessClubKey || !businessClubKeys.has(businessClubKey)) {
+          return false;
+        }
+      }
+
+      if (targetGroupKeys.size > 0) {
+        const targetGroupKey = resolveTargetGroupFilterKey(deal);
+        if (!targetGroupKey || !targetGroupKeys.has(targetGroupKey)) {
           return false;
         }
       }
@@ -1270,6 +1302,29 @@ export function createReportingService(
       rows.set(source.key, {
         key: source.key,
         label: source.label
+      });
+    }
+
+    return sortSources(Array.from(rows.values()));
+  };
+
+  const buildValueCatalog = (
+    deals: Awaited<ReturnType<ReportingRepository["getAllDeals"]>>,
+    resolveValue: (
+      deal: Awaited<ReturnType<ReportingRepository["getAllDeals"]>>[number]
+    ) => string | null
+  ) => {
+    const rows = new Map<string, SourceCatalogEntry>();
+
+    for (const deal of deals) {
+      const value = resolveValue(deal);
+      if (!value) {
+        continue;
+      }
+
+      rows.set(value, {
+        key: value,
+        label: value
       });
     }
 
@@ -3519,6 +3574,8 @@ export function createReportingService(
         stageCatalog,
         managerCatalog,
         sourceCatalog: buildSourceCatalog(scopedDeals, stageCatalog),
+        businessClubCatalog: buildValueCatalog(scopedDeals, resolveBusinessClubFilterKey),
+        targetGroupCatalog: buildValueCatalog(scopedDeals, resolveTargetGroupFilterKey),
         wonStageIds,
         defaultPeriodDays: input.defaultPeriodDays,
         lastSync,

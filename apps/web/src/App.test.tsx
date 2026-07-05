@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '@/App'
 import { apiClient } from '@/lib/api-client'
+import { RevenueVelocityScene, SourceCohortsScene, UnitEconomicsScene } from '@/proto/scenes'
 import type {
   ConversionEventTypeSettingsInput,
   DealPricingRuleInput,
@@ -12,6 +13,7 @@ import type {
   SalesPlanQuarterInput,
   SourceCohortConversionReport,
 } from '@/lib/dashboard-types'
+import type { ProtoFilterState, ProtoRuntimeData } from '@/proto/types'
 
 const mockState = vi.hoisted(() => ({
   unauthorizedListener: null as null | (() => void),
@@ -69,6 +71,8 @@ vi.mock('@/lib/api-client', () => ({
       stageCatalog: [],
       managerCatalog: [],
       sourceCatalog: [],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: null,
@@ -1322,6 +1326,28 @@ async function waitForDashboardShell() {
   await waitFor(() => expect(apiClient.getDashboard).toHaveBeenCalled())
 }
 
+function createSceneFilters(
+  overrides: Partial<ProtoFilterState> = {},
+): ProtoFilterState {
+  return {
+    rangeStart: '2026-07-01',
+    rangeEnd: '2026-07-05',
+    compareRanges: [],
+    managers: [],
+    sources: [],
+    businessClubs: [],
+    targetGroups: [],
+    ...overrides,
+  }
+}
+
+const readyRuntimeData: ProtoRuntimeData = {
+  managerOptions: [],
+  sourceOptions: [],
+  operationalStatus: 'ready',
+  operationalError: null,
+}
+
 describe('App', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1584,6 +1610,102 @@ describe('App', () => {
     expect(await screen.findByText(/1 разрез/i)).toBeInTheDocument()
     expect(screen.getByText(/Егоров Андрей/i)).toBeInTheDocument()
     expect(apiClient.getAttractionOntology).not.toHaveBeenCalled()
+  })
+
+  it('passes customer filters into the source cohort conversion tab request', async () => {
+    render(
+      <SourceCohortsScene
+        commentMode={false}
+        filters={{
+          rangeStart: '2026-07-01',
+          rangeEnd: '2026-07-05',
+          compareRanges: [],
+          managers: [],
+          sources: ['LIDGEN'],
+          businessClubs: ['ClubFirst One'],
+          targetGroups: ['ClubFirst Future'],
+        }}
+      />,
+    )
+
+    await waitFor(() =>
+      expect(apiClient.getSourceCohortConversionReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessClubKeys: ['ClubFirst One'],
+          targetGroupKeys: ['ClubFirst Future'],
+        }),
+      ),
+    )
+  })
+
+  it('reloads the revenue velocity scene when customer filters change', async () => {
+    const initialFilters = createSceneFilters()
+    const customerFilters = createSceneFilters({
+      businessClubs: ['ClubFirst One'],
+      targetGroups: ['ClubFirst Future'],
+    })
+    const { rerender } = render(
+      <RevenueVelocityScene
+        filters={initialFilters}
+        runtimeData={readyRuntimeData}
+        commentMode={false}
+      />,
+    )
+
+    await waitFor(() => expect(apiClient.getRevenueVelocityReport).toHaveBeenCalled())
+    vi.mocked(apiClient.getRevenueVelocityReport).mockClear()
+
+    rerender(
+      <RevenueVelocityScene
+        filters={customerFilters}
+        runtimeData={readyRuntimeData}
+        commentMode={false}
+      />,
+    )
+
+    await waitFor(() =>
+      expect(apiClient.getRevenueVelocityReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessClubKeys: ['ClubFirst One'],
+          targetGroupKeys: ['ClubFirst Future'],
+        }),
+      ),
+    )
+  })
+
+  it('reloads the unit economics scene when customer filters change', async () => {
+    const initialFilters = createSceneFilters()
+    const customerFilters = createSceneFilters({
+      businessClubs: ['ClubFirst One'],
+      targetGroups: ['ClubFirst Future'],
+    })
+    const { rerender } = render(
+      <UnitEconomicsScene
+        filters={initialFilters}
+        runtimeData={readyRuntimeData}
+        commentMode={false}
+      />,
+    )
+
+    await waitFor(() => expect(apiClient.getUnitEconomicsReport).toHaveBeenCalled())
+    vi.mocked(apiClient.getUnitEconomicsReport).mockClear()
+
+    rerender(
+      <UnitEconomicsScene
+        filters={customerFilters}
+        runtimeData={readyRuntimeData}
+        commentMode={false}
+      />,
+    )
+
+    await waitFor(() =>
+      expect(apiClient.getUnitEconomicsReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessClubKeys: ['ClubFirst One'],
+          targetGroupKeys: ['ClubFirst Future'],
+        }),
+      ),
+    )
   })
 
   it('does not keep stale source cohort rows while a selected month is loading', async () => {

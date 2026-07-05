@@ -63,6 +63,8 @@ export function createDefaultFilters(today = new Date()): ProtoFilterState {
     compareRanges: [],
     managers: [],
     sources: [],
+    businessClubs: [],
+    targetGroups: [],
   }
 }
 

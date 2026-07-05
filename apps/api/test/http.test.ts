@@ -4062,7 +4062,9 @@ describe("createApp", () => {
         from: "2026-04-01T00:00:00.000Z",
         to: "2026-04-30T23:59:59.999Z",
         managerIds: "7,9",
-        sourceKeys: "WEB"
+        sourceKeys: "WEB",
+        businessClubKeys: "ClubFirst Russia",
+        targetGroupKeys: "ClubFirst Future,ClubFirst Ladies"
       })
       .expect(200)
       .expect(({ body }) => {
@@ -4085,7 +4087,9 @@ describe("createApp", () => {
       },
       filters: {
         managerIds: ["7", "9"],
-        sourceKeys: ["WEB"]
+        sourceKeys: ["WEB"],
+        businessClubKeys: ["ClubFirst Russia"],
+        targetGroupKeys: ["ClubFirst Future", "ClubFirst Ladies"]
       }
     });
 

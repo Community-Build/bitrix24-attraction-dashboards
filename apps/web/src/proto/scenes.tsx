@@ -6242,6 +6242,8 @@ export function RevenueVelocityScene({ filters, runtimeData }: SceneComponentPro
     to: 'to' in query ? query.to : null,
     managers: query.managerIds,
     sources: query.sourceKeys,
+    businessClubs: query.businessClubKeys,
+    targetGroups: query.targetGroupKeys,
     view,
     dimension,
   })
@@ -7996,7 +7998,6 @@ export function OperationsScene({ filters }: SceneComponentProps) {
 }
 
 export function SourceCohortsScene({ filters }: SceneComponentProps) {
-  const { compareRanges, managers, rangeEnd, rangeStart, sources } = filters
   const filterMonth = getSourceCohortFilterMonth(filters)
   const [monthOverride, setMonthOverride] = useState<{
     filterMonth: string
@@ -8019,19 +8020,9 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
   const sourceCohortQuery = useMemo(
     () =>
       requestedMonth
-        ? buildSourceCohortQuery(
-            { compareRanges, managers, rangeEnd, rangeStart, sources },
-            requestedMonth,
-          )
+        ? buildSourceCohortQuery(filters, requestedMonth)
         : null,
-    [
-      compareRanges,
-      managers,
-      rangeEnd,
-      rangeStart,
-      sources,
-      requestedMonth,
-    ],
+    [filters, requestedMonth],
   )
   const requestKey = useMemo(
     () => (sourceCohortQuery ? JSON.stringify(sourceCohortQuery) : ''),
@@ -9404,6 +9395,8 @@ export function UnitEconomicsScene({ filters, runtimeData }: SceneComponentProps
     to: 'to' in query ? query.to : null,
     managers: query.managerIds,
     sources: query.sourceKeys,
+    businessClubs: query.businessClubKeys,
+    targetGroups: query.targetGroupKeys,
     eventParticipantMode,
   })
   const report =
