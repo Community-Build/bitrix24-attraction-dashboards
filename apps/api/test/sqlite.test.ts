@@ -1853,6 +1853,88 @@ describe("createSqliteRepository", () => {
     );
   });
 
+  it("seeds and replaces operational threshold settings", async () => {
+    const repository = createTempRepository();
+
+    const seeded = await repository.getOperationalThresholdSettings();
+    expect(seeded).toMatchObject({
+      noCallsMaxDays: 7,
+      noActivityMaxDays: 5,
+      slaBusinessHours: {
+        sla1: 24,
+        sla2: 5,
+        sla3: 72
+      },
+      updatedAt: null
+    });
+    expect(seeded.stageAging).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stageId: "C10:NEW",
+          stageName: "База входящая",
+          maxDaysOnStage: 1
+        }),
+        expect.objectContaining({
+          stageId: "C10:PREPARATION",
+          stageName: "Звонок-знакомство",
+          maxDaysOnStage: 3
+        })
+      ])
+    );
+
+    await repository.replaceOperationalThresholdSettings({
+      stageAging: [
+        {
+          stageId: "C10:NEW",
+          maxDaysOnStage: 2
+        },
+        {
+          stageId: "C10:PREPARATION",
+          maxDaysOnStage: 4
+        }
+      ],
+      noCallsMaxDays: 6,
+      noActivityMaxDays: 4,
+      slaBusinessHours: {
+        sla1: 20,
+        sla2: 6,
+        sla3: 60
+      },
+      updatedAt: "2026-04-29T10:00:00.000Z"
+    });
+
+    const updated = await repository.getOperationalThresholdSettings();
+    expect(updated).toMatchObject({
+      noCallsMaxDays: 6,
+      noActivityMaxDays: 4,
+      slaBusinessHours: {
+        sla1: 20,
+        sla2: 6,
+        sla3: 60
+      },
+      updatedAt: "2026-04-29T10:00:00.000Z"
+    });
+    expect(updated.stageAging).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          stageId: "C10:NEW",
+          stageName: "База входящая",
+          maxDaysOnStage: 2
+        }),
+        expect.objectContaining({
+          stageId: "C10:PREPARATION",
+          stageName: "Звонок-знакомство",
+          maxDaysOnStage: 4
+        }),
+        expect.objectContaining({
+          stageId: "C10:UC_9E0XYG",
+          stageName: "Встреча-знакомство",
+          maxDaysOnStage: 14
+        })
+      ])
+    );
+  });
+
   it("seeds and replaces attraction manager whitelist settings", async () => {
     const directory = mkdtempSync(join(tmpdir(), "bitrix24-reporting-"));
     tempDirs.push(directory);

@@ -97,6 +97,8 @@ export type AttractionSettingsRepository = Pick<
   | "replaceSalesPlanPeriods"
   | "getPricingRules"
   | "replacePricingRules"
+  | "getOperationalThresholdSettings"
+  | "replaceOperationalThresholdSettings"
   | "getUnitEconomicsCostArticles"
   | "getUnitEconomicsCostRules"
   | "replaceUnitEconomicsCostRules"
@@ -167,6 +169,8 @@ export type ReportingRepository = SyncRepository &
     | "replaceSalesPlanPeriods"
     | "getPricingRules"
     | "replacePricingRules"
+    | "getOperationalThresholdSettings"
+    | "replaceOperationalThresholdSettings"
     // Unit economics.
     | "getUnitEconomicsCostArticles"
     | "getUnitEconomicsCostRules"

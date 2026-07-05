@@ -31,6 +31,9 @@ import type {
   ManagerWhitelistSettingsData,
   ManagerWhitelistSettingsInput,
   ManualSyncSummary,
+  OperationalDashboardReport,
+  OperationalThresholdSettings,
+  OperationalThresholdSettingsInput,
   ReportRange,
   ReportFilters,
   RevenueVelocityDimension,
@@ -75,6 +78,7 @@ import {
   buildSourceQualityConversionReport,
   buildTargetGroupConversionReport
 } from "../domain/operational-reports.js";
+import { buildOperationalDashboardReport } from "../domain/operational-dashboard.js";
 import {
   ATTRACTION_MANAGER_CATALOG,
   buildManagerTeams,
@@ -187,6 +191,11 @@ export interface ReportingService {
     compareRanges?: ReportRange[];
     filters?: ReportFilters;
   }): Promise<ActivitiesWorkloadReport>;
+  getOperationalDashboardReport(input: {
+    periodDays?: number;
+    range?: ReportRange;
+    filters?: ReportFilters;
+  }): Promise<OperationalDashboardReport>;
   getAcquisitionOutcomesReport(input: {
     periodDays?: number;
     range?: ReportRange;
@@ -278,6 +287,10 @@ export interface ReportingService {
   }): Promise<SalesPlanData>;
   getPricingSettings(): Promise<DealPricingSettings>;
   replacePricingSettings(input: DealPricingSettingsInput): Promise<DealPricingSettings>;
+  getOperationalThresholdSettings(): Promise<OperationalThresholdSettings>;
+  replaceOperationalThresholdSettings(
+    input: OperationalThresholdSettingsInput
+  ): Promise<OperationalThresholdSettings>;
   getAttractionOntology(): Promise<AttractionOntologyResponse>;
   getAttractionOntologySourceDocument(
     sourceId: string
@@ -1158,6 +1171,43 @@ export function createReportingService(
       : sortAttractionManagers(sortedRows);
   };
 
+  const getLocalManagerDirectory = async (managerIds: string[]) => {
+    const requestedIds = uniqueStrings(managerIds);
+    const existingById = new Map<string, ManagerDirectoryEntry>();
+
+    for (const manager of await input.repository.getManagerDirectory()) {
+      existingById.set(manager.id, manager);
+    }
+    for (const manager of ATTRACTION_MANAGER_CATALOG) {
+      existingById.set(manager.id, {
+        ...existingById.get(manager.id),
+        ...manager
+      });
+    }
+    for (const managerId of requestedIds) {
+      if (managerId === UNASSIGNED_MANAGER_ID) {
+        existingById.set(managerId, {
+          id: UNASSIGNED_MANAGER_ID,
+          name: UNASSIGNED_MANAGER_NAME
+        });
+      } else if (!existingById.has(managerId)) {
+        existingById.set(managerId, {
+          id: managerId,
+          name: managerId
+        });
+      }
+    }
+
+    const rows =
+      requestedIds.length > 0
+        ? requestedIds
+            .map((managerId) => existingById.get(managerId))
+            .filter((row): row is ManagerDirectoryEntry => Boolean(row))
+        : Array.from(existingById.values());
+
+    return sortAttractionManagers(sortManagers(rows));
+  };
+
   const getAttractionManagerScope = async () => {
     const settings = await input.repository.getManagerWhitelistSettings("attraction");
     return settings
@@ -1923,6 +1973,17 @@ export function createReportingService(
       };
     },
 
+    async getOperationalThresholdSettings() {
+      return input.repository.getOperationalThresholdSettings();
+    },
+
+    async replaceOperationalThresholdSettings(settingsInput) {
+      return input.repository.replaceOperationalThresholdSettings({
+        ...settingsInput,
+        updatedAt: nowFactory().toISOString()
+      });
+    },
+
     async getUnitEconomicsSettings() {
       const [articles, rules, eventParticipantMode] = await Promise.all([
         input.repository.getUnitEconomicsCostArticles(),
@@ -2237,7 +2298,8 @@ export function createReportingService(
         activities,
         deadlineChanges,
         meetingDateChanges,
-        calls
+        calls,
+        operationalThresholdSettings
       ] =
         await Promise.all([
           input.repository.getAllDeals(),
@@ -2248,7 +2310,8 @@ export function createReportingService(
           input.repository.getAllDealMeetingDateChanges
             ? input.repository.getAllDealMeetingDateChanges()
             : Promise.resolve([]),
-          input.repository.getAllCalls()
+          input.repository.getAllCalls(),
+          input.repository.getOperationalThresholdSettings()
         ]);
       const canonical = await loadCanonicalReportInputs({
         stageHistory,
@@ -2367,7 +2430,8 @@ export function createReportingService(
           calls: scopedCalls,
           eventVisitFacts: scopedEventVisitFacts,
           dealTouchpointFacts: scopedDealTouchpointFacts,
-          managerDirectory
+          managerDirectory,
+          slaBusinessHours: operationalThresholdSettings.slaBusinessHours
         });
 
       const report = attachComparisons(
@@ -2380,6 +2444,93 @@ export function createReportingService(
         ...report,
         warnings: [...workloadFilters.warnings, ...report.warnings]
       };
+    },
+
+    async getOperationalDashboardReport({ periodDays, range, filters }) {
+      const scopedFilters = await normalizeAttractionReportFilters(filters);
+      const now = nowFactory();
+      const [
+        deals,
+        stageCatalog,
+        stageHistory,
+        activities,
+        calls,
+        wonStageIds,
+        operationalThresholdSettings
+      ] = await Promise.all([
+        input.repository.getAllDeals(),
+        getScopedStageCatalog(true),
+        input.repository.getAllStageHistory(),
+        input.repository.getAllActivities(),
+        input.repository.getAllCalls(),
+        input.repository.getWonStageIds(),
+        input.repository.getOperationalThresholdSettings()
+      ]);
+      const canonical = await loadCanonicalReportInputs({
+        stageHistory,
+        activities,
+        calls
+      }, {
+        includeTouchpointFacts: true
+      });
+      const reportStageHistory = canonical.stageHistory;
+      const reportActivities = canonical.activities ?? activities;
+      const reportCalls = canonical.calls ?? calls;
+      const resolvedRange = resolveRange(
+        periodDays,
+        range,
+        input.defaultPeriodDays,
+        now
+      );
+      const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
+      const scopedDealIds = new Set(scopedDeals.map((deal) => deal.id));
+      const scopedStageHistory = reportStageHistory.filter((row) =>
+        scopedDealIds.has(row.ownerId)
+      );
+      const scopedActivities = reportActivities.filter(
+        (activity) =>
+          isDealOwnerType(activity.ownerTypeId) && scopedDealIds.has(activity.ownerId)
+      );
+      const activityById = new Map(
+        scopedActivities.map((activity) => [activity.id, activity])
+      );
+      const scopedCalls = reportCalls.filter((call) => {
+        if (
+          isDealCallEntity(call.crmEntityType) &&
+          call.crmEntityId &&
+          scopedDealIds.has(call.crmEntityId)
+        ) {
+          return true;
+        }
+
+        return Boolean(call.crmActivityId && activityById.has(call.crmActivityId));
+      });
+      const managerDirectory = await getLocalManagerDirectory(
+        uniqueStrings([
+          ...scopedDeals.map((deal) => deal.assignedById),
+          ...scopedActivities.map((activity) => activity.responsibleId),
+          ...scopedCalls.map((call) => call.portalUserId),
+          ...scopedCalls.map((call) =>
+            call.crmActivityId
+              ? activityById.get(call.crmActivityId)?.responsibleId ?? null
+              : null
+          )
+        ])
+      );
+
+      return buildOperationalDashboardReport({
+        range: resolvedRange,
+        now: now.toISOString(),
+        deals: scopedDeals,
+        stageCatalog,
+        stageHistory: scopedStageHistory,
+        activities: scopedActivities,
+        calls: scopedCalls,
+        managerDirectory,
+        thresholds: operationalThresholdSettings,
+        wonStageIds,
+        dealUrlBuilder: (dealId) => buildBitrixDealUrl(bitrixPortalHost, dealId)
+      });
     },
 
     async getAcquisitionOutcomesReport({

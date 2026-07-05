@@ -1303,6 +1303,118 @@ describe("buildActivitiesWorkloadReport", () => {
     });
   });
 
+  it("uses configured business-hour thresholds for SLA calculations", () => {
+    const input = {
+      range: {
+        from: "2026-04-20T00:00:00.000Z",
+        to: "2026-04-20T23:59:59.999Z"
+      },
+      deals: [
+        {
+          id: "CUSTOM_SLA",
+          leadId: null,
+          categoryId: "10",
+          stageId: "C10:PREPARATION",
+          stageSemanticId: "P",
+          opportunity: 10000,
+          assignedById: "6994",
+          sourceId: "8",
+          qualityValue: "3.1 Готов ко встрече с представителем клуба",
+          businessClubValue: null,
+          targetGroupValue: null,
+          meetingTypeValue: null,
+          dateCreate: "2026-04-20T09:00:00.000Z",
+          dateModify: "2026-04-20T15:00:00.000Z",
+          dateClosed: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          utmContent: null,
+          utmTerm: null
+        }
+      ],
+      stageCatalog: [
+        {
+          entityType: "deal",
+          categoryId: "10",
+          statusId: "C10:PREPARATION",
+          name: "Звонок-знакомство",
+          semanticId: "P",
+          sortOrder: 20
+        },
+        {
+          entityType: "source",
+          categoryId: null,
+          statusId: "8",
+          name: "Лидген УС",
+          semanticId: null,
+          sortOrder: 8
+        }
+      ],
+      stageHistory: [
+        {
+          id: "INTRO",
+          ownerId: "CUSTOM_SLA",
+          categoryId: "10",
+          stageId: "C10:PREPARATION",
+          stageSemanticId: "P",
+          typeId: null,
+          createdTime: "2026-04-20T09:00:00.000Z"
+        }
+      ],
+      activities: [],
+      deadlineChanges: [],
+      calls: [
+        {
+          id: "FIRST_CALL",
+          crmActivityId: null,
+          portalUserId: "6994",
+          callType: "1",
+          callStartDate: "2026-04-20T15:00:00.000Z",
+          callDurationSeconds: 60,
+          crmEntityType: "DEAL",
+          crmEntityId: "CUSTOM_SLA",
+          callFailedCode: "200"
+        }
+      ],
+      managerDirectory: [{ id: "6994", name: "Анастасия Кузнецова" }]
+    } satisfies Parameters<typeof buildActivitiesWorkloadReport>[0];
+
+    const defaultResult = buildActivitiesWorkloadReport(input);
+    const configuredResult = buildActivitiesWorkloadReport({
+      ...input,
+      slaBusinessHours: {
+        sla1: 24,
+        sla2: 5,
+        sla3: 72
+      }
+    });
+
+    const defaultSla2 = defaultResult.managerRows[0]?.slaMetrics.find(
+      (metric) => metric.slaKey === "sla2"
+    );
+    const configuredSla2 = configuredResult.managerRows[0]?.slaMetrics.find(
+      (metric) => metric.slaKey === "sla2"
+    );
+
+    expect(defaultSla2).toEqual({
+      slaKey: "sla2",
+      label: "Первый контакт",
+      onTimeCount: 1,
+      lateCount: 0,
+      noTouchCount: 0,
+      medianHours: 6
+    });
+    expect(configuredSla2).toEqual({
+      slaKey: "sla2",
+      label: "Первый контакт",
+      onTimeCount: 0,
+      lateCount: 1,
+      noTouchCount: 0,
+      medianHours: 6
+    });
+  });
+
   it("requires two calls and a next-stage transition within three business days on intro stage", () => {
     const result = buildActivitiesWorkloadReport({
       range: {

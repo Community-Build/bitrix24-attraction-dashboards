@@ -24,6 +24,9 @@ import type {
   ManagerDirectoryEntry,
   ManagerWhitelistSetting,
   ModuleEventTypeSetting,
+  OperationalStageAgingThreshold,
+  OperationalThresholdSettings,
+  OperationalThresholdSettingsInput,
   SalesPlanDraftRow,
   SalesPlanRow,
   SnapshotStats,
@@ -56,6 +59,70 @@ export interface LastSyncSummary {
   mode: "full" | "delta";
   dealBreakdown: SyncDealChangeBreakdown;
 }
+
+const OPERATIONAL_THRESHOLD_SETTINGS_KEY = "attraction";
+
+const DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS: OperationalStageAgingThreshold[] = [
+  {
+    stageId: "C10:NEW",
+    stageName: "База входящая",
+    maxDaysOnStage: 1
+  },
+  {
+    stageId: "C10:PREPARATION",
+    stageName: "Звонок-знакомство",
+    maxDaysOnStage: 3
+  },
+  {
+    stageId: "C10:UC_9E0XYG",
+    stageName: "Встреча-знакомство",
+    maxDaysOnStage: 14
+  },
+  {
+    stageId: "C10:UC_61CBCU",
+    stageName: "Активация",
+    maxDaysOnStage: 14
+  },
+  {
+    stageId: "C10:UC_A249EJ",
+    stageName: "Демонстрация",
+    maxDaysOnStage: 14
+  },
+  {
+    stageId: "C10:UC_CPR91Y",
+    stageName: "Проблематизация",
+    maxDaysOnStage: 14
+  },
+  {
+    stageId: "C10:UC_5KZT6Y",
+    stageName: "Адмиссия",
+    maxDaysOnStage: 7
+  },
+  {
+    stageId: "C10:UC_M1M5WM",
+    stageName: "Контракт",
+    maxDaysOnStage: 7
+  },
+  {
+    stageId: "C10:UC_7CLBFT",
+    stageName: "На передаче",
+    maxDaysOnStage: 5
+  }
+];
+
+const DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT: OperationalThresholdSettingsInput = {
+  stageAging: DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS.map((threshold) => ({
+    stageId: threshold.stageId,
+    maxDaysOnStage: threshold.maxDaysOnStage
+  })),
+  noCallsMaxDays: 7,
+  noActivityMaxDays: 5,
+  slaBusinessHours: {
+    sla1: 24,
+    sla2: 5,
+    sla3: 72
+  }
+};
 
 export interface SyncCursorInput {
   key: string;
@@ -113,6 +180,11 @@ export interface ReplaceSalesPlanPeriodsInput {
 export interface ReplacePricingRulesInput {
   updatedAt: string;
   rules: DealPricingRuleInput[];
+}
+
+export interface ReplaceOperationalThresholdSettingsInput
+  extends OperationalThresholdSettingsInput {
+  updatedAt: string;
 }
 
 export interface ReplaceUnitEconomicsCostRulesInput {
@@ -678,6 +750,10 @@ export interface SqliteRepository {
   replaceSalesPlanPeriods(input: ReplaceSalesPlanPeriodsInput): Promise<void>;
   getPricingRules(): Promise<DealPricingRule[]>;
   replacePricingRules(input: ReplacePricingRulesInput): Promise<DealPricingRule[]>;
+  getOperationalThresholdSettings(): Promise<OperationalThresholdSettings>;
+  replaceOperationalThresholdSettings(
+    input: ReplaceOperationalThresholdSettingsInput
+  ): Promise<OperationalThresholdSettings>;
   getUnitEconomicsCostArticles(): Promise<UnitEconomicsCostArticle[]>;
   getUnitEconomicsCostRules(): Promise<UnitEconomicsCostRule[]>;
   replaceUnitEconomicsCostRules(
@@ -888,6 +964,110 @@ function parseDiagnostics(value: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+function toPositiveInteger(value: unknown, fallback: number) {
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) && numberValue > 0
+    ? Math.round(numberValue)
+    : fallback;
+}
+
+function parseOperationalThresholdSettingsPayload(
+  value: string | null | undefined
+): OperationalThresholdSettingsInput {
+  if (!value) {
+    return DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as Partial<OperationalThresholdSettingsInput>;
+    const stageAging = Array.isArray(parsed.stageAging)
+      ? parsed.stageAging
+          .map((row) => ({
+            stageId:
+              typeof row?.stageId === "string" && row.stageId.trim().length > 0
+                ? row.stageId.trim()
+                : null,
+            maxDaysOnStage: toPositiveInteger(row?.maxDaysOnStage, 1)
+          }))
+          .filter(
+            (row): row is OperationalThresholdSettingsInput["stageAging"][number] =>
+              row.stageId !== null
+          )
+      : DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT.stageAging;
+
+    return {
+      stageAging:
+        stageAging.length > 0
+          ? stageAging
+          : DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT.stageAging,
+      noCallsMaxDays: toPositiveInteger(
+        parsed.noCallsMaxDays,
+        DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT.noCallsMaxDays
+      ),
+      noActivityMaxDays: toPositiveInteger(
+        parsed.noActivityMaxDays,
+        DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT.noActivityMaxDays
+      ),
+      slaBusinessHours: {
+        sla1: toPositiveInteger(
+          parsed.slaBusinessHours?.sla1,
+          DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT.slaBusinessHours.sla1
+        ),
+        sla2: toPositiveInteger(
+          parsed.slaBusinessHours?.sla2,
+          DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT.slaBusinessHours.sla2
+        ),
+        sla3: toPositiveInteger(
+          parsed.slaBusinessHours?.sla3,
+          DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT.slaBusinessHours.sla3
+        )
+      }
+    };
+  } catch {
+    return DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT;
+  }
+}
+
+function hydrateOperationalThresholdSettings(input: {
+  payloadJson: string | null | undefined;
+  updatedAt: string | null;
+}): OperationalThresholdSettings {
+  const payload = parseOperationalThresholdSettingsPayload(input.payloadJson);
+  const defaultStageById = new Map(
+    DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS.map((threshold) => [
+      threshold.stageId,
+      threshold
+    ])
+  );
+  const payloadStageById = new Map(
+    payload.stageAging.map((threshold) => [threshold.stageId, threshold])
+  );
+  const stageAging = [
+    ...DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS.map((threshold) => ({
+      stageId: threshold.stageId,
+      stageName: threshold.stageName,
+      maxDaysOnStage:
+        payloadStageById.get(threshold.stageId)?.maxDaysOnStage ??
+        threshold.maxDaysOnStage
+    })),
+    ...payload.stageAging
+      .filter((threshold) => !defaultStageById.has(threshold.stageId))
+      .map((threshold) => ({
+        stageId: threshold.stageId,
+        stageName: threshold.stageId,
+        maxDaysOnStage: threshold.maxDaysOnStage
+      }))
+  ];
+
+  return {
+    stageAging,
+    noCallsMaxDays: payload.noCallsMaxDays,
+    noActivityMaxDays: payload.noActivityMaxDays,
+    slaBusinessHours: payload.slaBusinessHours,
+    updatedAt: input.updatedAt
+  };
 }
 
 function normalizeSyncRunStatus(value: string): SyncRunLogEntry["status"] {
@@ -1390,6 +1570,12 @@ export function createSqliteRepository(
       updated_at TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS operational_threshold_settings (
+      key TEXT PRIMARY KEY,
+      payload_json TEXT NOT NULL,
+      updated_at TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS unit_economics_cost_articles (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -1682,6 +1868,25 @@ export function createSqliteRepository(
       }
     );
     seedPricingTransaction(DEFAULT_PRICING_RULES);
+  }
+
+  const existingOperationalThresholdSettings = database
+    .prepare("SELECT COUNT(*) AS count FROM operational_threshold_settings")
+    .get() as { count: number };
+
+  if (existingOperationalThresholdSettings.count === 0) {
+    database
+      .prepare(
+        `INSERT INTO operational_threshold_settings (
+          key,
+          payload_json,
+          updated_at
+        ) VALUES (?, ?, NULL)`
+      )
+      .run(
+        OPERATIONAL_THRESHOLD_SETTINGS_KEY,
+        JSON.stringify(DEFAULT_OPERATIONAL_THRESHOLD_SETTINGS_INPUT)
+      );
   }
 
   const existingUnitEconomicsArticles = database
@@ -2841,6 +3046,20 @@ export function createSqliteRepository(
       @updatedAt
     )
   `);
+  const upsertOperationalThresholdSettingsStatement = database.prepare(`
+    INSERT INTO operational_threshold_settings (
+      key,
+      payload_json,
+      updated_at
+    ) VALUES (
+      @key,
+      @payloadJson,
+      @updatedAt
+    )
+    ON CONFLICT(key) DO UPDATE SET
+      payload_json = excluded.payload_json,
+      updated_at = excluded.updated_at
+  `);
   const insertUnitEconomicsCostRuleStatement = database.prepare(`
     INSERT INTO unit_economics_cost_rules (
       id,
@@ -2985,6 +3204,16 @@ export function createSqliteRepository(
           sortOrder: rule.sortOrder ?? index * 10,
           updatedAt: input.updatedAt
         });
+      });
+    }
+  );
+  const replaceOperationalThresholdSettingsTransaction = database.transaction(
+    (input: ReplaceOperationalThresholdSettingsInput) => {
+      const { updatedAt, ...settings } = input;
+      upsertOperationalThresholdSettingsStatement.run({
+        key: OPERATIONAL_THRESHOLD_SETTINGS_KEY,
+        payloadJson: JSON.stringify(settings),
+        updatedAt
       });
     }
   );
@@ -5093,6 +5322,33 @@ export function createSqliteRepository(
     async replacePricingRules(input) {
       replacePricingRulesTransaction(input);
       return this.getPricingRules();
+    },
+
+    async getOperationalThresholdSettings() {
+      const row = database
+        .prepare(
+          `SELECT
+            payload_json AS payloadJson,
+            updated_at AS updatedAt
+          FROM operational_threshold_settings
+          WHERE key = ?`
+        )
+        .get(OPERATIONAL_THRESHOLD_SETTINGS_KEY) as
+        | {
+            payloadJson: string;
+            updatedAt: string | null;
+          }
+        | undefined;
+
+      return hydrateOperationalThresholdSettings({
+        payloadJson: row?.payloadJson ?? null,
+        updatedAt: row?.updatedAt ?? null
+      });
+    },
+
+    async replaceOperationalThresholdSettings(input) {
+      replaceOperationalThresholdSettingsTransaction(input);
+      return this.getOperationalThresholdSettings();
     },
 
     async getUnitEconomicsCostArticles() {

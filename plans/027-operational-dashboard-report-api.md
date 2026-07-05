@@ -52,7 +52,10 @@ domain logic and HTTP endpoint; plan 028 renders it.
     `qualityValue`, `businessClubValue`, `targetGroupValue`,
     `meetingSlots?: DealMeetingSlot[]`, `dateCreate`, `dateModify`, `dateClosed`.
   - `DealMeetingSlot` (line ~16): `{ index: 1|2|3; dateValue: string|null; typeValue; placeValue; calendarValue; eventId; source: "deal_fields" }` —
-    canonical «Встреча 1/2/3» model (plans 008-010, DONE).
+    canonical «Встреча 1/2/3» model (plans 008-010, DONE). For this report,
+    meeting aggregation is strictly by `index` (`Встреча 1`, `Встреча 2`,
+    `Встреча 3`). `typeValue` is contextual metadata only and must not become
+    a report grouping dimension.
   - `ActivitySnapshot` (line ~258): `{ id, ownerTypeId, ownerId, typeId, providerId, responsibleId, createdTime, deadline, lastUpdated, completed, completedTime }` —
     Bitrix «дела»; `ownerId` binds to the deal.
   - `CallSnapshot` (line ~321): `{ id, crmActivityId, portalUserId, callType, callStartDate, callDurationSeconds, crmEntityType, crmEntityId, callFailedCode, ... }` —
@@ -241,8 +244,9 @@ Export `buildOperationalDashboardReport(input)` with input
   `service.ts` and mirror it).
 - **Flow metrics over `range`**: `createdDeals` = deals with `dateCreate` in
   range. `meetingsHeld.bySlot` = meeting slots (`deal.meetingSlots[]`) whose
-  `dateValue` falls in range AND is `<= now` (held, not planned); label slots
-  «Встреча 1/2/3». `sales` = deals whose FIRST transition to `C10:WON` (from
+  `dateValue` falls in range AND is `<= now` (held, not planned); group only by
+  `slot.index` and label slots «Встреча 1/2/3». Do not group by
+  `slot.typeValue`. `sales` = deals whose FIRST transition to `C10:WON` (from
   stage history; fallback: current stage is WON and `dateClosed` in range)
   happened in range, grouped by `targetGroupValue` (label fallback
   «Без таргет-группы»), with `averageDaysToWin` = mean of
@@ -317,7 +321,9 @@ Cover at minimum:
 4. no_recent_calls honors `max(lastCallAt, dateCreate)` (a deal created 2 days
    ago with zero calls and `noCallsMaxDays 7` → NOT flagged).
 5. Flow: meetingsHeld bySlot counts only `dateValue` in range and `<= now`;
-   sales grouped by club with cycle; lost counts `C10:LOSE` + `C10:UC_EA3R76`.
+   two slots with different `typeValue` but the same `index` are counted in
+   the same «Встреча N» bucket; sales grouped by club with cycle; lost counts
+   `C10:LOSE` + `C10:UC_EA3R76`.
 6. planned: slot date today / tomorrow / yesterday → today counts 1, tomorrow 1.
 7. risks sorted critical-first and capped at 500 (fixture with 501+ not
    needed — assert the cap constant is applied via a small cap override if the
@@ -333,12 +339,12 @@ Add to `test/http.test.ts`: authenticated GET
 
 ## Done criteria
 
-- [ ] `pnpm typecheck` and `pnpm lint` exit 0
-- [ ] `pnpm --filter @bitrix24-reporting/api test` exits 0, including ≥8 new domain tests
-- [ ] GET `/api/reports/operational-dashboard` (authed) returns the contract shape; unauthenticated → 401
-- [ ] Report responses contain deal IDs but no deal titles/phones/emails (grep the new domain file for `title` — no deal title field is read)
-- [ ] No files outside the in-scope list modified (`git status`)
-- [ ] `plans/README.md` status row updated
+- [x] `pnpm typecheck` and `pnpm lint` exit 0
+- [x] `pnpm --filter @bitrix24-reporting/api test` exits 0, including ≥8 new domain tests
+- [x] GET `/api/reports/operational-dashboard` (authed) returns the contract shape; unauthenticated → 401
+- [x] Report responses contain deal IDs but no deal titles/phones/emails (grep the new domain file for `title` — no deal title field is read)
+- [x] 027 implementation files stayed inside this plan's API/report scope; the active branch also contains 026 and 028 sequence files by design
+- [x] `plans/README.md` status row updated
 
 ## STOP conditions
 

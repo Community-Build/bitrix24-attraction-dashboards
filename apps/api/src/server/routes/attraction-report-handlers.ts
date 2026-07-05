@@ -36,6 +36,7 @@ export interface AttractionReportRouteService {
   getSourceQualityConversionReport(input: RangeRequest): Promise<unknown>;
   getSourceCohortConversionReport(input: RangeRequest): Promise<unknown>;
   getActivitiesWorkloadReport(input: RangeRequest): Promise<unknown>;
+  getOperationalDashboardReport(input: RangeRequest): Promise<unknown>;
   getAcquisitionOutcomesReport(input: RangeRequest): Promise<unknown>;
   getTargetGroupConversionReport(input: RangeRequest): Promise<unknown>;
   getManagerActionOutcomeReport(input: RangeRequest): Promise<unknown>;
@@ -217,6 +218,23 @@ export function createAttractionReportRouteHandlers({
         route: "activities-workload",
         handler: async () =>
           service.getActivitiesWorkloadReport(
+            await parseScopedRangeRequest(request, response)
+          )
+      });
+    },
+    getOperationalDashboardReport: async (request, response, next) => {
+      if (denyIfMissingAttractionAccess(response)) {
+        return;
+      }
+
+      await sendTimedJson({
+        request,
+        response,
+        next,
+        moduleId: "attraction",
+        route: "operational-dashboard",
+        handler: async () =>
+          service.getOperationalDashboardReport(
             await parseScopedRangeRequest(request, response)
           )
       });

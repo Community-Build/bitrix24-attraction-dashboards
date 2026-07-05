@@ -30,7 +30,9 @@ planned today and tomorrow, first-touch SLA health, and — the core — a live
 risk feed of stuck and neglected deals with links into Bitrix. The layout was
 designed and approved interactively; the binding visual reference is
 **`plans/assets/operational-dashboard-prototype.html`** (open it in a browser
-before writing any JSX). Match its structure, not its pixel styling — all
+before writing any JSX). Historical `v2` mockups that show meeting rows by
+meeting `typeValue` are superseded for this report: render meetings strictly
+as «Встреча 1/2/3». Match the reference structure, not its pixel styling — all
 styling must come from the existing design system.
 
 ## Current state
@@ -42,8 +44,9 @@ styling must come from the existing design system.
      styling), subtitle «N критично · M риск».
   2. Two-column grid `xl:grid-cols-[1.2fr_1fr]`:
      - Left, stacked panels: «Встречи за период» (rows «Встреча 1/2/3» with
-       counts) beside «Продажи за период» (rows per клуб продажи with count +
-       cycle); «SLA первого касания» (вовремя / с опозданием / без касания +
+       counts; never group by `typeValue`) beside «Продажи за период» (rows
+       per клуб продажи with count + cycle); «SLA первого касания» (вовремя /
+       с опозданием / без касания +
        медиана, threshold from settings shown in the header) beside
        «Запланировано» (сегодня: встречи по слотам + дела; завтра: то же);
        «В работе по этапам» compact list (этап · открытых · «N в риске» badge).
@@ -161,8 +164,8 @@ exact state pattern from the newest live scene in the file. Register in
 ### Step 3: Render summary + left column
 
 Implement layout blocks 1-2 from "Current state" with existing primitives.
-Notes: slot labels come from the payload (`slotLabel`), do not hardcode beyond
-fallbacks; meetings/sales panels show an em-dash row when empty; SLA panel
+Notes: slot labels come from the payload (`slotLabel`), do not derive labels
+from meeting `typeValue`; meetings/sales panels show an em-dash row when empty; SLA panel
 header shows «порог N ч» from the payload's `thresholdBusinessHours` of sla2;
 «В работе по этапам» rows render «N в риске» as `badge-chip badge-red`
 (critical>0) / `badge-amber` — omit the badge when 0.
@@ -219,14 +222,14 @@ Capture one screenshot at 1280 width for the PR description.
 
 ## Done criteria
 
-- [ ] `pnpm typecheck`, `pnpm lint` exit 0
-- [ ] `pnpm --filter @bitrix24-reporting/web exec vitest run` exits 0 incl. the new scene test
-- [ ] Tab «Операционный» is the FIRST analytics tab
-- [ ] All six `data-comment-block-id` attributes from "Current state" exist in the rendered scene
-- [ ] No horizontal page overflow at 1280×720 and 1024×768 (browser-verified)
-- [ ] Risk cards show deal IDs + Bitrix links, never deal titles/names/phones
-- [ ] No files outside the in-scope list modified (`git status`)
-- [ ] `plans/README.md` status row updated
+- [x] `pnpm typecheck`, `pnpm lint` exit 0
+- [x] `pnpm --filter @bitrix24-reporting/web exec vitest run` exits 0 incl. the new scene test
+- [x] Tab «Операционный» is the FIRST analytics tab
+- [x] All six `data-comment-block-id` attributes from "Current state" exist in the rendered scene
+- [x] No horizontal page overflow at 1280×720 and 1024×768 (browser-verified)
+- [x] Risk cards show deal IDs + Bitrix links, never deal titles/names/phones
+- [x] No unintended files outside the active 026-028 implementation sequence modified (`git status`)
+- [x] `plans/README.md` status row updated
 
 ## STOP conditions
 

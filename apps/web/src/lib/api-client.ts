@@ -53,6 +53,11 @@ import type {
   ManagerActionOutcomeReport,
   ManagerActionOutcomeReportSnapshot,
   MetaResponse,
+  OperationalDashboardReport,
+  OperationalMeetingSlotCount,
+  OperationalRiskRuleKey,
+  OperationalThresholdSettings,
+  OperationalThresholdSettingsInput,
   OntologyConcept,
   OntologyDriftItem,
   OntologyReportBinding,
@@ -1538,6 +1543,207 @@ function normalizePricingSettings(value: unknown): DealPricingSettings {
         updatedAt: asNullableString(rule.updatedAt),
       }
     }),
+  }
+}
+
+function asPositiveInteger(value: unknown, fallback: number) {
+  return Math.max(1, Math.round(asNumber(value, fallback)))
+}
+
+function normalizeOperationalThresholdSettings(
+  value: unknown,
+): OperationalThresholdSettings {
+  const data = isRecord(value) ? value : {}
+  const slaBusinessHours = isRecord(data.slaBusinessHours)
+    ? data.slaBusinessHours
+    : {}
+
+  return {
+    updatedAt: asNullableString(data.updatedAt),
+    stageAging: asArray(data.stageAging, (entry) => {
+      const threshold = isRecord(entry) ? entry : {}
+
+      return {
+        stageId: asString(threshold.stageId),
+        stageName: asString(threshold.stageName, asString(threshold.stageId)),
+        maxDaysOnStage: asPositiveInteger(threshold.maxDaysOnStage, 1),
+      }
+    }).filter((threshold) => threshold.stageId.length > 0),
+    noCallsMaxDays: asPositiveInteger(data.noCallsMaxDays, 7),
+    noActivityMaxDays: asPositiveInteger(data.noActivityMaxDays, 5),
+    slaBusinessHours: {
+      sla1: asPositiveInteger(slaBusinessHours.sla1, 24),
+      sla2: asPositiveInteger(slaBusinessHours.sla2, 5),
+      sla3: asPositiveInteger(slaBusinessHours.sla3, 72),
+    },
+  }
+}
+
+function normalizeOperationalRiskRuleKey(value: unknown): OperationalRiskRuleKey {
+  return value === 'stage_aging' ||
+    value === 'no_open_activity' ||
+    value === 'no_recent_calls' ||
+    value === 'no_recent_activity'
+    ? value
+    : 'stage_aging'
+}
+
+function normalizeOperationalSeverity(value: unknown): 'risk' | 'critical' {
+  return value === 'critical' ? 'critical' : 'risk'
+}
+
+function normalizeOperationalSlotIndex(value: unknown): 1 | 2 | 3 {
+  return value === 2 ? 2 : value === 3 ? 3 : 1
+}
+
+function createOperationalSlotCounts(): OperationalMeetingSlotCount[] {
+  return [1, 2, 3].map((slotIndex) => ({
+    slotIndex: slotIndex as 1 | 2 | 3,
+    slotLabel: `Встреча ${slotIndex}`,
+    count: 0,
+  }))
+}
+
+function normalizeOperationalMeetingSlotCounts(
+  value: unknown,
+): OperationalMeetingSlotCount[] {
+  const rows = createOperationalSlotCounts()
+
+  for (const entry of Array.isArray(value) ? value : []) {
+    const item = isRecord(entry) ? entry : {}
+    const slotIndex = normalizeOperationalSlotIndex(item.slotIndex)
+    const row = rows.find((candidate) => candidate.slotIndex === slotIndex)
+    if (row) {
+      row.slotLabel = asString(item.slotLabel, row.slotLabel)
+      row.count = asNumber(item.count)
+    }
+  }
+
+  return rows
+}
+
+function normalizeOperationalDashboardReport(value: unknown): OperationalDashboardReport {
+  const data = isRecord(value) ? value : {}
+  const meetingsHeld = isRecord(data.meetingsHeld) ? data.meetingsHeld : {}
+  const sales = isRecord(data.sales) ? data.sales : {}
+  const riskSummary = isRecord(data.riskSummary) ? data.riskSummary : {}
+  const planned = isRecord(data.planned) ? data.planned : {}
+
+  return {
+    range: normalizeRange(data.range),
+    generatedAt: asString(data.generatedAt),
+    createdDeals: asNumber(data.createdDeals),
+    meetingsHeld: {
+      total: asNumber(meetingsHeld.total),
+      bySlot: normalizeOperationalMeetingSlotCounts(meetingsHeld.bySlot),
+    },
+    sales: {
+      total: asNumber(sales.total),
+      byClub: asArray(sales.byClub, (entry) => {
+        const item = isRecord(entry) ? entry : {}
+        return {
+          targetGroupKey: asString(item.targetGroupKey),
+          targetGroupLabel: asString(
+            item.targetGroupLabel,
+            asString(item.targetGroupKey),
+          ),
+          wonDeals: asNumber(item.wonDeals),
+          averageDaysToWin: asNumber(item.averageDaysToWin),
+        }
+      }),
+    },
+    lostDeals: asNumber(data.lostDeals),
+    openDeals: asNumber(data.openDeals),
+    riskSummary: {
+      total: asNumber(riskSummary.total),
+      critical: asNumber(riskSummary.critical),
+      risk: asNumber(riskSummary.risk),
+      byRule: asArray(riskSummary.byRule, (entry) => {
+        const item = isRecord(entry) ? entry : {}
+        return {
+          rule: normalizeOperationalRiskRuleKey(item.rule),
+          label: asString(item.label),
+          count: asNumber(item.count),
+        }
+      }),
+      byStage: asArray(riskSummary.byStage, (entry) => {
+        const item = isRecord(entry) ? entry : {}
+        return {
+          stageId: asString(item.stageId),
+          stageName: asString(item.stageName, asString(item.stageId)),
+          count: asNumber(item.count),
+        }
+      }),
+    },
+    stageWip: asArray(data.stageWip, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        stageId: asString(item.stageId),
+        stageName: asString(item.stageName, asString(item.stageId)),
+        openDeals: asNumber(item.openDeals),
+        riskDeals: asNumber(item.riskDeals),
+      }
+    }),
+    sla: asArray(data.sla, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      const slaKey =
+        item.slaKey === 'sla1' || item.slaKey === 'sla3' ? item.slaKey : 'sla2'
+      return {
+        slaKey,
+        label: asString(item.label, slaKey),
+        thresholdBusinessHours: asNumber(item.thresholdBusinessHours),
+        onTimeCount: asNumber(item.onTimeCount),
+        lateCount: asNumber(item.lateCount),
+        noTouchCount: asNumber(item.noTouchCount),
+        medianHours: asNumber(item.medianHours),
+      }
+    }),
+    planned: {
+      meetingsToday: normalizeOperationalMeetingSlotCounts(planned.meetingsToday),
+      meetingsTomorrow: normalizeOperationalMeetingSlotCounts(planned.meetingsTomorrow),
+      tasksToday: asNumber(planned.tasksToday),
+      tasksTomorrow: asNumber(planned.tasksTomorrow),
+    },
+    managers: asArray(data.managers, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        managerId: asString(item.managerId),
+        managerName: asString(item.managerName, asString(item.managerId)),
+        createdDeals: asNumber(item.createdDeals),
+        meetingsBySlot: normalizeOperationalMeetingSlotCounts(item.meetingsBySlot),
+        wonDeals: asNumber(item.wonDeals),
+        slaLateCount: asNumber(item.slaLateCount),
+        slaNoTouchCount: asNumber(item.slaNoTouchCount),
+        openDeals: asNumber(item.openDeals),
+        riskDeals: asNumber(item.riskDeals),
+      }
+    }),
+    risks: asArray(data.risks, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        dealId: asString(item.dealId),
+        dealUrl: asNullableString(item.dealUrl),
+        managerId: asString(item.managerId),
+        managerName: asString(item.managerName, asString(item.managerId)),
+        stageId: asString(item.stageId),
+        stageName: asString(item.stageName, asString(item.stageId)),
+        daysOnStage: asNumber(item.daysOnStage),
+        stageMaxDays: asNullableNumber(item.stageMaxDays),
+        sourceLabel: asString(item.sourceLabel),
+        customerClubLabel: asString(item.customerClubLabel),
+        flags: asArray(item.flags, (flagEntry) => {
+          const flag = isRecord(flagEntry) ? flagEntry : {}
+          return {
+            rule: normalizeOperationalRiskRuleKey(flag.rule),
+            label: asString(flag.label),
+            severity: normalizeOperationalSeverity(flag.severity),
+          }
+        }),
+        severity: normalizeOperationalSeverity(item.severity),
+        overdueRatio: asNumber(item.overdueRatio),
+      }
+    }),
+    thresholdsUpdatedAt: asNullableString(data.thresholdsUpdatedAt),
   }
 }
 
@@ -4117,6 +4323,23 @@ export const apiClient = {
       normalizePricingSettings,
     )
   },
+  async getOperationalThresholdSettings() {
+    return requestJson(
+      buildUrl('/api/settings/operational-thresholds'),
+      { method: 'GET' },
+      normalizeOperationalThresholdSettings,
+    )
+  },
+  async saveOperationalThresholdSettings(input: OperationalThresholdSettingsInput) {
+    return requestJson(
+      buildUrl('/api/settings/operational-thresholds'),
+      {
+        method: 'PUT',
+        body: JSON.stringify(input),
+      },
+      normalizeOperationalThresholdSettings,
+    )
+  },
   async getUnitEconomicsSettings() {
     return requestJson(
       buildUrl('/api/settings/unit-economics'),
@@ -4215,6 +4438,13 @@ export const apiClient = {
       buildUrl('/api/reports/source-cohort-conversion', buildQueryParams(query)),
       { method: 'GET' },
       normalizeSourceCohortConversionReport,
+    )
+  },
+  async getOperationalDashboardReport(query: DashboardQuery) {
+    return requestJson(
+      buildUrl('/api/reports/operational-dashboard', buildQueryParams(query)),
+      { method: 'GET' },
+      normalizeOperationalDashboardReport,
     )
   },
   async getActivitiesWorkloadReport(query: DashboardQuery) {

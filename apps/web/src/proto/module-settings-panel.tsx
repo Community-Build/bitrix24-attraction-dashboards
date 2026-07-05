@@ -21,6 +21,8 @@ import type {
   DealPricingSettings,
   ManagerWhitelistSettingsData,
   ManagerWhitelistSettingsInput,
+  OperationalThresholdSettings,
+  OperationalThresholdSettingsInput,
   UnitEconomicsCalculationMethod,
   UnitEconomicsCostRule,
   UnitEconomicsCostRulesInput,
@@ -32,12 +34,16 @@ import { formatAmount, formatInteger } from '@/lib/formatters'
 type ModuleSettingsPanelProps = {
   canEdit: boolean
   pricingSettings?: DealPricingSettings | undefined
+  operationalThresholdSettings?: OperationalThresholdSettings | undefined
   conversionEventTypeSettings?: ConversionEventTypeSettingsData | undefined
   unitEconomicsSettings?: UnitEconomicsSettings | undefined
   managerWhitelistSettings?: ManagerWhitelistSettingsData | undefined
   pricingSettingsLoading?: boolean
   pricingSettingsSaving?: boolean
   pricingSettingsSaveError?: string | null
+  operationalThresholdSettingsLoading?: boolean
+  operationalThresholdSettingsSaving?: boolean
+  operationalThresholdSettingsSaveError?: string | null
   conversionEventTypeSettingsLoading?: boolean
   conversionEventTypeSettingsSaving?: boolean
   conversionEventTypeSettingsSaveError?: string | null
@@ -49,6 +55,9 @@ type ModuleSettingsPanelProps = {
   managerWhitelistSettingsSaveError?: string | null
   managerWhitelistSettingsNotice?: string | null
   onPricingSettingsSave?: (rows: DealPricingRuleInput[]) => Promise<void>
+  onOperationalThresholdSettingsSave?: (
+    input: OperationalThresholdSettingsInput,
+  ) => Promise<void>
   onConversionEventTypeSettingsSave?: (
     input: ConversionEventTypeSettingsInput,
   ) => Promise<void>
@@ -319,6 +328,23 @@ function buildManagerWhitelistRows(
     .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
 }
 
+type OperationalThresholdDraftEdits = {
+  stageAging: Record<string, number>
+  noCallsMaxDays?: number
+  noActivityMaxDays?: number
+  sla1?: number
+  sla2?: number
+  sla3?: number
+}
+
+function toOperationalDraftInteger(value: number) {
+  return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0
+}
+
+function toOperationalSavedInteger(value: number) {
+  return Math.max(1, Math.round(value) || 1)
+}
+
 function isPercentUnitEconomicsRule(rule: UnitEconomicsCostRule) {
   return (
     rule.calculationMethod === 'percent_of_module_revenue' ||
@@ -380,12 +406,16 @@ function getUnitEconomicsEventScope(
 export function ModuleSettingsPanel({
   canEdit,
   pricingSettings,
+  operationalThresholdSettings,
   conversionEventTypeSettings,
   unitEconomicsSettings,
   managerWhitelistSettings,
   pricingSettingsLoading = false,
   pricingSettingsSaving = false,
   pricingSettingsSaveError = null,
+  operationalThresholdSettingsLoading = false,
+  operationalThresholdSettingsSaving = false,
+  operationalThresholdSettingsSaveError = null,
   conversionEventTypeSettingsLoading = false,
   conversionEventTypeSettingsSaving = false,
   conversionEventTypeSettingsSaveError = null,
@@ -397,6 +427,7 @@ export function ModuleSettingsPanel({
   managerWhitelistSettingsSaveError = null,
   managerWhitelistSettingsNotice = null,
   onPricingSettingsSave,
+  onOperationalThresholdSettingsSave,
   onConversionEventTypeSettingsSave,
   onUnitEconomicsCostRulesSave,
   onManagerWhitelistSettingsSave,
@@ -426,6 +457,40 @@ export function ModuleSettingsPanel({
         .reduce((total, row) => total + row.attractionRevenueAmount, 0),
     [draftPricingRows],
   )
+  const [draftOperationalThresholdEdits, setDraftOperationalThresholdEdits] =
+    useState<OperationalThresholdDraftEdits>({ stageAging: {} })
+  const draftOperationalStageRows = useMemo(
+    () =>
+      (operationalThresholdSettings?.stageAging ?? []).map((threshold) => ({
+        ...threshold,
+        maxDaysOnStage:
+          draftOperationalThresholdEdits.stageAging[threshold.stageId] ??
+          threshold.maxDaysOnStage,
+      })),
+    [draftOperationalThresholdEdits.stageAging, operationalThresholdSettings?.stageAging],
+  )
+  const draftOperationalThresholdValues = {
+    noCallsMaxDays:
+      draftOperationalThresholdEdits.noCallsMaxDays ??
+      operationalThresholdSettings?.noCallsMaxDays ??
+      7,
+    noActivityMaxDays:
+      draftOperationalThresholdEdits.noActivityMaxDays ??
+      operationalThresholdSettings?.noActivityMaxDays ??
+      5,
+    sla1:
+      draftOperationalThresholdEdits.sla1 ??
+      operationalThresholdSettings?.slaBusinessHours.sla1 ??
+      24,
+    sla2:
+      draftOperationalThresholdEdits.sla2 ??
+      operationalThresholdSettings?.slaBusinessHours.sla2 ??
+      5,
+    sla3:
+      draftOperationalThresholdEdits.sla3 ??
+      operationalThresholdSettings?.slaBusinessHours.sla3 ??
+      72,
+  }
   const [draftUnitEconomicsEdits, setDraftUnitEconomicsEdits] = useState<
     Record<string, Partial<UnitEconomicsCostRule>>
   >({})
@@ -524,6 +589,54 @@ export function ModuleSettingsPanel({
         ...patch,
       },
     }))
+  }
+
+  function updateOperationalStageThreshold(stageId: string, maxDaysOnStage: number) {
+    if (!canEdit) {
+      return
+    }
+
+    setDraftOperationalThresholdEdits((current) => ({
+      ...current,
+      stageAging: {
+        ...current.stageAging,
+        [stageId]: toOperationalDraftInteger(maxDaysOnStage),
+      },
+    }))
+  }
+
+  function updateOperationalThresholdValue(
+    key: Exclude<keyof OperationalThresholdDraftEdits, 'stageAging'>,
+    value: number,
+  ) {
+    if (!canEdit) {
+      return
+    }
+
+    setDraftOperationalThresholdEdits((current) => ({
+      ...current,
+      [key]: toOperationalDraftInteger(value),
+    }))
+  }
+
+  function buildOperationalThresholdInput(): OperationalThresholdSettingsInput {
+    return {
+      stageAging: draftOperationalStageRows.map((row) => ({
+        stageId: row.stageId,
+        maxDaysOnStage: toOperationalSavedInteger(row.maxDaysOnStage),
+      })),
+      noCallsMaxDays: toOperationalSavedInteger(
+        draftOperationalThresholdValues.noCallsMaxDays,
+      ),
+      noActivityMaxDays: toOperationalSavedInteger(
+        draftOperationalThresholdValues.noActivityMaxDays,
+      ),
+      slaBusinessHours: {
+        sla1: toOperationalSavedInteger(draftOperationalThresholdValues.sla1),
+        sla2: toOperationalSavedInteger(draftOperationalThresholdValues.sla2),
+        sla3: toOperationalSavedInteger(draftOperationalThresholdValues.sla3),
+      },
+    }
   }
 
   function updateUnitEconomicsRule(
@@ -712,6 +825,158 @@ export function ModuleSettingsPanel({
               onClick={() => void onPricingSettingsSave?.(draftPricingRows)}
             >
               {pricingSettingsSaving ? 'Сохранение...' : 'Сохранить цены'}
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white/80">
+          <div className="grid min-w-[34rem] grid-cols-[minmax(11rem,1fr)_10rem_8rem] gap-3 border-b border-slate-200 bg-slate-50/80 px-4 py-3 text-xs font-semibold uppercase text-slate-500">
+            <span>Этап</span>
+            <span>ID</span>
+            <span>Дней</span>
+          </div>
+
+          {operationalThresholdSettingsLoading &&
+          draftOperationalStageRows.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-slate-500">Загружаю пороги.</div>
+          ) : draftOperationalStageRows.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-slate-500">Пороги не настроены.</div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {draftOperationalStageRows.map((row) => (
+                <div
+                  key={row.stageId}
+                  className="grid min-w-[34rem] grid-cols-[minmax(11rem,1fr)_10rem_8rem] gap-3 px-4 py-3 text-sm"
+                >
+                  <div className="font-semibold text-slate-950">{row.stageName}</div>
+                  <div className="self-center truncate text-xs text-slate-500">
+                    {row.stageId}
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    className="field h-10"
+                    value={row.maxDaysOnStage}
+                    disabled={!canEdit}
+                    onChange={(event) =>
+                      updateOperationalStageThreshold(
+                        row.stageId,
+                        Number(event.target.value),
+                      )
+                    }
+                    aria-label={`Порог этапа ${row.stageName}`}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
+          <div className="subtle-label">Операционные пороги</div>
+          <div className="mt-3 grid gap-3">
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <span>Без звонков, дней</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className="field h-10"
+                value={draftOperationalThresholdValues.noCallsMaxDays}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  updateOperationalThresholdValue(
+                    'noCallsMaxDays',
+                    Number(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <span>Без активностей, дней</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className="field h-10"
+                value={draftOperationalThresholdValues.noActivityMaxDays}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  updateOperationalThresholdValue(
+                    'noActivityMaxDays',
+                    Number(event.target.value),
+                  )
+                }
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <span>SLA1, часов</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className="field h-10"
+                value={draftOperationalThresholdValues.sla1}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  updateOperationalThresholdValue('sla1', Number(event.target.value))
+                }
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <span>SLA2, часов</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className="field h-10"
+                value={draftOperationalThresholdValues.sla2}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  updateOperationalThresholdValue('sla2', Number(event.target.value))
+                }
+              />
+            </label>
+            <label className="grid gap-1 text-sm font-medium text-slate-700">
+              <span>SLA3, часов</span>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                className="field h-10"
+                value={draftOperationalThresholdValues.sla3}
+                disabled={!canEdit}
+                onChange={(event) =>
+                  updateOperationalThresholdValue('sla3', Number(event.target.value))
+                }
+              />
+            </label>
+          </div>
+          {operationalThresholdSettingsSaveError ? (
+            <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+              {operationalThresholdSettingsSaveError}
+            </div>
+          ) : null}
+          {canEdit ? (
+            <button
+              type="button"
+              className="btn btn-primary mt-4 w-full"
+              disabled={
+                operationalThresholdSettingsSaving ||
+                draftOperationalStageRows.length === 0
+              }
+              onClick={() =>
+                void onOperationalThresholdSettingsSave?.(
+                  buildOperationalThresholdInput(),
+                )
+              }
+            >
+              {operationalThresholdSettingsSaving
+                ? 'Сохранение...'
+                : 'Сохранить пороги'}
             </button>
           ) : null}
         </div>
