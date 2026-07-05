@@ -2,6 +2,8 @@
 
 ## Project
 This repository contains Bitrix24 attraction dashboards: local API, SQLite-backed reporting, and web/prototype dashboards.
+The durable project map is `docs/product/PROJECT_STRUCTURE.md`; read it before architecture, module, reporting, call-analysis, Telegram, MCP, Paperclip, or sync work.
+The target product is `attraction`. `leadgen` is legacy until a dedicated removal migration deletes it; do not use leadgen as a design constraint for new work.
 
 ## Working Rules
 - Do not work directly on `main` except for emergency repository maintenance.
@@ -76,8 +78,9 @@ If a named preset is unavailable in the current runtime, emulate it with the clo
 - Every business module must have `docs/modules/<module-key>/MODULE_ONTOLOGY.md` before broad automation or Paperclip delegation.
 - Module ontology must define entities, roles, states, data scope, report ownership, access boundaries, and privacy exclusions.
 - V1 module is `attraction`; use `docs/modules/attraction/MODULE_ONTOLOGY.md` as the current module contract.
-- Future modules may have different dashboard interfaces. Do not force new modules into the attraction UI if their workflow, metrics, or roles differ.
-- Shared platform changes must state which modules and roles they affect and how attraction behavior remains protected.
+- `leadgen` is legacy/retired for target architecture per ADR 0003. Keep existing code stable until a dedicated deletion task, but do not add new leadgen features or preserve abstractions only for leadgen.
+- Future modules require a new ADR before they become design constraints. Do not force new modules into the attraction UI if their workflow, metrics, or roles differ.
+- Shared platform changes must state which attraction roles and platform surfaces they affect and how attraction behavior remains protected.
 
 ## Paperclip Proof Loop
 - For non-trivial Paperclip development tasks, follow `ops/paperclip/proof-loop.md`.

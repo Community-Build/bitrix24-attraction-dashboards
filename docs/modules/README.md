@@ -22,18 +22,21 @@ Every module gets:
 docs/modules/<module-key>/MODULE_ONTOLOGY.md
 ```
 
-Current modules:
+Current active module:
 
 - `attraction`: `docs/modules/attraction/MODULE_ONTOLOGY.md`
-- `leadgen`: `docs/modules/leadgen/MODULE_ONTOLOGY.md`
 
-Use `docs/modules/attraction/MODULE_ONTOLOGY.md` as the V1 platform example, but do not force new modules into the attraction UI or report semantics. `leadgen` has its own funnel, manager whitelist, report registry, and Paperclip context.
+Use `docs/modules/attraction/MODULE_ONTOLOGY.md` as the V1 platform example.
+ADR 0003 marks `leadgen` as legacy for the target architecture; do not use it
+as a design constraint for new module, report, Paperclip, or platform work.
+The existing `docs/modules/leadgen/MODULE_ONTOLOGY.md` file is historical until
+a dedicated leadgen removal migration deletes or archives that contour.
 
 Paperclip uses one company and one shared GitHub repository, but module-specific
 projects for dashboard-comment routing:
 
 - `attraction` -> `Attraction Dashboard`
-- `leadgen` -> `Leadgen Dashboard`
+- `leadgen` -> legacy only until removal
 
 Weekly manager routines are company-level and should not be attached to either
 module project.

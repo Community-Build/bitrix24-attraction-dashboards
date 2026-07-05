@@ -3,6 +3,11 @@
 The module capability manifest is the shared/platform contract for module
 discovery, fork-owned custom module integration, and AI-agent-safe read access.
 
+ADR 0003 sets the target product architecture to attraction-only. Leadgen
+capability behavior may remain in code while the legacy removal migration is
+pending, but leadgen is not an active product surface and must not drive new
+module abstractions.
+
 It is intentionally metadata-only. A manifest is not a report implementation,
 not a repository adapter, and not an agent runtime. It describes what a module
 owns and which safe platform surfaces a caller may use.
@@ -25,10 +30,11 @@ Each module owns:
 - privacy rules;
 - capability semantics.
 
-`attraction` and `leadgen` remain separate products. A fork-owned module such as
-a neutral `custom-module` fixture must publish its own ontology reference,
-report descriptors, safe read models, and data policy instead of copying
-attraction assumptions.
+Historically, `attraction` and `leadgen` were separate products. After ADR 0003,
+`attraction` is the only active product target. A fork-owned module such as a
+neutral `custom-module` fixture must publish its own ontology reference, report
+descriptors, safe read models, and data policy instead of copying attraction
+assumptions.
 
 ## Report Status
 
