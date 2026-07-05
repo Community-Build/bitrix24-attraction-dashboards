@@ -155,18 +155,24 @@ function createOntology(
   }
 }
 
+function createFilters() {
+  return {
+    rangeStart: '2026-04-01',
+    rangeEnd: '2026-04-30',
+    compareRanges: [],
+    managers: [],
+    sources: [],
+    businessClubs: [],
+    targetGroups: [],
+  }
+}
+
 describe('OntologyHubScene', () => {
   it('renders governance as role and unit without personal owner names', () => {
     render(
       <OntologyHubScene
         commentMode={false}
-        filters={{
-          rangeStart: '2026-04-01',
-          rangeEnd: '2026-04-30',
-          compareRanges: [],
-          managers: [],
-          sources: [],
-        }}
+        filters={createFilters()}
         runtimeData={{
           managerOptions: [],
           sourceOptions: [],
@@ -186,13 +192,7 @@ describe('OntologyHubScene', () => {
     render(
       <OntologyHubScene
         commentMode={false}
-        filters={{
-          rangeStart: '2026-04-01',
-          rangeEnd: '2026-04-30',
-          compareRanges: [],
-          managers: [],
-          sources: [],
-        }}
+        filters={createFilters()}
         runtimeData={{
           managerOptions: [],
           sourceOptions: [],
@@ -263,13 +263,7 @@ describe('OntologyHubScene', () => {
       render(
         <OntologyHubScene
           commentMode={false}
-          filters={{
-            rangeStart: '2026-04-01',
-            rangeEnd: '2026-04-30',
-            compareRanges: [],
-            managers: [],
-            sources: [],
-          }}
+          filters={createFilters()}
           runtimeData={{
             managerOptions: [],
             sourceOptions: [],
@@ -297,13 +291,7 @@ describe('OntologyHubScene', () => {
     render(
       <OntologyHubScene
         commentMode={false}
-        filters={{
-          rangeStart: '2026-04-01',
-          rangeEnd: '2026-04-30',
-          compareRanges: [],
-          managers: [],
-          sources: [],
-        }}
+        filters={createFilters()}
         runtimeData={{
           managerOptions: [],
           sourceOptions: [],
@@ -345,13 +333,7 @@ describe('OntologyHubScene', () => {
       render(
         <OntologyHubScene
           commentMode={false}
-          filters={{
-            rangeStart: '2026-04-01',
-            rangeEnd: '2026-04-30',
-            compareRanges: [],
-            managers: [],
-            sources: [],
-          }}
+          filters={createFilters()}
           runtimeData={{
             managerOptions: [],
             sourceOptions: [],
@@ -407,13 +389,7 @@ describe('OntologyHubScene', () => {
     render(
       <OntologyHubScene
         commentMode={false}
-        filters={{
-          rangeStart: '2026-04-01',
-          rangeEnd: '2026-04-30',
-          compareRanges: [],
-          managers: [],
-          sources: [],
-        }}
+        filters={createFilters()}
         runtimeData={{
           managerOptions: [],
           sourceOptions: [],
@@ -480,13 +456,7 @@ describe('OntologyHubScene', () => {
     render(
       <OntologyHubScene
         commentMode={false}
-        filters={{
-          rangeStart: '2026-04-01',
-          rangeEnd: '2026-04-30',
-          compareRanges: [],
-          managers: [],
-          sources: [],
-        }}
+        filters={createFilters()}
         runtimeData={{
           managerOptions: [],
           sourceOptions: [],
@@ -512,13 +482,7 @@ describe('OntologyHubScene', () => {
     return render(
       <OntologyHubScene
         commentMode={false}
-        filters={{
-          rangeStart: '2026-04-01',
-          rangeEnd: '2026-04-30',
-          compareRanges: [],
-          managers: [],
-          sources: [],
-        }}
+        filters={createFilters()}
         runtimeData={{
           managerOptions: [],
           sourceOptions: [],

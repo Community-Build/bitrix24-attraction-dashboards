@@ -26,6 +26,8 @@ describe('live-reporting', () => {
       ],
       managers: ['7', '9'],
       sources: ['WEB', 'REFERRAL'],
+      businessClubs: ['ClubFirst One'],
+      targetGroups: ['ClubFirst Future'],
     })
 
     expect(query).toEqual({
@@ -34,6 +36,8 @@ describe('live-reporting', () => {
       to: '2026-04-30T23:59:59.999+03:00',
       managerIds: ['7', '9'],
       sourceKeys: ['WEB', 'REFERRAL'],
+      businessClubKeys: ['ClubFirst One'],
+      targetGroupKeys: ['ClubFirst Future'],
       compareRanges: [
         {
           from: '2026-03-01T00:00:00.000+03:00',

@@ -72,6 +72,8 @@ export interface HourlyWeekdayWorkloadHeatmap {
 export interface ReportFilters {
   managerIds?: string[]
   sourceKeys?: string[]
+  businessClubKeys?: string[]
+  targetGroupKeys?: string[]
 }
 
 export type UnitEconomicsEventParticipantMode = 'invited' | 'attended'
@@ -2099,6 +2101,8 @@ export interface MetaResponse {
   stageCatalog: StageCatalogEntry[]
   managerCatalog: ManagerDirectoryEntry[]
   sourceCatalog: SourceCatalogEntry[]
+  businessClubCatalog: SourceCatalogEntry[]
+  targetGroupCatalog: SourceCatalogEntry[]
   wonStageIds: string[]
   defaultPeriodDays: number
   lastSync: LastSyncSummary | null

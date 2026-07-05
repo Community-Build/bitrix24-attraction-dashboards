@@ -18,6 +18,8 @@ const filters: ProtoFilterState = {
   compareRanges: [],
   managers: [],
   sources: [],
+  businessClubs: [],
+  targetGroups: [],
 }
 
 function heatmap(

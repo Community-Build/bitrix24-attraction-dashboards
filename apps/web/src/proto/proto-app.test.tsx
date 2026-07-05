@@ -73,6 +73,8 @@ vi.mock('@/lib/api-client', () => ({
       stageCatalog: [],
       managerCatalog: [],
       sourceCatalog: [],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: null,
@@ -1856,6 +1858,8 @@ describe('ProtoApp', () => {
       ],
       managerCatalog: [],
       sourceCatalog: [],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: null,
@@ -3462,6 +3466,8 @@ describe('ProtoApp', () => {
         },
       ],
       sourceCatalog: [],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: null,
@@ -3551,6 +3557,8 @@ describe('ProtoApp', () => {
       stageCatalog: [],
       managerCatalog: [],
       sourceCatalog: [],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: {
@@ -4037,6 +4045,8 @@ describe('ProtoApp', () => {
         { key: 'leadgen-us', label: 'Лидген US' },
         { key: 'internal', label: 'Внутренняя база' },
       ],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: null,
@@ -5987,6 +5997,66 @@ describe('ProtoApp', () => {
     )
   })
 
+  it('applies business club and target group filters from one customer picker', async () => {
+    vi.mocked(apiClient.getMeta).mockResolvedValueOnce({
+      stageCatalog: [],
+      managerCatalog: [],
+      sourceCatalog: [],
+      businessClubCatalog: [
+        { key: 'ClubFirst Russia', label: 'ClubFirst Russia' },
+        { key: 'ClubFirst GlobAll', label: 'ClubFirst GlobAll' },
+      ],
+      targetGroupCatalog: [
+        { key: 'ClubFirst Future', label: 'ClubFirst Future' },
+        { key: 'ClubFirst Ladies', label: 'ClubFirst Ladies' },
+      ],
+      wonStageIds: [],
+      defaultPeriodDays: 30,
+      lastSync: null,
+      snapshotStats: {
+        deals: 0,
+        activities: 0,
+        calls: 0,
+        stageHistory: 0,
+      },
+      syncHealth: {
+        status: 'ready',
+        blocking: false,
+        checkedAt: '2026-04-10T12:00:00.000Z',
+        lastSuccessfulSync: null,
+        issues: [],
+        warnings: [],
+      },
+    } as MetaResponse)
+
+    render(<ProtoApp />)
+
+    await waitFor(() => expect(apiClient.getDashboard).toHaveBeenCalled())
+    vi.mocked(apiClient.getDashboard).mockClear()
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Заказчик$/i }))
+    expect(screen.getAllByText('Бизнес-клуб заказчика').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Таргет-группа').length).toBeGreaterThan(0)
+
+    await userEvent.click(screen.getByText('ClubFirst Russia'))
+    await userEvent.click(screen.getByText('ClubFirst Future'))
+    expect(screen.getByRole('button', { name: /^Заказчик$/i })).toHaveTextContent(
+      '1 клуб · 1 таргет',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /^применить фильтры$/i }))
+
+    await waitFor(() =>
+      expect(apiClient.getDashboard).toHaveBeenCalledWith(
+        expect.objectContaining({
+          businessClubKeys: ['ClubFirst Russia'],
+          targetGroupKeys: ['ClubFirst Future'],
+        }),
+      ),
+    )
+    expect(screen.getByText(/Заказчик: 1 клуб · 1 таргет/i)).toBeInTheDocument()
+  })
+
   it('defaults the main range and added compare ranges to sequential previous calendar weeks', () => {
     const filters = createDefaultFilters(new Date('2026-04-19T12:00:00+03:00'))
     const firstCompare = createCompareRange(filters)
@@ -6519,6 +6589,8 @@ describe('ProtoApp', () => {
       stageCatalog: [],
       managerCatalog: [],
       sourceCatalog: [],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: null,
@@ -7015,6 +7087,8 @@ describe('ProtoApp', () => {
         { id: '11234', name: 'Ромашова Ольга' },
       ],
       sourceCatalog: [],
+      businessClubCatalog: [],
+      targetGroupCatalog: [],
       wonStageIds: [],
       defaultPeriodDays: 30,
       lastSync: null,

@@ -122,6 +122,8 @@ interface MetaResponse {
   stageCatalog: StageCatalogEntry[];
   managerCatalog: ManagerDirectoryEntry[];
   sourceCatalog: SourceCatalogEntry[];
+  businessClubCatalog?: SourceCatalogEntry[];
+  targetGroupCatalog?: SourceCatalogEntry[];
   wonStageIds: string[];
   defaultPeriodDays: number;
   lastSync: {
@@ -148,6 +150,8 @@ interface RangeRequest {
   filters?: {
     managerIds?: string[];
     sourceKeys?: string[];
+    businessClubKeys?: string[];
+    targetGroupKeys?: string[];
   };
   includeBreakdown?: boolean;
   eventParticipantMode?: UnitEconomicsEventParticipantMode;
@@ -402,6 +406,8 @@ const reportQuerySchema = z
     ),
     managerIds: z.preprocess(parseCsvArray, z.array(z.string()).optional()),
     sourceKeys: z.preprocess(parseCsvArray, z.array(z.string()).optional()),
+    businessClubKeys: z.preprocess(parseCsvArray, z.array(z.string()).optional()),
+    targetGroupKeys: z.preprocess(parseCsvArray, z.array(z.string()).optional()),
     includeBreakdown: z.preprocess(
       parseOptionalBoolean,
       z.boolean().optional()
@@ -824,10 +830,19 @@ function parseRangeRequest(query: unknown): RangeRequest {
     to: parsed.compareTo?.[index] ?? from
   }));
   const filters =
-    parsed.managerIds?.length || parsed.sourceKeys?.length
+    parsed.managerIds?.length ||
+    parsed.sourceKeys?.length ||
+    parsed.businessClubKeys?.length ||
+    parsed.targetGroupKeys?.length
       ? {
           ...(parsed.managerIds?.length ? { managerIds: parsed.managerIds } : {}),
-          ...(parsed.sourceKeys?.length ? { sourceKeys: parsed.sourceKeys } : {})
+          ...(parsed.sourceKeys?.length ? { sourceKeys: parsed.sourceKeys } : {}),
+          ...(parsed.businessClubKeys?.length
+            ? { businessClubKeys: parsed.businessClubKeys }
+            : {}),
+          ...(parsed.targetGroupKeys?.length
+            ? { targetGroupKeys: parsed.targetGroupKeys }
+            : {})
         }
       : undefined;
 

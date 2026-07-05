@@ -975,6 +975,8 @@ describe('apiClient', () => {
       to: '2026-04-30T23:59:59.999Z',
       managerIds: ['7', '9'],
       sourceKeys: ['WEB'],
+      businessClubKeys: ['ClubFirst Russia'],
+      targetGroupKeys: ['ClubFirst Future', 'ClubFirst Ladies'],
       compareRanges: [
         {
           from: '2026-03-01T00:00:00.000Z',
@@ -990,6 +992,10 @@ describe('apiClient', () => {
     expect(parsedUrl.searchParams.get('to')).toBe('2026-04-30T23:59:59.999Z')
     expect(parsedUrl.searchParams.get('managerIds')).toBe('7,9')
     expect(parsedUrl.searchParams.get('sourceKeys')).toBe('WEB')
+    expect(parsedUrl.searchParams.get('businessClubKeys')).toBe('ClubFirst Russia')
+    expect(parsedUrl.searchParams.get('targetGroupKeys')).toBe(
+      'ClubFirst Future,ClubFirst Ladies',
+    )
     expect(parsedUrl.searchParams.get('compareFrom')).toBe(
       '2026-03-01T00:00:00.000Z',
     )

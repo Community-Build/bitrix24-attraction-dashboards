@@ -909,6 +909,8 @@ export interface HourlyWeekdayWorkloadHeatmap {
 export interface ReportFilters {
   managerIds?: string[];
   sourceKeys?: string[];
+  businessClubKeys?: string[];
+  targetGroupKeys?: string[];
 }
 
 export type UnitEconomicsEventParticipantMode = "invited" | "attended";

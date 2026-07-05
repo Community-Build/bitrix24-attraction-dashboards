@@ -246,6 +246,12 @@ function resetAttractionReportData(
   return {
     managerOptions: runtimeData.managerOptions,
     sourceOptions: runtimeData.sourceOptions,
+    ...(runtimeData.businessClubOptions !== undefined
+      ? { businessClubOptions: runtimeData.businessClubOptions }
+      : {}),
+    ...(runtimeData.targetGroupOptions !== undefined
+      ? { targetGroupOptions: runtimeData.targetGroupOptions }
+      : {}),
     ...(runtimeData.pricingSettings !== undefined
       ? { pricingSettings: runtimeData.pricingSettings }
       : {}),
@@ -758,6 +764,44 @@ function summarizeSelection(
   return labels.length <= 2 ? labels.join(', ') : `${labels.length} выбрано`
 }
 
+function formatRussianCount(count: number, forms: [string, string, string]) {
+  const mod10 = count % 10
+  const mod100 = count % 100
+  const form = mod10 === 1 && mod100 !== 11
+    ? forms[0]
+    : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+      ? forms[1]
+      : forms[2]
+
+  return `${count} ${form}`
+}
+
+function summarizeCustomerSelection(input: {
+  businessClubs: string[]
+  targetGroups: string[]
+  businessClubOptions: PickerOption[]
+  targetGroupOptions: PickerOption[]
+  fallback: string
+}) {
+  const totalSelected = input.businessClubs.length + input.targetGroups.length
+  if (totalSelected === 0) {
+    return input.fallback
+  }
+
+  if (input.businessClubs.length > 0 && input.targetGroups.length > 0) {
+    return [
+      formatRussianCount(input.businessClubs.length, ['клуб', 'клуба', 'клубов']),
+      formatRussianCount(input.targetGroups.length, ['таргет', 'таргета', 'таргетов']),
+    ].join(' · ')
+  }
+
+  if (input.businessClubs.length > 0) {
+    return summarizeSelection(input.businessClubs, input.businessClubOptions, input.fallback)
+  }
+
+  return summarizeSelection(input.targetGroups, input.targetGroupOptions, input.fallback)
+}
+
 function formatRangeLabel(start: string, end: string) {
   return `${formatShortDate(start)}..${formatShortDate(end)}`
 }
@@ -849,6 +893,9 @@ function buildWhitelistedManagerOptions(
 
 const MANAGER_TEAM_FILTER_PREFIX = 'team:'
 const MANAGER_ALL_TEAMS_FILTER_ID = `${MANAGER_TEAM_FILTER_PREFIX}__all__`
+const CUSTOMER_BUSINESS_CLUB_FILTER_PREFIX = 'business-club:'
+const CUSTOMER_TARGET_GROUP_FILTER_PREFIX = 'target-group:'
+const EMPTY_PICKER_OPTIONS: PickerOption[] = []
 
 type ManagerTeamFilterOption = {
   id: string
@@ -886,6 +933,8 @@ function cloneFilters(filters: ProtoFilterState): ProtoFilterState {
     compareRanges: filters.compareRanges.map((range) => ({ ...range })),
     managers: [...filters.managers],
     sources: [...filters.sources],
+    businessClubs: [...filters.businessClubs],
+    targetGroups: [...filters.targetGroups],
   }
 }
 
@@ -1324,11 +1373,17 @@ function resolveCommentAnchor(
   }
 }
 
+type PickerOptionGroup = {
+  heading: string
+  options: PickerOption[]
+}
+
 function MultiSelectField({
   label,
   placeholder,
   emptyLabel,
   options,
+  optionGroups,
   selected,
   onToggle,
   summary,
@@ -1338,6 +1393,7 @@ function MultiSelectField({
   placeholder: string
   emptyLabel: string
   options: PickerOption[]
+  optionGroups?: PickerOptionGroup[]
   selected: string[]
   onToggle: (value: string) => void
   summary?: string
@@ -1345,6 +1401,7 @@ function MultiSelectField({
 }) {
   const [open, setOpen] = useState(false)
   const fieldSummary = summary ?? summarizeSelection(selected, options, emptyLabel)
+  const groups = optionGroups ?? [{ heading: label, options }]
 
   return (
     <div className="space-y-1.5">
@@ -1365,22 +1422,26 @@ function MultiSelectField({
             <CommandInput placeholder={placeholder} />
             <CommandList className="proto-select-list">
               <CommandEmpty>Ничего не найдено</CommandEmpty>
-              <CommandGroup heading={label}>
-                {options.map((option) => (
-                  <CommandItem
-                    key={option.id}
-                    value={`${option.label} ${option.meta}`}
-                    data-checked={isOptionSelected ? isOptionSelected(option) : selected.includes(option.id)}
-                    className="cursor-pointer"
-                    onSelect={() => onToggle(option.id)}
-                  >
-                    <div className="flex min-w-0 flex-col">
-                      <strong className="truncate text-sm">{option.label}</strong>
-                      <span className="truncate text-xs text-slate-500">{option.meta}</span>
-                    </div>
-                  </CommandItem>
+              {groups
+                .filter((group) => group.options.length > 0)
+                .map((group) => (
+                  <CommandGroup key={group.heading} heading={group.heading}>
+                    {group.options.map((option) => (
+                      <CommandItem
+                        key={option.id}
+                        value={`${option.label} ${option.meta} ${group.heading}`}
+                        data-checked={isOptionSelected ? isOptionSelected(option) : selected.includes(option.id)}
+                        className="cursor-pointer"
+                        onSelect={() => onToggle(option.id)}
+                      >
+                        <div className="flex min-w-0 flex-col">
+                          <strong className="truncate text-sm">{option.label}</strong>
+                          <span className="truncate text-xs text-slate-500">{option.meta}</span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
                 ))}
-              </CommandGroup>
             </CommandList>
           </Command>
         </PopoverContent>
@@ -2168,6 +2229,44 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
     runtimeData.managerOptions.length > 0 ? runtimeData.managerOptions : managerOptions
   const availableSourceOptions =
     runtimeData.sourceOptions.length > 0 ? runtimeData.sourceOptions : sourceOptions
+  const availableBusinessClubOptions = runtimeData.businessClubOptions ?? EMPTY_PICKER_OPTIONS
+  const availableTargetGroupOptions = runtimeData.targetGroupOptions ?? EMPTY_PICKER_OPTIONS
+  const customerBusinessClubOptions = useMemo(
+    () =>
+      availableBusinessClubOptions.map((option) => ({
+        ...option,
+        id: `${CUSTOMER_BUSINESS_CLUB_FILTER_PREFIX}${option.id}`,
+      })),
+    [availableBusinessClubOptions],
+  )
+  const customerTargetGroupOptions = useMemo(
+    () =>
+      availableTargetGroupOptions.map((option) => ({
+        ...option,
+        id: `${CUSTOMER_TARGET_GROUP_FILTER_PREFIX}${option.id}`,
+      })),
+    [availableTargetGroupOptions],
+  )
+  const customerFilterOptions = useMemo(
+    () => [...customerBusinessClubOptions, ...customerTargetGroupOptions],
+    [customerBusinessClubOptions, customerTargetGroupOptions],
+  )
+  const selectedBusinessClubs = filters.businessClubs
+  const selectedTargetGroups = filters.targetGroups
+  const selectedCustomerFilterOptions = useMemo(
+    () => [
+      ...selectedBusinessClubs.map((id) => `${CUSTOMER_BUSINESS_CLUB_FILTER_PREFIX}${id}`),
+      ...selectedTargetGroups.map((id) => `${CUSTOMER_TARGET_GROUP_FILTER_PREFIX}${id}`),
+    ],
+    [selectedBusinessClubs, selectedTargetGroups],
+  )
+  const customerFilterSummary = summarizeCustomerSelection({
+    businessClubs: selectedBusinessClubs,
+    targetGroups: selectedTargetGroups,
+    businessClubOptions: availableBusinessClubOptions,
+    targetGroupOptions: availableTargetGroupOptions,
+    fallback: 'Все заказчики',
+  })
   const whitelistedManagerOptions = buildWhitelistedManagerOptions(
     runtimeData.managerWhitelistSettings,
   )
@@ -2512,6 +2611,16 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
           label: entry.label,
           meta: 'Источник',
         }))
+        const businessClubPickerOptions = meta.businessClubCatalog.map((entry) => ({
+          id: entry.key,
+          label: entry.label,
+          meta: 'Бизнес-клуб заказчика',
+        }))
+        const targetGroupPickerOptions = meta.targetGroupCatalog.map((entry) => ({
+          id: entry.key,
+          label: entry.label,
+          meta: 'Таргет-группа',
+        }))
         const stagePickerOptions = buildStagePickerOptions(
           meta.stageCatalog,
           activeModule?.bitrixCategoryId ?? '10',
@@ -2529,6 +2638,8 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
             ...current,
             managerOptions: managerPickerOptions,
             sourceOptions: sourcePickerOptions,
+            businessClubOptions: businessClubPickerOptions,
+            targetGroupOptions: targetGroupPickerOptions,
             stageOptions: stagePickerOptions,
             ...(current.salesPlan ? { salesPlan: current.salesPlan } : {}),
             ...(current.salesPlanMonth ? { salesPlanMonth: current.salesPlanMonth } : {}),
@@ -3282,13 +3393,20 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
     setFilters((current) => ({ ...current, ...next }))
   }
 
-  function toggleFilterValue(key: 'managers' | 'sources', value: string) {
-    setFilters((current) => ({
-      ...current,
-      [key]: current[key].includes(value)
-        ? current[key].filter((item) => item !== value)
-        : [...current[key], value],
-    }))
+  function toggleFilterValue(
+    key: 'managers' | 'sources' | 'businessClubs' | 'targetGroups',
+    value: string,
+  ) {
+    setFilters((current) => {
+      const selectedValues = current[key]
+
+      return {
+        ...current,
+        [key]: selectedValues.includes(value)
+          ? selectedValues.filter((item) => item !== value)
+          : [...selectedValues, value],
+      }
+    })
   }
 
   function toggleManagerFilterValue(value: string) {
@@ -3306,6 +3424,23 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
     }
 
     toggleFilterValue('managers', value)
+  }
+
+  function toggleCustomerFilterValue(value: string) {
+    if (value.startsWith(CUSTOMER_BUSINESS_CLUB_FILTER_PREFIX)) {
+      toggleFilterValue(
+        'businessClubs',
+        value.slice(CUSTOMER_BUSINESS_CLUB_FILTER_PREFIX.length),
+      )
+      return
+    }
+
+    if (value.startsWith(CUSTOMER_TARGET_GROUP_FILTER_PREFIX)) {
+      toggleFilterValue(
+        'targetGroups',
+        value.slice(CUSTOMER_TARGET_GROUP_FILTER_PREFIX.length),
+      )
+    }
   }
 
   function addCompareRange() {
@@ -4694,7 +4829,14 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
               </div>
             </div>
 
-            <div className="grid gap-3 xl:grid-cols-[minmax(0,330px)_minmax(0,1fr)_minmax(0,1fr)_auto] xl:items-end">
+            <div
+              className={cn(
+                'grid gap-3 xl:items-end',
+                isLeadgenModule
+                  ? 'xl:grid-cols-[minmax(0,330px)_minmax(0,1fr)_minmax(0,1fr)_auto]'
+                  : 'xl:grid-cols-[minmax(0,290px)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]',
+              )}
+            >
               <div className="space-y-1.5">
                 <label className="subtle-label">Основной диапазон</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -4734,6 +4876,27 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                   )
                 }
               />
+              {!isLeadgenModule ? (
+                <MultiSelectField
+                  label="Заказчик"
+                  placeholder="Поиск клуба или таргет-группы"
+                  emptyLabel="Все заказчики"
+                  options={customerFilterOptions}
+                  optionGroups={[
+                    {
+                      heading: 'Бизнес-клуб заказчика',
+                      options: customerBusinessClubOptions,
+                    },
+                    {
+                      heading: 'Таргет-группа',
+                      options: customerTargetGroupOptions,
+                    },
+                  ]}
+                  selected={selectedCustomerFilterOptions}
+                  onToggle={toggleCustomerFilterValue}
+                  summary={customerFilterSummary}
+                />
+              ) : null}
               <MultiSelectField
                 label="Источники"
                 placeholder="Поиск источника"
@@ -4824,6 +4987,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
               {summarizeCompareRanges(filters.compareRanges)} | Менеджеры:{' '}
               {managerFilterSummary} | Источники:{' '}
               {summarizeSelection(filters.sources, availableSourceOptions, 'все')}
+              {!isLeadgenModule ? <> | Заказчик: {customerFilterSummary}</> : null}
             </p>
             {isReportLoading ? (
               <div

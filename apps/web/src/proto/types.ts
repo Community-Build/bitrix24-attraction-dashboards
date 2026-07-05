@@ -197,6 +197,8 @@ export interface ProtoFilterState {
   compareRanges: CompareRange[]
   managers: string[]
   sources: string[]
+  businessClubs: string[]
+  targetGroups: string[]
 }
 
 export interface ProtoKpi {
@@ -471,6 +473,8 @@ export interface CommentStore {
 export interface ProtoRuntimeData {
   managerOptions: PickerOption[]
   sourceOptions: PickerOption[]
+  businessClubOptions?: PickerOption[]
+  targetGroupOptions?: PickerOption[]
   stageOptions?: PickerOption[]
   sceneStatuses?: Record<string, 'idle' | 'loading' | 'ready' | 'error'>
   sceneErrors?: Record<string, string | null>

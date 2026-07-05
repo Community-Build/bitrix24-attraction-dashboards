@@ -728,6 +728,8 @@ export function buildDashboardQueryFromProtoFilters(
     to: toMoscowRangeBoundary(filters.rangeEnd, 'end'),
     managerIds: filters.managers,
     sourceKeys: filters.sources,
+    businessClubKeys: filters.businessClubs,
+    targetGroupKeys: filters.targetGroups,
     compareRanges: filters.compareRanges.map((range) => ({
       from: toMoscowRangeBoundary(range.start, 'start'),
       to: toMoscowRangeBoundary(range.end, 'end'),
