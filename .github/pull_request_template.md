@@ -3,12 +3,12 @@
 
 ## Module
 - [ ] `attraction`
-- [ ] `leadgen`
+- [ ] `leadgen` legacy/removal only
 - [ ] shared/platform
 
 Module label:
 - [ ] `module:attraction`
-- [ ] `module:leadgen`
+- [ ] `module:leadgen` only for explicit legacy containment/removal work
 - [ ] `module:shared-platform`
 
 ## Affected Areas
@@ -38,6 +38,7 @@ Module label:
 ## Module Isolation
 - [ ] Module ontology was checked for every selected module.
 - [ ] Attraction behavior is unchanged unless `attraction` or `shared/platform` is selected.
-- [ ] Leadgen behavior is unchanged unless `leadgen` or `shared/platform` is selected.
-- [ ] Paperclip project routing is unchanged or explicitly verified for affected modules.
+- [ ] Leadgen is treated as legacy per ADR 0003; no new leadgen product behavior is introduced.
+- [ ] Leadgen behavior is unchanged unless this is an explicit legacy containment/removal task.
+- [ ] Paperclip project routing is unchanged or explicitly verified for affected attraction/platform work.
 - [ ] No deal names, contact names, phones, emails, raw Bitrix payloads, cookies, tokens, or secrets are stored, displayed, logged, or sent to Paperclip.

@@ -69,6 +69,8 @@ before runtime wiring:
 - New work should not use leadgen as a design constraint.
 - Existing leadgen code can remain until removal, but it is not part of the
   target architecture.
+- GitHub templates, deploy docs, and production operations should mark leadgen
+  as legacy until the removal migration deletes those paths.
 - Future agents must read `PROJECT_STRUCTURE.md` before making architecture
   claims or adding product surfaces.
 - Refactors should deepen attraction-owned modules before adding generic

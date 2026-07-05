@@ -25,9 +25,14 @@ Use this order when reconstructing how the project is built:
 5. `docs/modules/attraction/REPORT_REGISTRY.md` - attraction report bindings.
 6. `docs/adr/0002-manager-approved-call-enrichment-writeback.md` - destructive
    writeback exception and Telegram approval flow.
-7. `docs/architecture/agent-mcp.md` - read-only agent gateway.
-8. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
-9. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
+7. `docs/architecture/web-runtime.md` - one supported web shell and browser data
+   access rule.
+8. `docs/architecture/module-capabilities.md` - manifest and agent-readable
+   report policy.
+9. `docs/architecture/agent-mcp.md` - read-only agent gateway.
+10. `docs/deploy-timeweb-vps.md` - production env and rollout controls.
+11. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
+12. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
 
 ## Product Surfaces
 
@@ -105,3 +110,22 @@ dashboard comments -> local comments -> Paperclip workflow
    - `apps/api/src/server/service.ts`
 4. Remove leadgen in a dedicated migration after production usage and config are
    checked.
+
+## Leadgen Removal Checklist
+
+The leadgen migration must be explicit because legacy code still exists in the
+API, web shell, tests, deploy docs, GitHub templates, and production operations.
+
+Before deletion, verify and update:
+
+- production usage: confirm no active users depend on leadgen routes, sync,
+  comments, Paperclip routing, or database files;
+- web: remove leadgen module switching, leadgen dashboard state, leadgen API
+  client methods, and tests that assert leadgen behavior;
+- API: remove leadgen service, routes, sync, repository setup, capability
+  descriptors, environment parsing, and tests;
+- operations: remove or retire leadgen options from GitHub templates,
+  production sync workflows, deploy docs, and Paperclip project routing;
+- data: decide whether to archive or delete `bitrix24-leadgen.db` on production;
+- docs: archive `docs/modules/leadgen/MODULE_ONTOLOGY.md` and superseded
+  leadgen plans after the code path is gone.
