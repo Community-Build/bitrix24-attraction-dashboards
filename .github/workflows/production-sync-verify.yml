@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       module:
-        description: Module to sync and verify
+        description: Module to sync and verify. Leadgen is legacy; use only for explicit containment/removal verification.
         required: true
         default: attraction
         type: choice
@@ -31,17 +31,17 @@ on:
         default: ""
         type: string
       category_id:
-        description: Leadgen only. Expected Bitrix deal category, currently 28.
+        description: Legacy leadgen only. Expected Bitrix deal category, currently 28.
         required: false
         default: "28"
         type: string
       range_from:
-        description: Leadgen workload range start.
+        description: Legacy leadgen workload range start.
         required: false
         default: "2026-05-11T00:00:00.000Z"
         type: string
       range_to:
-        description: Leadgen workload range end.
+        description: Legacy leadgen workload range end.
         required: false
         default: "2026-05-17T23:59:59.999Z"
         type: string

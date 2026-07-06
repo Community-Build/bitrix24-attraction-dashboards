@@ -60,6 +60,7 @@ WEB_STATIC_DIR=/app/apps/web/dist
 DATABASE_URL=file:/app/data/bitrix24-reporting.db
 PLATFORM_DATABASE_URL=file:/app/data/bitrix24-reporting.db
 ATTRACTION_DATABASE_URL=file:/app/data/bitrix24-attraction.db
+# Legacy until the ADR 0003 leadgen removal migration.
 LEADGEN_DATABASE_URL=file:/app/data/bitrix24-leadgen.db
 JSON_BODY_LIMIT=256kb
 ATTRACTION_AUTO_SYNC_ENABLED=true
@@ -81,6 +82,7 @@ BITRIX24_PORTAL_HOST=<portal>.bitrix24.ru
 BITRIX24_WEBHOOK_USER_ID=<user-id>
 BITRIX24_WEBHOOK_TOKEN=<token>
 BITRIX24_DEAL_CATEGORY_IDS=10
+# Legacy until the ADR 0003 leadgen removal migration.
 BITRIX24_LEADGEN_US_CATEGORY_ID=28
 BITRIX24_LEADGEN_MANAGER_IDS=8244,84,11620,11486,12028,11610
 REPORT_WON_STAGE_IDS=C10:WON

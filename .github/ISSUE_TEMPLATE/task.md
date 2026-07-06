@@ -11,13 +11,13 @@ assignees: ""
 
 ## Module
 - [ ] `attraction`
-- [ ] `leadgen`
+- [ ] `leadgen` legacy/removal only
 - [ ] shared/platform
 
 Apply exactly one module label:
 
 - `module:attraction`
-- `module:leadgen`
+- `module:leadgen` only for explicit legacy containment/removal work
 - `module:shared-platform`
 
 ## Affected Areas
@@ -39,8 +39,9 @@ Apply exactly one module label:
 
 ## Module Isolation Notes
 - Attraction behavior must remain unchanged unless this is an attraction or shared/platform task.
-- Leadgen behavior must remain unchanged unless this is a leadgen or shared/platform task.
-- Dashboard comments route to module-specific Paperclip projects: `attraction` -> `Attraction Dashboard`, `leadgen` -> `Leadgen Dashboard`.
+- Leadgen is legacy per ADR 0003; do not create new leadgen product work.
+- Leadgen behavior must remain unchanged unless this is an explicit legacy containment/removal task.
+- Dashboard comments route to module-specific Paperclip projects: `attraction` -> `Attraction Dashboard`; `leadgen` remains legacy until removal.
 - Do not use or expose deal names, contact names, phones, emails, raw Bitrix payloads, cookies, tokens, or secrets.
 
 ## Verification

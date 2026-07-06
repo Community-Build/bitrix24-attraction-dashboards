@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Superseded by ADR 0003 for target architecture. Kept as historical context for
+the earlier split between attraction and leadgen.
 
 ## Context
 
