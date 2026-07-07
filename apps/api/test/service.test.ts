@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import type {
+  ActivitySnapshot,
+  DealSnapshot,
+  StageHistorySnapshot
+} from "@bitrix24-reporting/contracts";
 import { ATTRACTION_MANAGER_CATALOG } from "../src/domain/attraction-managers";
 import { DEFAULT_PRICING_RULES } from "../src/domain/deal-economics";
 import type { ReportingRepository } from "../src/server/repository-roles";
-import { createReportingService } from "../src/server/service";
+import {
+  createReportingService,
+  selectOperationalDashboardDealIds
+} from "../src/server/service";
 
 const EMPTY_SNAPSHOT_STATS = {
   deals: 0,
@@ -176,6 +184,155 @@ function withReportingRepositoryDefaults(
 }
 
 describe("createReportingService", () => {
+  it("keeps only deal ids that can affect the operational dashboard", () => {
+    const createDeal = (
+      input: Partial<DealSnapshot> & Pick<DealSnapshot, "id">
+    ): DealSnapshot => ({
+      id: input.id,
+      leadId: null,
+      categoryId: "10",
+      stageId: input.stageId ?? "C10:PREPARATION",
+      stageSemanticId: input.stageSemanticId ?? "P",
+      opportunity: 0,
+      assignedById: "78",
+      sourceId: "WEB",
+      qualityValue: null,
+      businessClubValue: null,
+      targetGroupValue: null,
+      meetingTypeValue: null,
+      meetingDateValue: null,
+      meetingSlots: input.meetingSlots ?? [],
+      tariffValue: null,
+      conversionEventValue: null,
+      refusalReasonValue: null,
+      refusalReasonDetail: null,
+      dateCreate: input.dateCreate ?? "2026-01-01T09:00:00.000Z",
+      dateModify: input.dateModify ?? "2026-01-01T09:00:00.000Z",
+      dateClosed: input.dateClosed ?? null,
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      utmContent: null,
+      utmTerm: null
+    });
+    const createStageHistory = (
+      input: Pick<
+        StageHistorySnapshot,
+        "ownerId" | "stageId" | "stageSemanticId" | "createdTime"
+      >
+    ): StageHistorySnapshot => ({
+      id: `${input.ownerId}:${input.stageId}:${input.createdTime}`,
+      categoryId: "10",
+      typeId: null,
+      ...input
+    });
+    const createActivity = (
+      input: Partial<ActivitySnapshot> & Pick<ActivitySnapshot, "id" | "ownerId">
+    ): ActivitySnapshot => ({
+      ownerTypeId: "2",
+      typeId: "6",
+      providerId: "CRM_TODO",
+      responsibleId: "78",
+      createdTime: "2026-06-10T09:00:00.000Z",
+      deadline: null,
+      lastUpdated: "2026-06-10T09:00:00.000Z",
+      completed: false,
+      completedTime: null,
+      ...input
+    });
+
+    const selected = selectOperationalDashboardDealIds({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      now: "2026-06-10T12:00:00.000Z",
+      wonStageIds: ["C10:WON"],
+      deals: [
+        createDeal({ id: "OPEN_OLD" }),
+        createDeal({
+          id: "CREATED_IN_RANGE",
+          dateCreate: "2026-06-05T09:00:00.000Z"
+        }),
+        createDeal({
+          id: "WON_BY_CURRENT_STATE",
+          stageId: "C10:WON",
+          stageSemanticId: "S",
+          dateClosed: "2026-06-08T09:00:00.000Z"
+        }),
+        createDeal({
+          id: "WON_BY_HISTORY",
+          stageId: "C10:LOSE",
+          stageSemanticId: "F",
+          dateClosed: "2026-01-15T09:00:00.000Z"
+        }),
+        createDeal({
+          id: "MEETING_TODAY",
+          stageId: "C10:LOSE",
+          stageSemanticId: "F",
+          meetingSlots: [
+            {
+              index: 1,
+              dateValue: "2026-06-10T11:00:00.000Z",
+              typeValue: null,
+              placeValue: null,
+              calendarValue: null,
+              eventId: null,
+              source: "deal_fields"
+            }
+          ]
+        }),
+        createDeal({
+          id: "TASK_TOMORROW",
+          stageId: "C10:LOSE",
+          stageSemanticId: "F",
+          dateClosed: "2026-01-15T09:00:00.000Z"
+        }),
+        createDeal({
+          id: "STALE_CLOSED",
+          stageId: "C10:LOSE",
+          stageSemanticId: "F",
+          dateClosed: "2026-01-15T09:00:00.000Z"
+        })
+      ],
+      stageHistory: [
+        createStageHistory({
+          ownerId: "WON_BY_HISTORY",
+          stageId: "C10:WON",
+          stageSemanticId: "S",
+          createdTime: "2026-06-07T09:00:00.000Z"
+        }),
+        createStageHistory({
+          ownerId: "STALE_CLOSED",
+          stageId: "C10:LOSE",
+          stageSemanticId: "F",
+          createdTime: "2026-01-15T09:00:00.000Z"
+        })
+      ],
+      activities: [
+        createActivity({
+          id: "A_TASK_TOMORROW",
+          ownerId: "TASK_TOMORROW",
+          deadline: "2026-06-11T10:00:00.000Z"
+        }),
+        createActivity({
+          id: "A_STALE",
+          ownerId: "STALE_CLOSED",
+          deadline: "2026-01-16T10:00:00.000Z"
+        })
+      ]
+    });
+
+    expect(Array.from(selected).sort()).toEqual([
+      "CREATED_IN_RANGE",
+      "MEETING_TODAY",
+      "OPEN_OLD",
+      "TASK_TOMORROW",
+      "WON_BY_CURRENT_STATE",
+      "WON_BY_HISTORY"
+    ]);
+  });
+
   it("preserves catalog call attribution policy in manager whitelist options", async () => {
     const service = createReportingService({
       dealCategoryIds: ["10"],
