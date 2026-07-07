@@ -78,7 +78,10 @@ import {
   buildSourceQualityConversionReport,
   buildTargetGroupConversionReport
 } from "../domain/operational-reports.js";
-import { buildOperationalDashboardReport } from "../domain/operational-dashboard.js";
+import {
+  OPERATIONAL_LOST_STAGE_IDS,
+  buildOperationalDashboardReport
+} from "../domain/operational-dashboard.js";
 import {
   ATTRACTION_MANAGER_CATALOG,
   buildManagerTeams,
@@ -394,6 +397,139 @@ function normalizeNullableId(value: string | number | null | undefined) {
 
 function isDealOwnerType(value: string | null | undefined) {
   return value === "2" || value?.toUpperCase() === "DEAL";
+}
+
+const MOSCOW_OFFSET_MS = 3 * 60 * 60 * 1000;
+const MS_PER_DAY = 86_400_000;
+
+function toTimestamp(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function isInTimestampRange(
+  value: string | null | undefined,
+  fromMs: number,
+  toMs: number
+) {
+  const timestamp = toTimestamp(value);
+  return timestamp !== null && timestamp >= fromMs && timestamp <= toMs;
+}
+
+function toMoscowDateKey(value: string | null | undefined) {
+  const timestamp = toTimestamp(value);
+  if (timestamp === null) {
+    return null;
+  }
+
+  return new Date(timestamp + MOSCOW_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+function addDaysToDateKey(dateKey: string, days: number) {
+  const timestamp = Date.parse(`${dateKey}T00:00:00.000Z`);
+  return new Date(timestamp + days * MS_PER_DAY).toISOString().slice(0, 10);
+}
+
+function isOperationalClosedStage(
+  stageId: string,
+  stageSemanticId: string | null,
+  wonStageIds: Set<string>
+) {
+  return (
+    wonStageIds.has(stageId) ||
+    stageSemanticId === "S" ||
+    stageSemanticId === "F" ||
+    OPERATIONAL_LOST_STAGE_IDS.has(stageId)
+  );
+}
+
+function isOperationalOpenDeal(deal: DealSnapshot, wonStageIds: Set<string>) {
+  return (
+    deal.stageSemanticId !== "S" &&
+    deal.stageSemanticId !== "F" &&
+    !wonStageIds.has(deal.stageId) &&
+    !OPERATIONAL_LOST_STAGE_IDS.has(deal.stageId)
+  );
+}
+
+export function selectOperationalDashboardDealIds(input: {
+  deals: DealSnapshot[];
+  stageHistory: StageHistorySnapshot[];
+  activities: ActivitySnapshot[];
+  range: ReportRange;
+  now: string;
+  wonStageIds: string[];
+}) {
+  const fromMs = Date.parse(input.range.from);
+  const toMs = Date.parse(input.range.to);
+  const nowMs = toTimestamp(input.now) ?? toMs;
+  const todayKey = toMoscowDateKey(input.now) ?? input.now.slice(0, 10);
+  const tomorrowKey = addDaysToDateKey(todayKey, 1);
+  const wonStageIds = new Set(input.wonStageIds);
+  const scopedDealIds = new Set(input.deals.map((deal) => deal.id));
+  const selectedDealIds = new Set<string>();
+
+  for (const deal of input.deals) {
+    if (
+      isOperationalOpenDeal(deal, wonStageIds) ||
+      isInTimestampRange(deal.dateCreate, fromMs, toMs) ||
+      (isOperationalClosedStage(deal.stageId, deal.stageSemanticId, wonStageIds) &&
+        isInTimestampRange(deal.dateClosed ?? deal.dateModify, fromMs, toMs))
+    ) {
+      selectedDealIds.add(deal.id);
+      continue;
+    }
+
+    for (const slot of deal.meetingSlots ?? []) {
+      const slotTimestamp = toTimestamp(slot.dateValue);
+      if (
+        slotTimestamp !== null &&
+        slotTimestamp >= fromMs &&
+        slotTimestamp <= toMs &&
+        slotTimestamp <= nowMs
+      ) {
+        selectedDealIds.add(deal.id);
+        break;
+      }
+
+      const slotDateKey = toMoscowDateKey(slot.dateValue);
+      if (slotDateKey === todayKey || slotDateKey === tomorrowKey) {
+        selectedDealIds.add(deal.id);
+        break;
+      }
+    }
+  }
+
+  for (const row of input.stageHistory) {
+    if (
+      scopedDealIds.has(row.ownerId) &&
+      isOperationalClosedStage(row.stageId, row.stageSemanticId, wonStageIds) &&
+      isInTimestampRange(row.createdTime, fromMs, toMs)
+    ) {
+      selectedDealIds.add(row.ownerId);
+    }
+  }
+
+  for (const activity of input.activities) {
+    if (
+      activity.completed ||
+      !isDealOwnerType(activity.ownerTypeId) ||
+      !scopedDealIds.has(activity.ownerId)
+    ) {
+      continue;
+    }
+
+    const deadlineKey = toMoscowDateKey(activity.deadline);
+    if (deadlineKey === todayKey || deadlineKey === tomorrowKey) {
+      selectedDealIds.add(activity.ownerId);
+    }
+  }
+
+  return selectedDealIds;
 }
 
 function resolveQueueCallType(call: CallSnapshot): CallAnalysisQueueCallType {
@@ -917,7 +1053,6 @@ function isManagerInScope(
   );
 }
 
-const MOSCOW_OFFSET_MS = 3 * 60 * 60 * 1000;
 const MONTH_LABELS_RU = [
   "Январь",
   "Февраль",
@@ -2537,14 +2672,29 @@ export function createReportingService(
         input.defaultPeriodDays,
         now
       );
-      const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
-      const scopedDealIds = new Set(scopedDeals.map((deal) => deal.id));
-      const scopedStageHistory = reportStageHistory.filter((row) =>
-        scopedDealIds.has(row.ownerId)
+      const allScopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
+      const allScopedDealIds = new Set(allScopedDeals.map((deal) => deal.id));
+      const allScopedStageHistory = reportStageHistory.filter((row) =>
+        allScopedDealIds.has(row.ownerId)
+      );
+      const relevantDealIds = selectOperationalDashboardDealIds({
+        deals: allScopedDeals,
+        stageHistory: allScopedStageHistory,
+        activities: reportActivities,
+        range: resolvedRange,
+        now: now.toISOString(),
+        wonStageIds
+      });
+      const scopedDeals = allScopedDeals.filter((deal) =>
+        relevantDealIds.has(deal.id)
+      );
+      const scopedStageHistory = allScopedStageHistory.filter((row) =>
+        relevantDealIds.has(row.ownerId)
       );
       const scopedActivities = reportActivities.filter(
         (activity) =>
-          isDealOwnerType(activity.ownerTypeId) && scopedDealIds.has(activity.ownerId)
+          isDealOwnerType(activity.ownerTypeId) &&
+          relevantDealIds.has(activity.ownerId)
       );
       const activityById = new Map(
         scopedActivities.map((activity) => [activity.id, activity])
@@ -2553,7 +2703,7 @@ export function createReportingService(
         if (
           isDealCallEntity(call.crmEntityType) &&
           call.crmEntityId &&
-          scopedDealIds.has(call.crmEntityId)
+          relevantDealIds.has(call.crmEntityId)
         ) {
           return true;
         }

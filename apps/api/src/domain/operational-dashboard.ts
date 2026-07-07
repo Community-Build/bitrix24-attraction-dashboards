@@ -28,7 +28,7 @@ import {
   resolveManagerName
 } from "./report-dimensions.js";
 
-const LOST_STAGE_IDS = new Set(["C10:LOSE", "C10:UC_EA3R76"]);
+export const OPERATIONAL_LOST_STAGE_IDS = new Set(["C10:LOSE", "C10:UC_EA3R76"]);
 const SLOT_INDEXES = [1, 2, 3] as const;
 const RISK_RULE_LABELS = {
   stage_aging: "Застряли на этапе",
@@ -155,7 +155,7 @@ function isOpenDeal(deal: DealSnapshot, wonStageIds: Set<string>) {
     deal.stageSemanticId !== "S" &&
     deal.stageSemanticId !== "F" &&
     !wonStageIds.has(deal.stageId) &&
-    !LOST_STAGE_IDS.has(deal.stageId)
+    !OPERATIONAL_LOST_STAGE_IDS.has(deal.stageId)
   );
 }
 
@@ -181,14 +181,14 @@ function resolveWonAt(
 function resolveLostAt(deal: DealSnapshot, stageHistoryRows: StageHistorySnapshot[]) {
   const lostAt = findFirstStageTime(
     stageHistoryRows,
-    (row) => LOST_STAGE_IDS.has(row.stageId) || row.stageSemanticId === "F"
+    (row) => OPERATIONAL_LOST_STAGE_IDS.has(row.stageId) || row.stageSemanticId === "F"
   );
 
   if (lostAt) {
     return lostAt;
   }
 
-  return LOST_STAGE_IDS.has(deal.stageId) || deal.stageSemanticId === "F"
+  return OPERATIONAL_LOST_STAGE_IDS.has(deal.stageId) || deal.stageSemanticId === "F"
     ? deal.dateClosed ?? deal.dateModify
     : null;
 }
