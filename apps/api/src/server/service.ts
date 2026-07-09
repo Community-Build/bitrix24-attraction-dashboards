@@ -1578,6 +1578,7 @@ export function createReportingService(
     const hasTouchpointFacts = touchpointFacts.length > 0;
 
     return {
+      dealStageFacts: hasStageFacts ? stageFacts : [],
       stageHistory: hasStageFacts
         ? stageFactsToStageHistory(stageFacts)
         : fallback.stageHistory,
@@ -1595,6 +1596,31 @@ export function createReportingService(
           : fallback.meetingDateChanges,
       eventVisitFacts,
       dealTouchpointFacts: touchpointFacts
+    };
+  };
+
+  const loadScopedCanonicalReportInputs = async (dealIds: string[]) => {
+    const scopedDealIds = uniqueStrings(dealIds);
+    const [
+      scopedStageHistory,
+      scopedDealStageFacts,
+      scopedDealTouchpointFacts,
+      scopedEventVisitFacts
+    ] = await Promise.all([
+      input.repository.getStageHistoryByOwnerIds(scopedDealIds),
+      input.repository.getDealStageFactsByDealIds(scopedDealIds),
+      input.repository.getDealTouchpointFactsByDealIds(scopedDealIds),
+      input.repository.getEventVisitFactsByDealIds(scopedDealIds)
+    ]);
+    const hasStageFacts = scopedDealStageFacts.length > 0;
+
+    return {
+      dealStageFacts: hasStageFacts ? scopedDealStageFacts : [],
+      stageHistory: hasStageFacts
+        ? stageFactsToStageHistory(scopedDealStageFacts)
+        : scopedStageHistory,
+      dealTouchpointFacts: scopedDealTouchpointFacts,
+      eventVisitFacts: scopedEventVisitFacts
     };
   };
 
@@ -2431,23 +2457,21 @@ export function createReportingService(
       filters
     }) {
       const scopedFilters = await normalizeAttractionReportFilters(filters);
-      const [deals, stageCatalog, stageHistory, wonStageIds] = await Promise.all([
+      const [deals, stageCatalog, wonStageIds] = await Promise.all([
         input.repository.getAllDeals(),
         getScopedStageCatalog(true),
-        input.repository.getAllStageHistory(),
         input.repository.getWonStageIds()
       ]);
-      const canonical = await loadCanonicalReportInputs({ stageHistory });
       const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
+      const canonical = await loadScopedCanonicalReportInputs(
+        scopedDeals.map((deal) => deal.id)
+      );
       const managerDirectory = await ensureManagerDirectory(
         uniqueStrings(
           scopedDeals.map((deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID)
         )
       );
-      const scopedDealIds = new Set(scopedDeals.map((deal) => deal.id));
-      const scopedStageHistory = canonical.stageHistory.filter((row) =>
-        scopedDealIds.has(row.ownerId)
-      );
+      const reportNow = nowFactory();
       const buildSnapshot = (
         targetRange: ReportRange
       ): SourceCohortConversionReportSnapshot =>
@@ -2456,14 +2480,19 @@ export function createReportingService(
           wonStageIds,
           deals: scopedDeals,
           stageCatalog,
-          stageHistory: scopedStageHistory,
-          managerDirectory
+          stageHistory: canonical.stageHistory,
+          dealStageFacts: canonical.dealStageFacts,
+          dealTouchpointFacts: canonical.dealTouchpointFacts,
+          eventVisitFacts: canonical.eventVisitFacts,
+          managerDirectory,
+          includeTrajectory: true,
+          now: reportNow
         });
       const resolvedRange = resolveRange(
         periodDays,
         range,
         input.defaultPeriodDays,
-        nowFactory()
+        reportNow
       );
 
       return attachComparisons(

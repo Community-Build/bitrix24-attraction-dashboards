@@ -27,6 +27,7 @@ export interface AttractionCapabilityService {
   getCallsWorkloadReport?: unknown;
   getConversionEventsReport?: unknown;
   getCohortConversionReport?: unknown;
+  getSourceCohortConversionReport?: unknown;
   getTocFlowReport?: unknown;
   getRevenueVelocityReport?: unknown;
   getUnitEconomicsReport?: unknown;
@@ -107,6 +108,11 @@ const attractionCapabilityReportAvailability: Array<
     route: "/api/reports/cohort-conversion",
     isAvailable: (service) =>
       typeof service.getCohortConversionReport === "function"
+  },
+  {
+    route: "/api/reports/source-cohort-conversion",
+    isAvailable: (service) =>
+      typeof service.getSourceCohortConversionReport === "function"
   },
   {
     route: "/api/reports/toc-flow",
@@ -210,6 +216,17 @@ export function createAttractionCapabilityManifest(): ModuleCapabilityManifest {
         route: "/api/reports/source-quality-conversion",
         inputSchemaId: "attraction.report-range-with-filters.v1",
         outputSchemaId: "attraction.source-quality-conversion.v1",
+        status: "available",
+        agentReadable: true
+      },
+      {
+        id: "source-cohort-conversion",
+        title: "Конверсии",
+        description:
+          "Attraction-owned source cohort report with factual stage/action trajectory over cached deal, stage, touchpoint and event visit facts.",
+        route: "/api/reports/source-cohort-conversion",
+        inputSchemaId: "attraction.report-range-with-filters.v1",
+        outputSchemaId: "attraction.source-cohort-conversion.v2",
         status: "available",
         agentReadable: true
       },

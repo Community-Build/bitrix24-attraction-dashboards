@@ -1,5 +1,8 @@
 import type {
   DealSnapshot,
+  DealStageFactSnapshot,
+  DealTouchpointFactSnapshot,
+  EventVisitFactSnapshot,
   ManagerDirectoryEntry,
   ReportRange,
   SourceCohortConversionManagerRow,
@@ -11,6 +14,7 @@ import type {
   StageHistorySnapshot
 } from "@bitrix24-reporting/contracts";
 
+import { buildSourceCohortTrajectoryReport } from "./source-cohort-trajectory.js";
 import {
   UNASSIGNED_MANAGER_ID,
   buildManagerDirectoryMap,
@@ -32,7 +36,12 @@ export interface SourceCohortConversionInput {
   deals: DealSnapshot[];
   stageCatalog: StageCatalogEntry[];
   stageHistory: StageHistorySnapshot[];
+  dealStageFacts?: DealStageFactSnapshot[];
+  dealTouchpointFacts?: DealTouchpointFactSnapshot[];
+  eventVisitFacts?: EventVisitFactSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
+  includeTrajectory?: boolean;
+  now?: Date;
 }
 
 type SourceCohortDealOutcome = {
@@ -514,7 +523,7 @@ export function buildSourceCohortConversionReport(
     rows.set(rowKey, currentRow);
   }
 
-  return {
+  const snapshot: SourceCohortConversionReportSnapshot = {
     range: input.range,
     totalCreatedDeals: totals.createdDeals,
     totalWonDeals: totals.wonDeals,
@@ -543,6 +552,29 @@ export function buildSourceCohortConversionReport(
 
         return leftLabel.localeCompare(rightLabel, "ru");
       })
-      .map(toSourceCohortRow)
+      .map(toSourceCohortRow),
+    trajectoryStatus: "unavailable",
+    trajectoryUnavailableReason:
+      "Траектория конверсии не рассчитана для этого ответа."
   };
+
+  return input.includeTrajectory
+    ? {
+        ...snapshot,
+        trajectoryStatus: "available",
+        trajectoryUnavailableReason: null,
+        trajectory: buildSourceCohortTrajectoryReport({
+          range: input.range,
+          wonStageIds: input.wonStageIds,
+          deals: input.deals,
+          stageCatalog: input.stageCatalog,
+          stageHistory: input.stageHistory,
+          dealStageFacts: input.dealStageFacts ?? [],
+          dealTouchpointFacts: input.dealTouchpointFacts ?? [],
+          eventVisitFacts: input.eventVisitFacts ?? [],
+          managerDirectory: input.managerDirectory ?? [],
+          ...(input.now ? { now: input.now } : {})
+        })
+      }
+    : snapshot;
 }
