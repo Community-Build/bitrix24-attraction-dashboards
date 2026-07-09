@@ -636,7 +636,8 @@ function resolveSyncHealthWarning(meta: Pick<MetaResponse, 'syncHealth'>) {
   return (
     meta.syncHealth?.warnings[0] ??
     (meta.syncHealth?.blocking
-      ? meta.syncHealth.issues[0]?.message ?? 'Локальный snapshot не подтвержден sync coverage.'
+      ? meta.syncHealth.issues[0]?.message ??
+        'Локальный снимок данных не подтвержден последней синхронизацией.'
       : null)
   )
 }
@@ -4532,7 +4533,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                       ? 'Плейбук Комьюнити-Интегратора: сценарии, события, поля и рабочие правила.'
                   : isLeadgenModule
                   ? 'Лидген УС: стадии, источники, UTM и менеджеры.'
-                  : 'Контур по продажам, делам, звонкам и когортам на базе локального Bitrix24 snapshot.'}
+                  : 'Контур по продажам, делам, звонкам и когортам на базе локального снимка Bitrix24.'}
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end">
@@ -4557,31 +4558,31 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                   <span>Личный кабинет</span>
                 </button>
               ) : null}
-              <span className="badge-chip badge-neutral">Desktop only</span>
+              <span className="badge-chip badge-neutral">Рабочий стол</span>
               <span className="badge-chip badge-green">
                 {isLeadgenModule
                   ? leadgenReportStatus === 'loading'
-                    ? 'Загрузка leadgen'
+                    ? 'Загрузка лидгена'
                     : leadgenReportStatus === 'error'
-                      ? 'Ошибка leadgen'
-                      : 'Leadgen API'
+                      ? 'Ошибка лидгена'
+                      : 'Лидген подключен'
                   : route === 'ontology'
                     ? activeRuntimeData.operationalStatus === 'loading'
-                      ? 'Загрузка ontology'
+                      ? 'Загрузка онтологии'
                       : activeRuntimeData.operationalStatus === 'error'
-                        ? 'Ошибка ontology'
-                        : 'Ontology live'
+                        ? 'Ошибка онтологии'
+                        : 'Онтология подключена'
                   : route === 'playbook'
-                    ? 'Плейбук local'
+                    ? 'Плейбук локально'
                   : activeScene.id === 'sales'
                   ? activeRuntimeData.salesDashboard
-                    ? 'Sales report live'
-                    : 'Sales loading'
+                    ? 'Отчет продаж подключен'
+                    : 'Загрузка продаж'
                   : activeRuntimeData.operationalStatus === 'loading'
-                    ? 'Загрузка live'
+                    ? 'Загрузка данных'
                     : activeRuntimeData.operationalStatus === 'error'
-                      ? 'Ошибка live'
-                      : 'Live API'}
+                      ? 'Ошибка данных'
+                      : 'Данные подключены'}
               </span>
             </div>
           </div>
@@ -4644,7 +4645,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                 setDraftComment(null)
               }}
             >
-              {commentMode ? 'Выйти из comment mode' : 'Comment mode'}
+              {commentMode ? 'Выйти из режима комментариев' : 'Режим комментариев'}
             </button>
           </nav>
 
@@ -4652,7 +4653,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
           <div className="sync-strip mt-3" aria-live="polite">
             <div className="sync-strip-grid">
               <div>
-                <div className="sync-strip-label">Snapshot</div>
+                <div className="sync-strip-label">Снимок данных</div>
                 <div className="sync-strip-value">
                   {snapshotStats
                     ? `${formatCount(snapshotStats.deals)} сделок`
@@ -4669,7 +4670,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                 ) : null}
               </div>
               <div>
-                <div className="sync-strip-label">Последний sync</div>
+                <div className="sync-strip-label">Последнее обновление</div>
                 <div className="sync-strip-value">
                   {lastSync ? formatDateTime(lastSync.finishedAt) : 'Еще не было'}
                 </div>
@@ -4679,7 +4680,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                         deals: lastSync.dealsSynced,
                         dealBreakdown: lastSync.dealBreakdown,
                       })}`
-                    : 'Локальный snapshot ожидает первого успешного запуска'}
+                    : 'Локальный снимок данных ожидает первого успешного запуска'}
                 </div>
               </div>
               <div>
@@ -4687,7 +4688,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                 <div className="sync-strip-value">
                   {syncProgress?.message ??
                     (syncSummary
-                      ? `${formatCount(syncSummary.changes.deals)} строк сделок из Bitrix за sync`
+                      ? `${formatCount(syncSummary.changes.deals)} строк сделок из Bitrix за обновление`
                       : 'Готов к запуску')}
                 </div>
                 <div className="sync-strip-meta">
@@ -5245,7 +5246,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
               <div className="flex flex-col gap-2">
                 {sceneComments.length === 0 ? (
                   <div className="panel p-4 text-sm text-slate-500">
-                    Включи `Comment mode` и кликни в любом месте страницы.
+                    Включи режим комментариев и кликни в любом месте страницы.
                   </div>
                 ) : (
                   sceneComments.map((comment, index) => (

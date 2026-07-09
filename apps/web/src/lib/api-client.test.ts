@@ -8,6 +8,96 @@ describe('apiClient', () => {
     vi.restoreAllMocks()
   })
 
+  it('marks incomplete source cohort trajectory payload as unavailable', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range: {
+          from: '2026-06-01T00:00:00.000Z',
+          to: '2026-06-30T23:59:59.999Z',
+        },
+        totalCreatedDeals: 1,
+        totalWonDeals: 0,
+        totalLostDeals: 0,
+        totalOpenDeals: 1,
+        winRate: 0,
+        averageDaysToWin: 0,
+        cohortMonths: [],
+        rows: [],
+        trajectoryStatus: 'available',
+        trajectoryUnavailableReason: null,
+        trajectory: {},
+        comparisons: [],
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const report = await apiClient.getSourceCohortConversionReport({
+      preset: 'custom',
+      from: '2026-06-01',
+      to: '2026-06-30',
+    })
+
+    expect(report.trajectoryStatus).toBe('unavailable')
+    expect(report.trajectoryUnavailableReason).toBe('Траектория конверсии передана не полностью.')
+    expect(report.trajectory).toBeUndefined()
+  })
+
+  it('does not expose trajectory when API marks it unavailable', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range: {
+          from: '2026-06-01T00:00:00.000Z',
+          to: '2026-06-30T23:59:59.999Z',
+        },
+        totalCreatedDeals: 1,
+        totalWonDeals: 0,
+        totalLostDeals: 0,
+        totalOpenDeals: 1,
+        winRate: 0,
+        averageDaysToWin: 0,
+        cohortMonths: [],
+        rows: [],
+        trajectoryStatus: 'unavailable',
+        trajectoryUnavailableReason: 'Траектория отключена для этого ответа.',
+        trajectory: {
+          range: {
+            from: '2026-06-01T00:00:00.000Z',
+            to: '2026-06-30T23:59:59.999Z',
+          },
+          totalDeals: 1,
+          stageNodes: [],
+          stageTransitions: [],
+          actionNodes: [],
+          factSteps: [],
+          conversionGaps: [],
+          speedSteps: [],
+          managerDiagnostics: [],
+          managerRows: [],
+          sourceRows: [],
+          customerRows: [],
+          overallSignals: {},
+          dataQuality: {},
+        },
+        comparisons: [],
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const report = await apiClient.getSourceCohortConversionReport({
+      preset: 'custom',
+      from: '2026-06-01',
+      to: '2026-06-30',
+    })
+
+    expect(report.trajectoryStatus).toBe('unavailable')
+    expect(report.trajectoryUnavailableReason).toBe('Траектория отключена для этого ответа.')
+    expect(report.trajectory).toBeUndefined()
+  })
+
   it('normalizes stage timeline interaction summaries while preserving legacy fallbacks', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

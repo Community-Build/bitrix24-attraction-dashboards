@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import App from '@/App'
@@ -163,6 +163,570 @@ vi.mock('@/lib/api-client', () => ({
           ],
         },
       ],
+      trajectoryStatus: 'available',
+      trajectoryUnavailableReason: null,
+      trajectory: {
+        range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
+        totalDeals: 77,
+        stageNodes: [
+          {
+            stageId: 'C10:NEW',
+            stageName: 'База входящая',
+            sortOrder: 10,
+            reachedDeals: 77,
+            reachedRate: 100,
+            medianDaysFromCreate: 0,
+            medianDaysOnStage: 1,
+          },
+          {
+            stageId: 'C10:MEETING',
+            stageName: 'Встреча-знакомство',
+            sortOrder: 40,
+            reachedDeals: 32,
+            reachedRate: 41.56,
+            medianDaysFromCreate: 3,
+            medianDaysOnStage: 7,
+          },
+          {
+            stageId: 'C10:CONTRACT',
+            stageName: 'Контракт (договор+счёт)',
+            sortOrder: 70,
+            reachedDeals: 8,
+            reachedRate: 10.39,
+            medianDaysFromCreate: 14,
+            medianDaysOnStage: 5,
+          },
+          {
+            stageId: 'C10:LOSE',
+            stageName: 'Корзина',
+            sortOrder: 90,
+            reachedDeals: 16,
+            reachedRate: 20.78,
+            medianDaysFromCreate: 9,
+            medianDaysOnStage: null,
+          },
+        ],
+        stageTransitions: [
+          {
+            id: 'stage-transition-START-C10:NEW',
+            fromStageId: null,
+            fromStageName: null,
+            fromSortOrder: null,
+            toStageId: 'C10:NEW',
+            toStageName: 'База входящая',
+            toSortOrder: 10,
+            deals: 77,
+            conversionRate: 100,
+          },
+          {
+            id: 'stage-transition-C10:NEW-C10:MEETING',
+            fromStageId: 'C10:NEW',
+            fromStageName: 'База входящая',
+            fromSortOrder: 10,
+            toStageId: 'C10:MEETING',
+            toStageName: 'Встреча-знакомство',
+            toSortOrder: 40,
+            deals: 32,
+            conversionRate: 41.56,
+          },
+          {
+            id: 'stage-transition-C10:MEETING-C10:CONTRACT',
+            fromStageId: 'C10:MEETING',
+            fromStageName: 'Встреча-знакомство',
+            fromSortOrder: 40,
+            toStageId: 'C10:CONTRACT',
+            toStageName: 'Контракт (договор+счёт)',
+            toSortOrder: 70,
+            deals: 8,
+            conversionRate: 25,
+          },
+        ],
+        actionNodes: [
+          {
+            actionKey: 'first_successful_call',
+            label: 'Первый успешный исходящий звонок',
+            reachedDeals: 45,
+            reachedRate: 58.44,
+            medianDaysFromCreate: 1,
+            evidence: 'Прямой доверенный исходящий звонок после создания сделки.',
+          },
+          {
+            actionKey: 'completed_meeting',
+            label: 'Факт проведенной встречи',
+            reachedDeals: 20,
+            reachedRate: 25.97,
+            medianDaysFromCreate: 5,
+            evidence: 'В CRM есть факт проведенной встречи.',
+          },
+          {
+            actionKey: 'attended_event',
+            label: 'Факт посещения события',
+            reachedDeals: 9,
+            reachedRate: 11.69,
+            medianDaysFromCreate: 8,
+            evidence: 'Есть фактическое посещение мероприятия.',
+          },
+        ],
+        factSteps: [
+          {
+            stepKey: 'created',
+            label: 'Создано',
+            deals: 77,
+            rateFromCohort: 100,
+            rateFromPrevious: 100,
+            medianDaysFromCreate: 0,
+            evidence: 'Сделка создана в выбранной когорте.',
+          },
+          {
+            stepKey: 'first_successful_call',
+            label: 'Первый успешный звонок',
+            deals: 45,
+            rateFromCohort: 58.44,
+            rateFromPrevious: 58.44,
+            medianDaysFromCreate: 1,
+            evidence: 'Прямой исходящий звонок с соединением и разговором дольше 30 секунд.',
+          },
+          {
+            stepKey: 'meeting_stage',
+            label: 'Этап встречи в CRM',
+            deals: 32,
+            rateFromCohort: 41.56,
+            rateFromPrevious: 71.11,
+            medianDaysFromCreate: 3,
+            evidence: 'Сделка дошла до CRM-этапа встречи.',
+          },
+          {
+            stepKey: 'completed_meeting',
+            label: 'Факт встречи',
+            deals: 20,
+            rateFromCohort: 25.97,
+            rateFromPrevious: 62.5,
+            medianDaysFromCreate: 5,
+            evidence: 'В CRM есть факт проведенной встречи.',
+          },
+          {
+            stepKey: 'attended_event',
+            label: 'Посещение события',
+            deals: 9,
+            rateFromCohort: 11.69,
+            rateFromPrevious: 45,
+            medianDaysFromCreate: 8,
+            evidence: 'Есть фактическое посещение мероприятия.',
+          },
+          {
+            stepKey: 'contract_stage',
+            label: 'Контракт',
+            deals: 8,
+            rateFromCohort: 10.39,
+            rateFromPrevious: 88.89,
+            medianDaysFromCreate: 14,
+            evidence: 'Сделка дошла до CRM-этапа контракта.',
+          },
+          {
+            stepKey: 'won',
+            label: 'Продажа',
+            deals: 1,
+            rateFromCohort: 1.3,
+            rateFromPrevious: 12.5,
+            medianDaysFromCreate: 21,
+            evidence: 'Сделка дошла до успешного финального статуса.',
+          },
+        ],
+        conversionGaps: [
+          {
+            gapKey: 'no_successful_call',
+            label: 'Нет успешного звонка',
+            deals: 32,
+            rate: 41.56,
+            denominatorStepKey: 'created',
+            evidence: 'Нет прямого успешного исходящего звонка дольше 30 секунд.',
+            managementQuestion: 'Почему не довели до успешного дозвона?',
+          },
+          {
+            gapKey: 'successful_call_without_meeting_stage',
+            label: 'Звонок есть, этапа встречи нет',
+            deals: 13,
+            rate: 28.89,
+            denominatorStepKey: 'first_successful_call',
+            evidence: 'Успешный звонок есть, но этап встречи не достигнут.',
+            managementQuestion: 'Почему после дозвона не назначили встречу?',
+          },
+          {
+            gapKey: 'meeting_stage_without_fact',
+            label: 'Этап встречи без факта встречи',
+            deals: 12,
+            rate: 37.5,
+            denominatorStepKey: 'meeting_stage',
+            evidence: 'Этап встречи достигнут, но факта проведенной встречи нет.',
+            managementQuestion: 'Почему этап встречи не подтвержден фактом?',
+          },
+          {
+            gapKey: 'completed_meeting_without_next_stage',
+            label: 'Факт встречи без следующего этапа',
+            deals: 6,
+            rate: 30,
+            denominatorStepKey: 'completed_meeting',
+            evidence: 'Факт встречи есть, но следующего перехода по CRM-стадиям нет.',
+            managementQuestion: 'Почему после встречи нет следующего шага?',
+          },
+          {
+            gapKey: 'attended_event_without_contract',
+            label: 'Событие без контракта',
+            deals: 2,
+            rate: 22.22,
+            denominatorStepKey: 'attended_event',
+            evidence: 'Посещение события есть, но этап контракта не достигнут.',
+            managementQuestion: 'Почему после события не дошли до контракта?',
+          },
+          {
+            gapKey: 'contract_without_win',
+            label: 'Контракт без продажи',
+            deals: 7,
+            rate: 87.5,
+            denominatorStepKey: 'contract_stage',
+            evidence: 'Этап контракта достигнут, но продажи нет.',
+            managementQuestion: 'Что блокирует закрытие контракта?',
+          },
+        ],
+        speedSteps: [
+          {
+            stepKey: 'first_successful_call',
+            label: 'Первый успешный звонок',
+            totalDeals: 77,
+            medianDays: 1,
+            slaDays: 3,
+            slowDeals: 4,
+            slowRate: 5.19,
+            buckets: [
+              { bucketKey: '0-1', label: '0-1 дн.', minDays: 0, maxDays: 1, deals: 28, rate: 36.36 },
+              { bucketKey: '1-3', label: '1-3 дн.', minDays: 1, maxDays: 3, deals: 13, rate: 16.88 },
+              { bucketKey: '3-7', label: '3-7 дн.', minDays: 3, maxDays: 7, deals: 4, rate: 5.19 },
+              { bucketKey: '7+', label: '7+ дн.', minDays: 7, maxDays: null, deals: 0, rate: 0 },
+              { bucketKey: 'no_fact', label: 'Нет факта', minDays: null, maxDays: null, deals: 32, rate: 41.56 },
+            ],
+          },
+          {
+            stepKey: 'completed_meeting',
+            label: 'Факт встречи',
+            totalDeals: 77,
+            medianDays: 5,
+            slaDays: 7,
+            slowDeals: 3,
+            slowRate: 3.9,
+            buckets: [
+              { bucketKey: '0-3', label: '0-3 дн.', minDays: 0, maxDays: 3, deals: 6, rate: 7.79 },
+              { bucketKey: '3-7', label: '3-7 дн.', minDays: 3, maxDays: 7, deals: 11, rate: 14.29 },
+              { bucketKey: '7-14', label: '7-14 дн.', minDays: 7, maxDays: 14, deals: 3, rate: 3.9 },
+              { bucketKey: '14+', label: '14+ дн.', minDays: 14, maxDays: null, deals: 0, rate: 0 },
+              { bucketKey: 'no_fact', label: 'Нет факта', minDays: null, maxDays: null, deals: 57, rate: 74.03 },
+            ],
+          },
+          {
+            stepKey: 'attended_event',
+            label: 'Посещение события',
+            totalDeals: 77,
+            medianDays: 8,
+            slaDays: 14,
+            slowDeals: 1,
+            slowRate: 1.3,
+            buckets: [
+              { bucketKey: '0-7', label: '0-7 дн.', minDays: 0, maxDays: 7, deals: 3, rate: 3.9 },
+              { bucketKey: '7-14', label: '7-14 дн.', minDays: 7, maxDays: 14, deals: 5, rate: 6.49 },
+              { bucketKey: '14-30', label: '14-30 дн.', minDays: 14, maxDays: 30, deals: 1, rate: 1.3 },
+              { bucketKey: '30+', label: '30+ дн.', minDays: 30, maxDays: null, deals: 0, rate: 0 },
+              { bucketKey: 'no_fact', label: 'Нет факта', minDays: null, maxDays: null, deals: 68, rate: 88.31 },
+            ],
+          },
+          {
+            stepKey: 'contract_stage',
+            label: 'Контракт',
+            totalDeals: 77,
+            medianDays: 14,
+            slaDays: 14,
+            slowDeals: 2,
+            slowRate: 2.6,
+            buckets: [
+              { bucketKey: '0-7', label: '0-7 дн.', minDays: 0, maxDays: 7, deals: 2, rate: 2.6 },
+              { bucketKey: '7-14', label: '7-14 дн.', minDays: 7, maxDays: 14, deals: 4, rate: 5.19 },
+              { bucketKey: '14-30', label: '14-30 дн.', minDays: 14, maxDays: 30, deals: 2, rate: 2.6 },
+              { bucketKey: '30+', label: '30+ дн.', minDays: 30, maxDays: null, deals: 0, rate: 0 },
+              { bucketKey: 'no_fact', label: 'Нет факта', minDays: null, maxDays: null, deals: 69, rate: 89.61 },
+            ],
+          },
+          {
+            stepKey: 'post_meeting_next_stage',
+            label: 'После встречи до следующего этапа',
+            totalDeals: 20,
+            medianDays: 3,
+            slaDays: 7,
+            slowDeals: 1,
+            slowRate: 5,
+            buckets: [
+              { bucketKey: '0-3', label: '0-3 дн.', minDays: 0, maxDays: 3, deals: 7, rate: 35 },
+              { bucketKey: '3-7', label: '3-7 дн.', minDays: 3, maxDays: 7, deals: 6, rate: 30 },
+              { bucketKey: '7-14', label: '7-14 дн.', minDays: 7, maxDays: 14, deals: 1, rate: 5 },
+              { bucketKey: '14+', label: '14+ дн.', minDays: 14, maxDays: null, deals: 0, rate: 0 },
+              { bucketKey: 'no_fact', label: 'Нет факта', minDays: null, maxDays: null, deals: 6, rate: 30 },
+            ],
+          },
+        ],
+        overallSignals: {
+          noSuccessfulCallDeals: 32,
+          firstSuccessfulCallDeals: 45,
+          firstSuccessfulCallFallbackDeals: 3,
+          successfulCallWithoutMeetingStageDeals: 13,
+          meetingStageDeals: 32,
+          meetingStageWithoutFactDeals: 12,
+          completedMeetingDeals: 20,
+          completedMeetingWithoutNextStageDeals: 6,
+          attendedEventDeals: 12,
+          attendedEventWithoutContractDeals: 2,
+          contractWithoutWinDeals: 7,
+          slowFirstSuccessfulCallDeals: 4,
+          slowCompletedMeetingDeals: 3,
+          slowAttendedEventDeals: 1,
+          slowContractStageDeals: 2,
+          staleAfterCompletedMeetingDeals: 2,
+          staleOpenContractStageDeals: 1,
+          repeatAttendedEventDeals: 3,
+          repeatAttendedEventVisits: 4,
+          contractStageDeals: 8,
+          contractStageRate: 10.39,
+          medianDaysToContractStage: 14,
+          medianDaysOnContractStage: 5,
+          wonDeals: 1,
+          lostDeals: 22,
+          openDeals: 54,
+        },
+        managerDiagnostics: [
+          {
+            managerId: '501',
+            managerName: 'Анастасия Кузнецова',
+            totalDeals: 20,
+            status: 'bottleneck',
+            headline:
+              'Анастасия Кузнецова: главное узкое место - CRM-встреча без факта.',
+            strengths: [],
+            bottlenecks: [
+              {
+                signalKey: 'meeting_stage_without_fact',
+                label: 'CRM-встреча без факта',
+                value: 60,
+                benchmarkValue: 37.5,
+                delta: 22.5,
+                unit: '%',
+                severity: 'warning',
+              },
+            ],
+            recommendedFocus:
+              'Проверить назначение встреч: этап встречи есть, факта встречи нет.',
+            sampleWarning: null,
+          },
+        ],
+        managerRows: [
+          {
+            key: '501',
+            label: 'Анастасия Кузнецова',
+            managerId: '501',
+            managerName: 'Анастасия Кузнецова',
+            totalDeals: 20,
+            firstSuccessfulCallDeals: 12,
+            firstSuccessfulCallFallbackDeals: 1,
+            firstSuccessfulCallRate: 60,
+            medianDaysToFirstSuccessfulCall: 1,
+            meetingStageDeals: 10,
+            meetingStageRate: 50,
+            completedMeetingDeals: 4,
+            completedMeetingRate: 20,
+            medianDaysToCompletedMeeting: 5,
+            attendedEventDeals: 2,
+            attendedEventRate: 10,
+            medianDaysToAttendedEvent: 8,
+            wonDeals: 1,
+            wonRate: 5,
+            lostDeals: 8,
+            openDeals: 11,
+            noSuccessfulCallDeals: 8,
+            successfulCallWithoutMeetingStageDeals: 2,
+            meetingStageWithoutFactDeals: 6,
+            completedMeetingWithoutNextStageDeals: 2,
+            attendedEventWithoutContractDeals: 1,
+            slowFirstSuccessfulCallDeals: 2,
+            slowCompletedMeetingDeals: 1,
+            slowAttendedEventDeals: 1,
+            slowContractStageDeals: 1,
+            staleAfterCompletedMeetingDeals: 1,
+            staleOpenContractStageDeals: 0,
+            repeatAttendedEventDeals: 1,
+            repeatAttendedEventVisits: 1,
+            contractStageDeals: 2,
+            contractStageRate: 10,
+            contractWithoutWinDeals: 1,
+            medianDaysToContractStage: 14,
+            medianDaysOnContractStage: 5,
+            dataQualityStatus: 'limited',
+            lossShape: {
+              dominantShapeKey: 'meeting_stage_without_fact',
+              dominantShapeLabel: 'Этап встречи без факта',
+              dominantDeals: 6,
+              dominantRate: 30,
+              terminalLossDeals: 8,
+              openWipDeals: 11,
+              reasons: [
+                {
+                  shapeKey: 'meeting_stage_without_fact',
+                  label: 'Этап встречи без факта',
+                  deals: 6,
+                  rate: 30,
+                  evidence: 'Этап встречи достигнут, но факта проведенной встречи нет.',
+                  recommendedQuestion: 'Почему этап встречи не подтвержден фактом?',
+                },
+              ],
+            },
+          },
+        ],
+        sourceRows: [
+          {
+            key: 'LIDGEN',
+            label: 'Лидген УС',
+            totalDeals: 38,
+            firstSuccessfulCallDeals: 24,
+            firstSuccessfulCallFallbackDeals: 2,
+            firstSuccessfulCallRate: 63.16,
+            medianDaysToFirstSuccessfulCall: 1,
+            meetingStageDeals: 18,
+            meetingStageRate: 47.37,
+            completedMeetingDeals: 9,
+            completedMeetingRate: 23.68,
+            medianDaysToCompletedMeeting: 5,
+            attendedEventDeals: 5,
+            attendedEventRate: 13.16,
+            medianDaysToAttendedEvent: 8,
+            wonDeals: 1,
+            wonRate: 2.63,
+            lostDeals: 16,
+            openDeals: 21,
+            noSuccessfulCallDeals: 14,
+            successfulCallWithoutMeetingStageDeals: 6,
+            meetingStageWithoutFactDeals: 9,
+            completedMeetingWithoutNextStageDeals: 4,
+            attendedEventWithoutContractDeals: 2,
+            slowFirstSuccessfulCallDeals: 3,
+            slowCompletedMeetingDeals: 2,
+            slowAttendedEventDeals: 1,
+            slowContractStageDeals: 1,
+            staleAfterCompletedMeetingDeals: 2,
+            staleOpenContractStageDeals: 1,
+            repeatAttendedEventDeals: 2,
+            repeatAttendedEventVisits: 3,
+            contractStageDeals: 4,
+            contractStageRate: 10.53,
+            contractWithoutWinDeals: 3,
+            medianDaysToContractStage: 14,
+            medianDaysOnContractStage: 5,
+            dataQualityStatus: 'reliable',
+            lossShape: {
+              dominantShapeKey: 'terminal_loss',
+              dominantShapeLabel: 'Терминальный проигрыш',
+              dominantDeals: 16,
+              dominantRate: 42.11,
+              terminalLossDeals: 16,
+              openWipDeals: 21,
+              reasons: [
+                {
+                  shapeKey: 'terminal_loss',
+                  label: 'Терминальный проигрыш',
+                  deals: 16,
+                  rate: 42.11,
+                  evidence: 'Сделка находится в проигрышном исходе.',
+                  recommendedQuestion: 'Какая причина проигрыша повторяется?',
+                },
+                {
+                  shapeKey: 'meeting_stage_without_fact',
+                  label: 'Этап встречи без факта',
+                  deals: 9,
+                  rate: 23.68,
+                  evidence: 'Этап встречи достигнут, но факта проведенной встречи нет.',
+                  recommendedQuestion: 'Почему этап встречи не подтвержден фактом?',
+                },
+              ],
+            },
+          },
+        ],
+        customerRows: [
+          {
+            key: 'ClubFirst Future',
+            label: 'ClubFirst Future',
+            totalDeals: 38,
+            firstSuccessfulCallDeals: 24,
+            firstSuccessfulCallFallbackDeals: 2,
+            firstSuccessfulCallRate: 63.16,
+            medianDaysToFirstSuccessfulCall: 1,
+            meetingStageDeals: 18,
+            meetingStageRate: 47.37,
+            completedMeetingDeals: 9,
+            completedMeetingRate: 23.68,
+            medianDaysToCompletedMeeting: 5,
+            attendedEventDeals: 5,
+            attendedEventRate: 13.16,
+            medianDaysToAttendedEvent: 8,
+            wonDeals: 1,
+            wonRate: 2.63,
+            lostDeals: 16,
+            openDeals: 21,
+            noSuccessfulCallDeals: 14,
+            successfulCallWithoutMeetingStageDeals: 6,
+            meetingStageWithoutFactDeals: 9,
+            completedMeetingWithoutNextStageDeals: 4,
+            attendedEventWithoutContractDeals: 2,
+            slowFirstSuccessfulCallDeals: 3,
+            slowCompletedMeetingDeals: 2,
+            slowAttendedEventDeals: 1,
+            slowContractStageDeals: 1,
+            staleAfterCompletedMeetingDeals: 2,
+            staleOpenContractStageDeals: 1,
+            repeatAttendedEventDeals: 2,
+            repeatAttendedEventVisits: 3,
+            contractStageDeals: 4,
+            contractStageRate: 10.53,
+            contractWithoutWinDeals: 3,
+            medianDaysToContractStage: 14,
+            medianDaysOnContractStage: 5,
+            dataQualityStatus: 'reliable',
+            lossShape: {
+              dominantShapeKey: 'contract_without_win',
+              dominantShapeLabel: 'Контракт без продажи',
+              dominantDeals: 3,
+              dominantRate: 7.89,
+              terminalLossDeals: 16,
+              openWipDeals: 21,
+              reasons: [
+                {
+                  shapeKey: 'contract_without_win',
+                  label: 'Контракт без продажи',
+                  deals: 3,
+                  rate: 7.89,
+                  evidence: 'Этап контракта достигнут, но продажи нет.',
+                  recommendedQuestion: 'Что блокирует закрытие контракта?',
+                },
+              ],
+            },
+          },
+        ],
+        dataQuality: {
+          totalDeals: 77,
+          stageHistoryDeals: 70,
+          stageHistoryCoverageRate: 90.91,
+          touchpointDeals: 55,
+          touchpointCoverageRate: 71.43,
+          eventVisitDeals: 12,
+          eventVisitCoverageRate: 15.58,
+          businessClubDeals: 55,
+          businessClubCoverageRate: 71.43,
+          businessClubMissingDeals: 22,
+          warnings: ['Разрезы с N < 10 нельзя использовать для жесткого ранжирования.'],
+        },
+      },
       comparisons: [],
     })),
     getOperationalDashboardReport: vi.fn(async () => ({
@@ -1470,7 +2034,7 @@ describe('App', () => {
       await screen.findByRole('heading', { name: /^pdca-дашборд метрик$/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /^comment mode$/i }),
+      screen.getByRole('button', { name: /^режим комментариев$/i }),
     ).toBeInTheDocument()
     expect(
       screen.getByText(/фильтры периода и среза/i),
@@ -1568,12 +2132,12 @@ describe('App', () => {
     await waitForDashboardShell()
 
     fireEvent.click(
-      await screen.findByRole('button', { name: /конверсия источников/i }),
+      await screen.findByRole('button', { name: /^конверсии$/i }),
     )
 
     await waitFor(() =>
       expect(
-        screen.getByRole('heading', { name: /конверсия источников/i }),
+        screen.getByRole('heading', { name: /^конверсии$/i }),
       ).toBeInTheDocument(),
     )
     await waitFor(() =>
@@ -1601,7 +2165,82 @@ describe('App', () => {
     expect(screen.getAllByText(/ClubFirst Future/).length).toBeGreaterThan(0)
     expect(screen.getByText(/Встреча-знакомство 6/i)).toBeInTheDocument()
     expect(screen.getAllByText(/Без таргет-группы/i).length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('heading', { name: /конверсии по этапам и фактам/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /диагностика переходов/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/фактическая цепочка/i).length).toBeGreaterThan(0)
+    expect(screen.getByText(/где разрывается движение/i)).toBeInTheDocument()
+    expect(screen.getByText(/этап встречи в CRM/i)).toBeInTheDocument()
+    expect(screen.getByText(/нет успешного звонка/i)).toBeInTheDocument()
+    expect(screen.getByText(/почему после дозвона не назначили встречу/i)).toBeInTheDocument()
+    expect(screen.queryByText(/successful_call_without_meeting_stage/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /сроки и зависания/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/нет факта/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/норма 3 дн/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/медленно/i).length).toBeGreaterThan(0)
+    expect(screen.queryByText(/no_fact/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /траектория участника/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/первый успешный звонок/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/повторные мероприятия/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/контракт/i).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /сроки на этапах/i })).toBeInTheDocument()
+    expect(screen.getAllByText(/CRM-встреча без факта/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/звонок позже нормы/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/зависли на контракте/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/после встречи без движения/i).length).toBeGreaterThan(0)
+    expect(screen.getByRole('heading', { name: /диагностика менеджеров/i })).toBeInTheDocument()
+    expect(screen.getByText(/оценка по текущему ответственному сделки/i)).toBeInTheDocument()
+    expect(screen.getByText(/Проверить назначение встреч/i)).toBeInTheDocument()
+    expect(screen.queryByText(/повторные события/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/meeting_stage_without_fact/i)).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Анастасия Кузнецова/i).length).toBeGreaterThan(0)
+
+    const trajectoryBlock = document.querySelector(
+      '[data-comment-block-id="attraction-source-cohort-trajectory-conversions"]',
+    )
+    expect(trajectoryBlock).toBeInTheDocument()
+    expect(
+      within(trajectoryBlock as HTMLElement).getByRole('columnheader', { name: 'Проигрыш' }),
+    ).toBeInTheDocument()
+    expect(
+      within(trajectoryBlock as HTMLElement).queryByRole('columnheader', { name: 'Корзина' }),
+    ).not.toBeInTheDocument()
+
+    const successfulCallHintButton = within(trajectoryBlock as HTMLElement).getAllByRole('button', {
+      name: /Считается первый прямой доверенный исходящий звонок/i,
+    })[0]
+    expect(successfulCallHintButton).toBeDefined()
+    const successfulCallHintButtonElement = successfulCallHintButton as HTMLElement
+    fireEvent.focus(successfulCallHintButtonElement)
+    const successfulCallTooltip = screen.getByRole('tooltip')
+    expect(successfulCallTooltip).toHaveTextContent(/Короткие соединения и неуспешные попытки/i)
+    expect(successfulCallTooltip).toHaveClass('fixed')
+    expect(trajectoryBlock as HTMLElement).not.toContainElement(successfulCallTooltip)
+    fireEvent.blur(successfulCallHintButtonElement)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    fireEvent.click(
+      within(trajectoryBlock as HTMLElement).getByRole('button', { name: 'Источники' }),
+    )
+    expect(
+      screen.getByRole('heading', { name: /какие источники где теряют движение/i }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('Лидген УС').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/профиль потерь/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/терминальный проигрыш/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/какая причина проигрыша повторяется/i).length).toBeGreaterThan(0)
     expect(screen.queryByText(/Егоров Андрей/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/terminal_loss/i)).not.toBeInTheDocument()
+
+    fireEvent.click(
+      within(trajectoryBlock as HTMLElement).getByRole('button', { name: 'Заказчики' }),
+    )
+    expect(
+      screen.getByRole('heading', { name: /какие заказчики как проходят траекторию/i }),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText(/контракт без продажи/i).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/что блокирует закрытие контракта/i).length).toBeGreaterThan(0)
 
     fireEvent.click(screen.getByRole('button', { name: /раскрыть строку/i }))
     expect(screen.getByText(/Егоров Андрей/i)).toBeInTheDocument()
@@ -1744,6 +2383,8 @@ describe('App', () => {
         },
       ],
       comparisons: [],
+      trajectoryStatus: 'unavailable',
+      trajectoryUnavailableReason: 'Траектория конверсии не рассчитана для этого ответа.',
     }
     vi.mocked(apiClient.getSourceCohortConversionReport).mockResolvedValue(loadedReport)
 
@@ -1751,7 +2392,7 @@ describe('App', () => {
     await waitForDashboardShell()
 
     fireEvent.click(
-      await screen.findByRole('button', { name: /конверсия источников/i }),
+      await screen.findByRole('button', { name: /^конверсии$/i }),
     )
 
     expect(await screen.findByText('Лидген УС')).toBeInTheDocument()
@@ -1773,7 +2414,7 @@ describe('App', () => {
   })
 
   it('renders an empty state for a source cohort month without rows', async () => {
-    const emptySourceCohortReport = {
+    const emptySourceCohortReport: SourceCohortConversionReport = {
       range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
       totalCreatedDeals: 0,
       totalWonDeals: 0,
@@ -1785,6 +2426,8 @@ describe('App', () => {
         { cohortMonth: '2026-05', cohortLabel: 'Май 2026', totalCreatedDeals: 0 },
       ],
       rows: [],
+      trajectoryStatus: 'unavailable',
+      trajectoryUnavailableReason: 'В выбранной когорте нет сделок.',
       comparisons: [],
     }
     vi.mocked(apiClient.getSourceCohortConversionReport)
@@ -1795,12 +2438,12 @@ describe('App', () => {
     await waitForDashboardShell()
 
     fireEvent.click(
-      await screen.findByRole('button', { name: /конверсия источников/i }),
+      await screen.findByRole('button', { name: /^конверсии$/i }),
     )
 
     await waitFor(() =>
       expect(
-        screen.getByRole('heading', { name: /конверсия источников/i }),
+        screen.getByRole('heading', { name: /^конверсии$/i }),
       ).toBeInTheDocument(),
     )
     await waitFor(() =>

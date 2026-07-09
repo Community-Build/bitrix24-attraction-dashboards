@@ -1593,7 +1593,7 @@ describe('ProtoApp', () => {
       await screen.findByRole('heading', { name: /^pdca-дашборд метрик$/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: /^comment mode$/i }),
+      screen.getByRole('button', { name: /^режим комментариев$/i }),
     ).toBeInTheDocument()
     expect(screen.getByText(/фильтры периода и среза/i)).toBeInTheDocument()
   })
@@ -2502,7 +2502,7 @@ describe('ProtoApp', () => {
 
     expect(window.location.pathname).toBe('/')
     await openSalesScene()
-    expect(await screen.findByText(/sales report live/i)).toBeInTheDocument()
+    expect(await screen.findByText(/отчет продаж подключен/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^настройки$/i })).not.toBeInTheDocument()
     unmount()
 
@@ -3652,7 +3652,7 @@ describe('ProtoApp', () => {
     expect(await screen.findByText(/4\s*140 сделок/i)).toBeInTheDocument()
     expect(screen.getByText(/306 активностей/i)).toBeInTheDocument()
     expect(screen.getByText(/119 звонков/i)).toBeInTheDocument()
-    expect(screen.getByText(/^Последний sync$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^Последнее обновление$/i)).toBeInTheDocument()
     expect(screen.getByText(formatExpectedDateTime('2026-05-19T20:18:39.000Z'))).toBeInTheDocument()
     expect(screen.getByText(/delta · новых 300 · обновлено 30 · закрыто 3/i)).toBeInTheDocument()
     expect(apiClient.getMeta).toHaveBeenCalledWith('leadgen')
@@ -6078,7 +6078,7 @@ describe('ProtoApp', () => {
   it('creates and persists a comment pin at the clicked coordinate', async () => {
     render(<ProtoApp />)
 
-    await userEvent.click(screen.getByRole('button', { name: /^comment mode$/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^режим комментариев$/i }))
 
     const shell = screen.getByRole('presentation')
     vi.spyOn(shell, 'getBoundingClientRect').mockReturnValue({
@@ -6166,7 +6166,7 @@ describe('ProtoApp', () => {
     render(<ProtoApp />)
 
     await userEvent.click(await screen.findByRole('button', { name: /отчет активности/i }))
-    await userEvent.click(screen.getByRole('button', { name: /^comment mode$/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^режим комментариев$/i }))
 
     const shell = screen.getByRole('presentation')
     vi.spyOn(shell, 'getBoundingClientRect').mockReturnValue({
@@ -6242,7 +6242,7 @@ describe('ProtoApp', () => {
 
     render(<ProtoApp />)
 
-    await userEvent.click(screen.getByRole('button', { name: /^comment mode$/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^режим комментариев$/i }))
 
     const shell = screen.getByRole('presentation')
     vi.spyOn(shell, 'getBoundingClientRect').mockReturnValue({
@@ -6285,7 +6285,7 @@ describe('ProtoApp', () => {
   it('allows comment pins on the filter panel chrome without blocking form controls', async () => {
     render(<ProtoApp />)
 
-    await userEvent.click(screen.getByRole('button', { name: /^comment mode$/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^режим комментариев$/i }))
 
     const shell = screen.getByRole('presentation')
     vi.spyOn(shell, 'getBoundingClientRect').mockReturnValue({
@@ -6609,10 +6609,10 @@ describe('ProtoApp', () => {
           {
             code: 'MISSING_COVERAGE',
             severity: 'blocking',
-            message: 'Нет подтвержденного покрытия локального snapshot.',
+            message: 'Локальный снимок данных не подтвержден последней синхронизацией.',
           },
         ],
-        warnings: ['Нет подтвержденного покрытия локального snapshot.'],
+        warnings: ['Локальный снимок данных не подтвержден последней синхронизацией.'],
       },
     })
     vi.mocked(apiClient.getDashboard).mockResolvedValueOnce({
@@ -6649,7 +6649,11 @@ describe('ProtoApp', () => {
     await openSalesScene()
 
     expect(
-      (await screen.findAllByText('Нет подтвержденного покрытия локального snapshot.')).length,
+      (
+        await screen.findAllByText(
+          'Локальный снимок данных не подтвержден последней синхронизацией.',
+        )
+      ).length,
     ).toBeGreaterThan(0)
     expect(await screen.findByText('Потапова Мария')).toBeInTheDocument()
     expect(within(screen.getByLabelText('KPI продаж')).getAllByText('1').length).toBeGreaterThan(0)
@@ -7058,7 +7062,7 @@ describe('ProtoApp', () => {
       nextStepCount: 0,
       nextStepRate: null,
       warnings: [
-        'Локальный snapshot конверсионных мероприятий не загружен: проверьте доступ webhook к smart-process "Посещения мероприятий" и запустите sync.',
+        'Снимок конверсионных мероприятий не загружен: проверьте доступ вебхука к smart-process «Посещения мероприятий» и запустите обновление данных.',
       ],
       rows: [],
       comparisons: [],
@@ -7069,10 +7073,10 @@ describe('ProtoApp', () => {
     await userEvent.click(await screen.findByRole('button', { name: /отчет активности/i }))
 
     expect(
-      screen.getAllByText(/snapshot конверсионных мероприятий не загружен/i).length,
+      screen.getAllByText(/снимок конверсионных мероприятий не загружен/i).length,
     ).toBeGreaterThan(0)
     expect(
-      screen.getAllByText(/проверьте доступ webhook к smart-process/i).length,
+      screen.getAllByText(/проверьте доступ вебхука к smart-process/i).length,
     ).toBeGreaterThan(0)
     expect(
       screen.queryByText(/конверсионные мероприятия не найдены/i),
