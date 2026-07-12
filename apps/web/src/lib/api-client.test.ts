@@ -44,6 +44,96 @@ describe('apiClient', () => {
     expect(report.trajectory).toBeUndefined()
   })
 
+  it('normalizes the conversion journey without making it part of the legacy minimum payload', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range: {
+          from: '2026-06-01T00:00:00.000Z',
+          to: '2026-06-30T23:59:59.999Z',
+        },
+        totalCreatedDeals: 1,
+        totalWonDeals: 0,
+        totalLostDeals: 0,
+        totalOpenDeals: 1,
+        winRate: 0,
+        averageDaysToWin: 0,
+        cohortMonths: [],
+        rows: [],
+        trajectoryStatus: 'available',
+        trajectoryUnavailableReason: null,
+        trajectory: {
+          range: {
+            from: '2026-06-01T00:00:00.000Z',
+            to: '2026-06-30T23:59:59.999Z',
+          },
+          totalDeals: 1,
+          conversionJourney: {
+            coreSteps: [
+              {
+                stepKey: 'first_call',
+                label: 'Первый звонок',
+                deals: 1,
+                rateFromCohort: 100,
+                transitionDeals: 1,
+                rateFromPrevious: 100,
+                dropoffDeals: 0,
+                medianDaysFromCreate: 0.5,
+                medianDaysFromPrevious: 0.5,
+                evidence: 'Первая исходящая попытка.',
+              },
+            ],
+            eventSteps: [],
+            eventDepthRows: [
+              {
+                depthKey: '0',
+                label: 'Без события',
+                deals: 1,
+                rateFromCompletedMeeting: 100,
+                contractDeals: 0,
+                contractRate: 0,
+                transferredDeals: 0,
+                transferredRate: 0,
+                medianDaysToContract: null,
+              },
+            ],
+          },
+          stageNodes: [],
+          stageTransitions: [],
+          actionNodes: [],
+          factSteps: [],
+          conversionGaps: [],
+          speedSteps: [],
+          managerDiagnostics: [],
+          managerRows: [],
+          sourceRows: [],
+          customerRows: [],
+          overallSignals: {},
+          dataQuality: {},
+        },
+        comparisons: [],
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const report = await apiClient.getSourceCohortConversionReport({
+      preset: 'custom',
+      from: '2026-06-01',
+      to: '2026-06-30',
+    })
+
+    expect(report.trajectoryStatus).toBe('available')
+    expect(report.trajectory?.conversionJourney?.coreSteps[0]).toEqual(
+      expect.objectContaining({
+        stepKey: 'first_call',
+        deals: 1,
+        medianDaysFromPrevious: 0.5,
+      }),
+    )
+    expect(report.trajectory?.conversionJourney?.eventDepthRows[0]?.depthKey).toBe('0')
+  })
+
   it('does not expose trajectory when API marks it unavailable', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

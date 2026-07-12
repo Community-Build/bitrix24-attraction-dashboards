@@ -193,7 +193,231 @@ function successfulCall(
   });
 }
 
+function eventVisit(
+  input: Partial<EventVisitFactSnapshot> &
+    Pick<EventVisitFactSnapshot, "visitId" | "dealId" | "eventId" | "eventDate">
+): EventVisitFactSnapshot {
+  return {
+    contactId: null,
+    leadId: null,
+    managerId: "501",
+    sourceId: "LIDGEN",
+    currentStageId: "DT:SUCCESS",
+    currentStageName: "Посетил",
+    invitedAt: null,
+    confirmedAt: null,
+    attendedAt: input.eventDate,
+    refusedAt: null,
+    finalStatus: "attended",
+    stageIdAtEvent: "C10:DEMO",
+    linkConfidence: "high",
+    linkReason: "event_visit_deal",
+    payloadJson: null,
+    ...input
+  };
+}
+
 describe("buildSourceCohortTrajectoryReport", () => {
+  it("builds the core conversion path and keeps event depth separate from contract conversion", () => {
+    const report = buildSourceCohortTrajectoryReport({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      now: new Date("2026-06-30T23:59:59.999Z"),
+      wonStageIds: ["C10:WON"],
+      deals: [
+        deal({
+          id: "three-events-won",
+          stageId: "C10:WON",
+          stageSemanticId: "S",
+          dateClosed: "2026-06-08T09:00:00.000Z"
+        }),
+        deal({ id: "first-call-only" }),
+        deal({ id: "contract-no-event", stageId: "C10:CONTRACT" })
+      ],
+      stageCatalog,
+      dealStageFacts: [
+        stageFact({
+          factId: "won-base",
+          dealId: "three-events-won",
+          stageId: "C10:NEW",
+          enteredAt: "2026-06-01T09:00:00.000Z",
+          leftAt: "2026-06-07T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "won-contract",
+          dealId: "three-events-won",
+          stageId: "C10:CONTRACT",
+          enteredAt: "2026-06-07T09:00:00.000Z",
+          leftAt: "2026-06-08T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "won-transferred",
+          dealId: "three-events-won",
+          stageId: "C10:WON",
+          enteredAt: "2026-06-08T09:00:00.000Z",
+          stageSemanticId: "S"
+        }),
+        stageFact({
+          factId: "contract-base",
+          dealId: "contract-no-event",
+          stageId: "C10:NEW",
+          enteredAt: "2026-06-01T09:00:00.000Z",
+          leftAt: "2026-06-04T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "contract-stage",
+          dealId: "contract-no-event",
+          stageId: "C10:CONTRACT",
+          enteredAt: "2026-06-04T09:00:00.000Z"
+        })
+      ],
+      dealTouchpointFacts: [
+        touchpoint({
+          factId: "won-first-attempt",
+          kind: "call",
+          dealId: "three-events-won",
+          occurredAt: "2026-06-01T10:00:00.000Z",
+          payloadJson: JSON.stringify({
+            direction: "outgoing",
+            connected: false,
+            overThirtySeconds: false
+          })
+        }),
+        successfulCall({
+          factId: "won-confirmed-call",
+          dealId: "three-events-won",
+          occurredAt: "2026-06-02T09:00:00.000Z"
+        }),
+        touchpoint({
+          factId: "won-meeting-scheduled",
+          kind: "meeting_date_changed",
+          dealId: "three-events-won",
+          occurredAt: "2026-06-02T10:00:00.000Z",
+          payloadJson: JSON.stringify({
+            previousMeetingDate: null,
+            nextMeetingDate: "2026-06-03T09:00:00.000Z"
+          })
+        }),
+        touchpoint({
+          factId: "won-meeting-completed",
+          kind: "meeting",
+          dealId: "three-events-won",
+          occurredAt: "2026-06-03T09:00:00.000Z",
+          payloadJson: JSON.stringify({
+            createdTime: "2026-06-02T10:00:00.000Z",
+            scheduledAt: "2026-06-03T09:00:00.000Z",
+            completed: true
+          })
+        }),
+        touchpoint({
+          factId: "call-only-attempt",
+          kind: "call",
+          dealId: "first-call-only",
+          occurredAt: "2026-06-01T11:00:00.000Z",
+          payloadJson: JSON.stringify({
+            direction: "outgoing",
+            connected: false,
+            overThirtySeconds: false
+          })
+        }),
+        successfulCall({
+          factId: "contract-confirmed-call",
+          dealId: "contract-no-event",
+          occurredAt: "2026-06-01T12:00:00.000Z"
+        }),
+        touchpoint({
+          factId: "contract-meeting",
+          kind: "meeting",
+          dealId: "contract-no-event",
+          occurredAt: "2026-06-03T09:00:00.000Z",
+          payloadJson: JSON.stringify({
+            createdTime: "2026-06-02T09:00:00.000Z",
+            scheduledAt: "2026-06-03T09:00:00.000Z",
+            completed: true
+          })
+        })
+      ],
+      eventVisitFacts: [
+        eventVisit({
+          visitId: "event-1-visit",
+          eventId: "event-1",
+          dealId: "three-events-won",
+          eventDate: "2026-06-04T09:00:00.000Z",
+          attendedAt: "2026-07-01T09:00:00.000Z"
+        }),
+        eventVisit({
+          visitId: "event-1-duplicate",
+          eventId: "event-1",
+          dealId: "three-events-won",
+          eventDate: "2026-06-04T09:00:00.000Z"
+        }),
+        eventVisit({
+          visitId: "event-2-visit",
+          eventId: "event-2",
+          dealId: "three-events-won",
+          eventDate: "2026-06-05T09:00:00.000Z"
+        }),
+        eventVisit({
+          visitId: "event-3-visit",
+          eventId: "event-3",
+          dealId: "three-events-won",
+          eventDate: "2026-06-06T09:00:00.000Z"
+        })
+      ]
+    });
+
+    const journey = report.conversionJourney;
+    expect(journey).toBeDefined();
+    expect(
+      journey!.coreSteps.map((step) => [
+        step.stepKey,
+        step.deals,
+        step.rateFromPrevious,
+        step.dropoffDeals
+      ])
+    ).toEqual([
+      ["created", 3, 100, 0],
+      ["first_call", 3, 100, 0],
+      ["confirmed_conversation", 2, 66.67, 1],
+      ["meeting_scheduled", 2, 100, 0],
+      ["meeting_completed", 2, 100, 0],
+      ["contract", 2, 100, 0],
+      ["transferred", 1, 50, 1]
+    ]);
+    expect(
+      journey!.eventSteps.map((step) => [
+        step.stepKey,
+        step.deals,
+        step.rateFromPrevious
+      ])
+    ).toEqual([
+      ["event_1", 1, 50],
+      ["event_2", 1, 100],
+      ["event_3_plus", 1, 100]
+    ]);
+    expect(journey!.eventDepthRows).toEqual([
+      expect.objectContaining({
+        depthKey: "0",
+        deals: 1,
+        contractDeals: 1,
+        contractRate: 100,
+        transferredDeals: 0
+      }),
+      expect.objectContaining({ depthKey: "1", deals: 0 }),
+      expect.objectContaining({ depthKey: "2", deals: 0 }),
+      expect.objectContaining({
+        depthKey: "3_plus",
+        deals: 1,
+        contractDeals: 1,
+        contractRate: 100,
+        transferredDeals: 1,
+        transferredRate: 100
+      })
+    ]);
+  });
+
   it("calculates previous-step rates as conditional intersections, not raw step ratios", () => {
     const report = buildSourceCohortTrajectoryReport({
       range: {

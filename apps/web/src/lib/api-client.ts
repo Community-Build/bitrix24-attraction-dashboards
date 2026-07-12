@@ -81,6 +81,8 @@ import type {
   SalesPlanQuarterInput,
   SourceCohortConversionReport,
   SourceCohortConversionReportSnapshot,
+  SourceCohortConversionEventDepthKey,
+  SourceCohortConversionJourneyStepKey,
   SourceCohortTrajectoryActionKey,
   SourceCohortTrajectoryAvailabilityStatus,
   SourceCohortTrajectoryDiagnosticSeverity,
@@ -2386,6 +2388,85 @@ function normalizeSourceCohortTrajectoryAvailabilityStatus(
   return asString(value, 'unavailable') === 'available' ? 'available' : 'unavailable'
 }
 
+function normalizeSourceCohortConversionJourneyStepKey(
+  value: unknown,
+): SourceCohortConversionJourneyStepKey {
+  const stepKey = asString(value, 'created')
+  return stepKey === 'created' ||
+    stepKey === 'first_call' ||
+    stepKey === 'confirmed_conversation' ||
+    stepKey === 'meeting_scheduled' ||
+    stepKey === 'meeting_completed' ||
+    stepKey === 'event_1' ||
+    stepKey === 'event_2' ||
+    stepKey === 'event_3_plus' ||
+    stepKey === 'contract' ||
+    stepKey === 'transferred'
+    ? stepKey
+    : 'created'
+}
+
+function normalizeSourceCohortConversionEventDepthKey(
+  value: unknown,
+): SourceCohortConversionEventDepthKey {
+  const depthKey = asString(value, '0')
+  return depthKey === '0' ||
+    depthKey === '1' ||
+    depthKey === '2' ||
+    depthKey === '3_plus'
+    ? depthKey
+    : '0'
+}
+
+function normalizeSourceCohortConversionJourney(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  if (
+    !Array.isArray(value.coreSteps) ||
+    !Array.isArray(value.eventSteps) ||
+    !Array.isArray(value.eventDepthRows)
+  ) {
+    return undefined
+  }
+
+  const normalizeStep = (entry: unknown) => {
+    const step = isRecord(entry) ? entry : {}
+    return {
+      stepKey: normalizeSourceCohortConversionJourneyStepKey(step.stepKey),
+      label: asString(step.label, asString(step.stepKey)),
+      deals: asNumber(step.deals),
+      rateFromCohort: asNumber(step.rateFromCohort),
+      transitionDeals: asNumber(step.transitionDeals),
+      rateFromPrevious: asNumber(step.rateFromPrevious),
+      dropoffDeals: asNumber(step.dropoffDeals),
+      medianDaysFromCreate: asNullableNumber(step.medianDaysFromCreate),
+      medianDaysFromPrevious: asNullableNumber(step.medianDaysFromPrevious),
+      evidence: asString(step.evidence),
+    }
+  }
+
+  return {
+    coreSteps: asArray(value.coreSteps, normalizeStep),
+    eventSteps: asArray(value.eventSteps, normalizeStep),
+    eventDepthRows: asArray(value.eventDepthRows, (entry) => {
+      const row = isRecord(entry) ? entry : {}
+      return {
+        depthKey: normalizeSourceCohortConversionEventDepthKey(row.depthKey),
+        label: asString(row.label, asString(row.depthKey)),
+        deals: asNumber(row.deals),
+        rateFromCompletedMeeting: asNumber(row.rateFromCompletedMeeting),
+        contractDeals: asNumber(row.contractDeals),
+        contractRate: asNumber(row.contractRate),
+        transferredDeals: asNumber(row.transferredDeals),
+        transferredRate: asNumber(row.transferredRate),
+        medianDaysToContract: asNullableNumber(row.medianDaysToContract),
+      }
+    }),
+  }
+}
+
 function normalizeSourceCohortTrajectoryActionKey(
   value: unknown,
 ): SourceCohortTrajectoryActionKey {
@@ -2601,10 +2682,14 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
 
   const signals = isRecord(value.overallSignals) ? value.overallSignals : {}
   const dataQuality = isRecord(value.dataQuality) ? value.dataQuality : {}
+  const conversionJourney = normalizeSourceCohortConversionJourney(
+    value.conversionJourney,
+  )
 
   return {
     range: normalizeRange(value.range),
     totalDeals: asNumber(value.totalDeals),
+    ...(conversionJourney ? { conversionJourney } : {}),
     stageNodes: asArray(value.stageNodes, (entry) => {
       const item = isRecord(entry) ? entry : {}
       return {

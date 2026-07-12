@@ -1140,9 +1140,61 @@ export interface SourceCohortTrajectoryManagerRow
   managerName: string
 }
 
+export type SourceCohortConversionJourneyCoreStepKey =
+  | 'created'
+  | 'first_call'
+  | 'confirmed_conversation'
+  | 'meeting_scheduled'
+  | 'meeting_completed'
+  | 'contract'
+  | 'transferred'
+
+export type SourceCohortConversionJourneyEventStepKey =
+  | 'event_1'
+  | 'event_2'
+  | 'event_3_plus'
+
+export type SourceCohortConversionJourneyStepKey =
+  | SourceCohortConversionJourneyCoreStepKey
+  | SourceCohortConversionJourneyEventStepKey
+
+export interface SourceCohortConversionJourneyStep {
+  stepKey: SourceCohortConversionJourneyStepKey
+  label: string
+  deals: number
+  rateFromCohort: number
+  transitionDeals: number
+  rateFromPrevious: number
+  dropoffDeals: number
+  medianDaysFromCreate: number | null
+  medianDaysFromPrevious: number | null
+  evidence: string
+}
+
+export type SourceCohortConversionEventDepthKey = '0' | '1' | '2' | '3_plus'
+
+export interface SourceCohortConversionEventDepthRow {
+  depthKey: SourceCohortConversionEventDepthKey
+  label: string
+  deals: number
+  rateFromCompletedMeeting: number
+  contractDeals: number
+  contractRate: number
+  transferredDeals: number
+  transferredRate: number
+  medianDaysToContract: number | null
+}
+
+export interface SourceCohortConversionJourney {
+  coreSteps: SourceCohortConversionJourneyStep[]
+  eventSteps: SourceCohortConversionJourneyStep[]
+  eventDepthRows: SourceCohortConversionEventDepthRow[]
+}
+
 export interface SourceCohortTrajectoryReport {
   range: ReportRange
   totalDeals: number
+  conversionJourney?: SourceCohortConversionJourney
   stageNodes: SourceCohortTrajectoryStageNode[]
   stageTransitions: SourceCohortTrajectoryStageTransition[]
   actionNodes: SourceCohortTrajectoryActionNode[]

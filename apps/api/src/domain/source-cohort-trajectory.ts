@@ -26,6 +26,7 @@ import {
   resolveDealSource,
   resolveManagerName
 } from "./report-dimensions.js";
+import { buildSourceCohortConversionJourney } from "./source-cohort-conversion-journey.js";
 import { buildLossShape } from "./source-cohort-trajectory-loss-shape.js";
 import { buildManagerDiagnostics } from "./source-cohort-trajectory-manager-diagnostics.js";
 
@@ -150,11 +151,14 @@ interface DealTrajectoryFacts {
     fromStageId: string | null;
     toStageId: string;
   }>;
+  firstCallAt: string | null;
   firstSuccessfulCallAt: string | null;
   firstSuccessfulCallFallbackAt: string | null;
+  meetingScheduledAt: string | null;
   completedMeetingAt: string | null;
   attendedEventAt: string | null;
   attendedEventAts: string[];
+  journeyAttendedEventAts: string[];
   wonAt: string | null;
 }
 
@@ -398,6 +402,22 @@ function resolveFirstSuccessfulCallAt(
   );
 }
 
+function resolveFirstCallAt(
+  facts: DealTouchpointFactSnapshot[],
+  dealCreatedAt: string
+) {
+  return getFirstTime(
+    facts
+      .filter((fact) => fact.kind === "call" && isDirectTrustedFact(fact))
+      .filter((fact) => isOnOrAfter(fact.occurredAt, dealCreatedAt))
+      .filter(
+        (fact) =>
+          payloadString(parsePayload(fact.payloadJson), "direction") === "outgoing"
+      )
+      .map((fact) => fact.occurredAt)
+  );
+}
+
 function resolveFirstSuccessfulCallFallbackAt(
   facts: DealTouchpointFactSnapshot[],
   dealCreatedAt: string
@@ -432,6 +452,32 @@ function resolveCompletedMeetingAt(
   );
 }
 
+function resolveMeetingScheduledAt(
+  facts: DealTouchpointFactSnapshot[],
+  dealCreatedAt: string
+) {
+  const candidates = facts
+    .filter((fact) => isTrustedFact(fact))
+    .flatMap((fact) => {
+      const payload = parsePayload(fact.payloadJson);
+      if (fact.kind === "meeting_date_changed") {
+        const nextMeetingDate = payloadString(payload, "nextMeetingDate")?.trim();
+        return nextMeetingDate ? [fact.occurredAt] : [];
+      }
+
+      if (fact.kind === "meeting") {
+        const scheduledAt = payloadString(payload, "scheduledAt")?.trim();
+        const createdTime = payloadString(payload, "createdTime")?.trim();
+        return scheduledAt && createdTime ? [createdTime] : [];
+      }
+
+      return [];
+    })
+    .filter((value) => isOnOrAfter(value, dealCreatedAt));
+
+  return getFirstTime(candidates);
+}
+
 function resolveAttendedEventAts(
   facts: EventVisitFactSnapshot[],
   dealCreatedAt: string
@@ -442,6 +488,34 @@ function resolveAttendedEventAts(
     .filter((value): value is string => Boolean(value))
     .filter((value) => isOnOrAfter(value, dealCreatedAt))
     .sort((left, right) => left.localeCompare(right));
+}
+
+function resolveJourneyAttendedEventAts(
+  facts: EventVisitFactSnapshot[],
+  dealCreatedAt: string
+) {
+  const firstVisitByEvent = new Map<string, string>();
+
+  for (const fact of facts) {
+    if (fact.finalStatus !== "attended" || !isTrustedFact(fact)) {
+      continue;
+    }
+
+    const occurredAt = fact.eventDate ?? fact.attendedAt;
+    if (!occurredAt || !isOnOrAfter(occurredAt, dealCreatedAt)) {
+      continue;
+    }
+
+    const eventKey = fact.eventId?.trim() || fact.visitId;
+    const current = firstVisitByEvent.get(eventKey);
+    if (!current || occurredAt.localeCompare(current) < 0) {
+      firstVisitByEvent.set(eventKey, occurredAt);
+    }
+  }
+
+  return Array.from(firstVisitByEvent.values()).sort((left, right) =>
+    left.localeCompare(right)
+  );
 }
 
 function firstWonAt(
@@ -661,6 +735,11 @@ function buildDealTrajectoryFacts(input: {
     input.eventVisitFactsByDeal.get(input.deal.id) ?? [],
     input.deal.dateCreate
   );
+  const journeyAttendedEventAts = resolveJourneyAttendedEventAts(
+    input.eventVisitFactsByDeal.get(input.deal.id) ?? [],
+    input.deal.dateCreate
+  );
+  const touchpointFacts = input.touchpointFactsByDeal.get(input.deal.id) ?? [];
 
   return {
     deal: input.deal,
@@ -669,20 +748,26 @@ function buildDealTrajectoryFacts(input: {
     stageDurationMs,
     currentStageEnteredAt: latestCurrentStageEntry(timelineRows, input.deal),
     stageTransitions: buildStageTransitions(timelineRows, input.baseStageId),
+    firstCallAt: resolveFirstCallAt(touchpointFacts, input.deal.dateCreate),
     firstSuccessfulCallAt: resolveFirstSuccessfulCallAt(
-      input.touchpointFactsByDeal.get(input.deal.id) ?? [],
+      touchpointFacts,
       input.deal.dateCreate
     ),
     firstSuccessfulCallFallbackAt: resolveFirstSuccessfulCallFallbackAt(
-      input.touchpointFactsByDeal.get(input.deal.id) ?? [],
+      touchpointFacts,
+      input.deal.dateCreate
+    ),
+    meetingScheduledAt: resolveMeetingScheduledAt(
+      touchpointFacts,
       input.deal.dateCreate
     ),
     completedMeetingAt: resolveCompletedMeetingAt(
-      input.touchpointFactsByDeal.get(input.deal.id) ?? [],
+      touchpointFacts,
       input.deal.dateCreate
     ),
     attendedEventAt: attendedEventAts[0] ?? null,
     attendedEventAts,
+    journeyAttendedEventAts,
     wonAt: firstWonAt(timelineRows, input.wonStageIds, input.deal)
   };
 }
@@ -1770,10 +1855,27 @@ export function buildSourceCohortTrajectoryReport(
     managerRows: managerReportRows,
     overallRow
   });
+  const conversionJourney = buildSourceCohortConversionJourney({
+    dealFacts: dealFacts.map((facts) => ({
+      dealId: facts.deal.id,
+      createdAt: facts.deal.dateCreate,
+      firstCallAt: facts.firstCallAt,
+      confirmedConversationAt: facts.firstSuccessfulCallAt,
+      meetingScheduledAt: facts.meetingScheduledAt,
+      meetingCompletedAt: facts.completedMeetingAt,
+      attendedEventAts: facts.journeyAttendedEventAts,
+      contractAt: contractStage
+        ? facts.stageEnteredAt.get(contractStage.stageId) ?? null
+        : null,
+      transferredAt: facts.wonAt
+    })),
+    asOf: reportNowIso
+  });
 
   return {
     range: input.range,
     totalDeals: dealFacts.length,
+    conversionJourney,
     stageNodes,
     stageTransitions,
     actionNodes,

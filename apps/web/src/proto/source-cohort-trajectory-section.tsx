@@ -10,6 +10,7 @@ import type {
 import { formatInteger, formatPercent } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import { FunnelStageDistributionChart, type FunnelStageNodeAnnotation } from '@/proto/funnel-stage-distribution-chart'
+import { SourceCohortConversionJourneySection } from '@/proto/source-cohort-conversion-journey'
 import { SourceCohortManagerDiagnosticsSection } from '@/proto/source-cohort-trajectory-manager-diagnostics'
 import type { TocStageDistribution } from '@/proto/types'
 
@@ -458,23 +459,25 @@ export function SourceCohortStageConversionSection({
       data-comment-block-id="attraction-source-cohort-trajectory-conversions"
       data-comment-block-label="Конверсии — траектория по этапам и фактам"
     >
-      <SourceCohortSectionHeading
-        title="Конверсии по этапам и фактам"
-        description={`Дополнительный слой ниже текущего отчета. Когорта ${selectedMonthLabel || '—'}: этапы, фактические встречи и события, сроки до следующего действия, зависания и отвалы.`}
-        right={
-          <div className="flex flex-wrap gap-2">
-            <span className="badge-chip badge-neutral">
-              {formatInteger(totalCreatedDeals)} сделок
-            </span>
-            {trajectory ? (
+      {!trajectory?.conversionJourney ? (
+        <SourceCohortSectionHeading
+          title="Конверсии по этапам и фактам"
+          description={`Когорта ${selectedMonthLabel || '—'}: этапы, фактические встречи и события, сроки до следующего действия, зависания и отвалы.`}
+          right={
+            <div className="flex flex-wrap gap-2">
               <span className="badge-chip badge-neutral">
-                история стадий {formatSourceCohortPercent(trajectory.dataQuality.stageHistoryCoverageRate)}
+                {formatInteger(totalCreatedDeals)} сделок
               </span>
-            ) : null}
-            <span className="badge-chip badge-neutral">когорта выбрана выше</span>
-          </div>
-        }
-      />
+              {trajectory ? (
+                <span className="badge-chip badge-neutral">
+                  история стадий {formatSourceCohortPercent(trajectory.dataQuality.stageHistoryCoverageRate)}
+                </span>
+              ) : null}
+              <span className="badge-chip badge-neutral">когорта выбрана выше</span>
+            </div>
+          }
+        />
+      ) : null}
 
       {!trajectory ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -485,6 +488,13 @@ export function SourceCohortStageConversionSection({
 
       {trajectory ? (
         <>
+	      {trajectory.conversionJourney ? (
+	        <SourceCohortConversionJourneySection
+	          journey={trajectory.conversionJourney}
+	          selectedMonthLabel={selectedMonthLabel}
+	          totalDeals={trajectory.totalDeals}
+	        />
+	      ) : null}
 	      <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
 	        {summaryCards.map(({ label, value, note, hint }) => (
 	          <div key={label} className="metric p-4">
