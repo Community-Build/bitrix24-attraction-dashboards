@@ -138,7 +138,12 @@ function buildCoreSteps(dealFacts: SourceCohortConversionJourneyDealFacts[]) {
 
   return CORE_STEP_DEFINITIONS.map((definition, index) => {
     const reachedFacts = reachedByStep.get(definition.stepKey) ?? [];
-    const previousDefinition = CORE_STEP_DEFINITIONS[index - 1] ?? null;
+    const previousDefinition =
+      definition.stepKey === "meeting_completed"
+        ? CORE_STEP_DEFINITIONS.find(
+            (candidate) => candidate.stepKey === "confirmed_conversation"
+          ) ?? null
+        : CORE_STEP_DEFINITIONS[index - 1] ?? null;
     const previousFacts = previousDefinition
       ? reachedByStep.get(previousDefinition.stepKey) ?? []
       : dealFacts;

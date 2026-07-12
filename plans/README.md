@@ -47,6 +47,7 @@ architectural issue found in the deep review.
 | [031](./031-add-manager-diagnostic-cards.md) | Add manager diagnostic cards for conversion trajectory gaps | P1 | M | 029, 030 | DONE |
 | [032](./032-add-source-customer-loss-shapes.md) | Add source and customer loss-shape analysis | P1 | M | 029, 030 | DONE |
 | [033](./033-fix-conversion-trajectory-review-findings.md) | Fix conversion trajectory review findings | P0 | M | 029, 030, 031, 032 | DONE |
+| [034](./034-simplify-conversion-report.md) | Simplify the conversion report around decisions and event outcomes | P0 | L | 029, 030, 031, 032, 033 | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale - finding fixed independently or approach

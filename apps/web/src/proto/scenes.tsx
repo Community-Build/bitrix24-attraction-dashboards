@@ -30,10 +30,7 @@ import type {
   SalesPlanQuarterDraftRow,
   SalesDealRow,
   SalesManagerGroup,
-  SourceCohortConversionManagerRow,
-  SourceCohortConversionOpenStageRow,
   SourceCohortConversionReport,
-  SourceCohortConversionRow,
   TargetGroupConversionReport,
   UnitEconomicsManagerCostDetailRow,
   UnitEconomicsManagerRow,
@@ -6064,14 +6061,6 @@ function buildSourceCohortQuery(filters: ProtoFilterState, month: string) {
   }
 }
 
-function formatSourceCohortPercent(value: number) {
-  return `${formatPercent(value)}%`
-}
-
-function formatSourceCohortDays(value: number) {
-  return value > 0 ? `${formatOneDecimal(value)} дн.` : '—'
-}
-
 const sourceCohortMonthShortLabels = [
   'Янв',
   'Фев',
@@ -6094,498 +6083,6 @@ function getSourceCohortMonthShortLabel(cohortMonth: string) {
 
 const sourceCohortVisibleYears = ['2025', '2026']
 
-function summarizeSourceCohortStages(
-  stages: SourceCohortConversionOpenStageRow[],
-  limit = 2,
-) {
-  if (stages.length === 0) {
-    return '—'
-  }
-
-  const visible = stages
-    .slice(0, limit)
-    .map((stage) => `${stage.stageName} ${formatInteger(stage.openDeals)}`)
-    .join(', ')
-  const hiddenCount = stages.length - limit
-
-  return hiddenCount > 0 ? `${visible} +${hiddenCount}` : visible
-}
-
-function aggregateSourceCohortOpenStages(rows: SourceCohortConversionRow[]) {
-  const totals = new Map<string, SourceCohortConversionOpenStageRow>()
-
-  for (const row of rows) {
-    for (const stage of row.openStageBreakdown) {
-      const current = totals.get(stage.stageId) ?? {
-        stageId: stage.stageId,
-        stageName: stage.stageName,
-        openDeals: 0,
-      }
-      current.openDeals += stage.openDeals
-      totals.set(stage.stageId, current)
-    }
-  }
-
-  return Array.from(totals.values()).sort((left, right) => {
-    if (right.openDeals !== left.openDeals) {
-      return right.openDeals - left.openDeals
-    }
-
-    return left.stageName.localeCompare(right.stageName, 'ru')
-  })
-}
-
-type SourceCohortTargetGroupItem = {
-  key: string
-  customerLabel?: string
-  targetGroupLabel: string
-  wonDeals: number
-  averageDaysToWin: number
-}
-
-function aggregateSourceCohortTargetGroups(
-  rows: SourceCohortConversionRow[],
-): SourceCohortTargetGroupItem[] {
-  const totals = new Map<
-    string,
-    SourceCohortTargetGroupItem & { cycleSum: number; cycleWeight: number }
-  >()
-
-  for (const row of rows) {
-    for (const targetGroup of row.targetGroupBreakdown) {
-      const key = `${row.customerKey}|${targetGroup.targetGroupKey}`
-      const current = totals.get(key) ?? {
-        key,
-        customerLabel: row.customerLabel,
-        targetGroupLabel: targetGroup.targetGroupLabel,
-        wonDeals: 0,
-        averageDaysToWin: 0,
-        cycleSum: 0,
-        cycleWeight: 0,
-      }
-      current.wonDeals += targetGroup.wonDeals
-      if (targetGroup.averageDaysToWin > 0 && targetGroup.wonDeals > 0) {
-        current.cycleSum += targetGroup.averageDaysToWin * targetGroup.wonDeals
-        current.cycleWeight += targetGroup.wonDeals
-      }
-      totals.set(key, current)
-    }
-  }
-
-  return Array.from(totals.values())
-    .map(({ cycleSum, cycleWeight, ...targetGroup }) => ({
-      ...targetGroup,
-      averageDaysToWin:
-        cycleWeight > 0 ? Number((cycleSum / cycleWeight).toFixed(2)) : 0,
-    }))
-    .sort((left, right) => {
-      if (right.wonDeals !== left.wonDeals) {
-        return right.wonDeals - left.wonDeals
-      }
-
-      const leftLabel = `${left.customerLabel ?? ''} ${left.targetGroupLabel}`
-      const rightLabel = `${right.customerLabel ?? ''} ${right.targetGroupLabel}`
-      return leftLabel.localeCompare(rightLabel, 'ru')
-    })
-}
-
-type SourceCohortManagerSegment = {
-  id: string
-  sourceLabel: string
-  qualityLabel: string
-  customerLabel: string
-  stats: SourceCohortConversionManagerRow
-}
-
-type SourceCohortManagerView = {
-  managerId: string
-  managerName: string
-  createdDeals: number
-  wonDeals: number
-  lostDeals: number
-  openDeals: number
-  winRate: number
-  averageDaysToWin: number
-  openStageBreakdown: SourceCohortConversionOpenStageRow[]
-  segments: SourceCohortManagerSegment[]
-}
-
-function buildSourceCohortManagerViews(
-  rows: SourceCohortConversionRow[],
-): SourceCohortManagerView[] {
-  const managers = new Map<
-    string,
-    Omit<SourceCohortManagerView, 'winRate' | 'averageDaysToWin' | 'openStageBreakdown'> & {
-      cycleSum: number
-      cycleWeight: number
-      openStages: Map<string, SourceCohortConversionOpenStageRow>
-    }
-  >()
-
-  for (const row of rows) {
-    for (const manager of row.managerBreakdown) {
-      const current = managers.get(manager.managerId) ?? {
-        managerId: manager.managerId,
-        managerName: manager.managerName,
-        createdDeals: 0,
-        wonDeals: 0,
-        lostDeals: 0,
-        openDeals: 0,
-        cycleSum: 0,
-        cycleWeight: 0,
-        openStages: new Map<string, SourceCohortConversionOpenStageRow>(),
-        segments: [],
-      }
-      current.createdDeals += manager.createdDeals
-      current.wonDeals += manager.wonDeals
-      current.lostDeals += manager.lostDeals
-      current.openDeals += manager.openDeals
-      if (manager.averageDaysToWin > 0 && manager.wonDeals > 0) {
-        current.cycleSum += manager.averageDaysToWin * manager.wonDeals
-        current.cycleWeight += manager.wonDeals
-      }
-      for (const stage of manager.openStageBreakdown) {
-        const stageTotal = current.openStages.get(stage.stageId) ?? {
-          stageId: stage.stageId,
-          stageName: stage.stageName,
-          openDeals: 0,
-        }
-        stageTotal.openDeals += stage.openDeals
-        current.openStages.set(stage.stageId, stageTotal)
-      }
-      current.segments.push({
-        id: `${row.id}|${manager.managerId}`,
-        sourceLabel: row.sourceLabel,
-        qualityLabel: row.qualityLabel,
-        customerLabel: row.customerLabel,
-        stats: manager,
-      })
-      managers.set(manager.managerId, current)
-    }
-  }
-
-  return Array.from(managers.values())
-    .map(({ cycleSum, cycleWeight, openStages, segments, ...manager }) => ({
-      ...manager,
-      winRate:
-        manager.createdDeals > 0
-          ? Number(((manager.wonDeals / manager.createdDeals) * 100).toFixed(2))
-          : 0,
-      averageDaysToWin:
-        cycleWeight > 0 ? Number((cycleSum / cycleWeight).toFixed(2)) : 0,
-      openStageBreakdown: Array.from(openStages.values()).sort((left, right) => {
-        if (right.openDeals !== left.openDeals) {
-          return right.openDeals - left.openDeals
-        }
-
-        return left.stageName.localeCompare(right.stageName, 'ru')
-      }),
-      segments: segments.sort((left, right) => {
-        if (right.stats.createdDeals !== left.stats.createdDeals) {
-          return right.stats.createdDeals - left.stats.createdDeals
-        }
-
-        return left.sourceLabel.localeCompare(right.sourceLabel, 'ru')
-      }),
-    }))
-    .sort((left, right) => {
-      if (right.createdDeals !== left.createdDeals) {
-        return right.createdDeals - left.createdDeals
-      }
-
-      return left.managerName.localeCompare(right.managerName, 'ru')
-    })
-}
-
-function SourceCohortExpandToggle({
-  isExpanded,
-  onToggle,
-}: {
-  isExpanded: boolean
-  onToggle: () => void
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={isExpanded ? 'Свернуть строку' : 'Раскрыть строку'}
-      aria-expanded={isExpanded}
-      onClick={onToggle}
-      className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-slate-200 bg-white text-sm font-bold text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900"
-    >
-      <HugeiconsIcon
-        icon={isExpanded ? ArrowDown01Icon : ArrowRight01Icon}
-        strokeWidth={2}
-        className="h-4 w-4"
-      />
-    </button>
-  )
-}
-
-function SourceCohortOutcomeBar({ report }: { report: SourceCohortConversionReport }) {
-  const total = report.totalCreatedDeals
-
-  if (total === 0) {
-    return null
-  }
-
-  const segments = [
-    { key: 'won', label: 'Продано', value: report.totalWonDeals, color: 'rgba(31,157,88,0.85)' },
-    { key: 'open', label: 'В работе', value: report.totalOpenDeals, color: 'rgba(77,124,255,0.55)' },
-    { key: 'lost', label: 'Проиграно', value: report.totalLostDeals, color: 'rgba(148,163,184,0.6)' },
-  ].filter((segment) => segment.value > 0)
-
-  return (
-    <div className="mt-4">
-      <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100">
-        {segments.map((segment) => (
-          <div
-            key={segment.key}
-            style={{ width: `${(segment.value / total) * 100}%`, backgroundColor: segment.color }}
-          />
-        ))}
-      </div>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-slate-600">
-        {segments.map((segment) => (
-          <span key={segment.key} className="inline-flex items-center gap-1.5">
-            <span
-              aria-hidden="true"
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: segment.color }}
-            />
-            {segment.label} {formatInteger(segment.value)} ·{' '}
-            {formatSourceCohortPercent((segment.value / total) * 100)}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-function SourceCohortStageBars({
-  stages,
-  emptyText,
-}: {
-  stages: SourceCohortConversionOpenStageRow[]
-  emptyText: string
-}) {
-  if (stages.length === 0) {
-    return <p className="text-sm text-slate-500">{emptyText}</p>
-  }
-
-  const totalOpenDeals = stages.reduce((total, stage) => total + stage.openDeals, 0)
-  const maxOpenDeals = stages[0]?.openDeals ?? 1
-
-  return (
-    <div className="grid gap-2.5">
-      {stages.map((stage) => (
-        <div key={stage.stageId} className="min-w-0">
-          <div className="flex items-baseline justify-between gap-3 text-sm">
-            <span className="min-w-0 truncate font-semibold text-slate-800">{stage.stageName}</span>
-            <span className="shrink-0 font-semibold text-slate-900">
-              {formatInteger(stage.openDeals)}
-              {' '}
-              <span className="ml-1.5 text-xs font-semibold text-slate-500">
-                {formatSourceCohortPercent(
-                  totalOpenDeals > 0 ? (stage.openDeals / totalOpenDeals) * 100 : 0,
-                )}
-              </span>
-            </span>
-          </div>
-          <div className="mt-1 h-1.5 rounded-full bg-slate-100">
-            <div
-              className="h-1.5 rounded-full"
-              style={{
-                width: `${maxOpenDeals > 0 ? Math.max((stage.openDeals / maxOpenDeals) * 100, 4) : 0}%`,
-                backgroundColor: 'rgba(77,124,255,0.7)',
-              }}
-            />
-          </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function SourceCohortTargetGroupList({
-  groups,
-  emptyText,
-}: {
-  groups: SourceCohortTargetGroupItem[]
-  emptyText: string
-}) {
-  if (groups.length === 0) {
-    return <p className="text-sm text-slate-500">{emptyText}</p>
-  }
-
-  return (
-    <div className="grid gap-2">
-      {groups.map((targetGroup) => (
-        <div
-          key={targetGroup.key}
-          className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-lg border border-slate-200 bg-white px-3 py-2"
-        >
-          <span className="min-w-0 text-sm">
-            {targetGroup.customerLabel ? (
-              <>
-                <span className="text-slate-500">{targetGroup.customerLabel}</span>{' '}
-                <span aria-hidden="true" className="text-slate-400">
-                  →
-                </span>{' '}
-              </>
-            ) : null}
-            <span className="font-semibold text-slate-800">
-              {targetGroup.targetGroupLabel}
-            </span>
-          </span>
-          <span className="shrink-0 text-sm text-slate-600">
-            <span className="font-bold text-emerald-700">{formatInteger(targetGroup.wonDeals)}</span>{' '}
-            {targetGroup.wonDeals === 1 ? 'продажа' : 'продаж'} · цикл{' '}
-            {formatSourceCohortDays(targetGroup.averageDaysToWin)}
-          </span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function SourceCohortRowDetails({ row }: { row: SourceCohortConversionRow }) {
-  return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.7fr)_minmax(260px,0.9fr)]">
-      <div className="min-w-0">
-        <div className="subtle-label">Менеджеры</div>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 text-[11px] uppercase tracking-[0.08em] text-slate-500">
-                <th className="py-2 pr-3 font-semibold">Менеджер</th>
-                <th className="py-2 pr-3 font-semibold">Передано</th>
-                <th className="py-2 pr-3 font-semibold">Продано</th>
-                <th className="py-2 pr-3 font-semibold">Конверсия</th>
-                <th className="py-2 pr-3 font-semibold">Цикл</th>
-                <th className="py-2 pr-3 font-semibold">Проиграно</th>
-                <th className="py-2 pr-3 font-semibold">В работе</th>
-                <th className="py-2 font-semibold">Этапы в работе</th>
-              </tr>
-            </thead>
-            <tbody>
-              {row.managerBreakdown.map((manager) => (
-                <tr
-                  key={manager.managerId}
-                  className="border-b border-slate-100 align-top last:border-b-0"
-                >
-                  <td className="py-2.5 pr-3 font-semibold text-slate-900">
-                    {manager.managerName}
-                  </td>
-                  <td className="py-2.5 pr-3 font-semibold text-slate-900">
-                    {formatInteger(manager.createdDeals)}
-                  </td>
-                  <td className="py-2.5 pr-3 font-semibold text-emerald-700">
-                    {formatInteger(manager.wonDeals)}
-                  </td>
-                  <td className="py-2.5 pr-3 font-semibold text-slate-900">
-                    {formatSourceCohortPercent(manager.winRate)}
-                  </td>
-                  <td className="whitespace-nowrap py-2.5 pr-3 text-slate-700">
-                    {formatSourceCohortDays(manager.averageDaysToWin)}
-                  </td>
-                  <td className="py-2.5 pr-3 text-slate-700">{formatInteger(manager.lostDeals)}</td>
-                  <td className="py-2.5 pr-3 text-slate-700">{formatInteger(manager.openDeals)}</td>
-                  <td className="py-2.5 text-xs leading-5 text-slate-600">
-                    <div className="max-w-[220px]">
-                      {summarizeSourceCohortStages(manager.openStageBreakdown)}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div className="grid content-start gap-4 border-slate-200 xl:border-l xl:pl-5">
-        <div>
-          <div className="subtle-label">В работе по этапам</div>
-          <div className="mt-2">
-            <SourceCohortStageBars
-              stages={row.openStageBreakdown}
-              emptyText="Открытых сделок в строке нет."
-            />
-          </div>
-        </div>
-        <div>
-          <div className="subtle-label">Продажи: клуб заказчика → таргет-группа</div>
-          <div className="mt-2">
-            <SourceCohortTargetGroupList
-              groups={row.targetGroupBreakdown.map((targetGroup) => ({
-                key: targetGroup.targetGroupKey,
-                customerLabel: row.customerLabel,
-                targetGroupLabel: targetGroup.targetGroupLabel,
-                wonDeals: targetGroup.wonDeals,
-                averageDaysToWin: targetGroup.averageDaysToWin,
-              }))}
-              emptyText="Продаж в строке пока нет."
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function SourceCohortManagerDetails({ manager }: { manager: SourceCohortManagerView }) {
-  return (
-    <div className="grid gap-4">
-      <div className="min-w-0 overflow-x-auto">
-        <table className="w-full min-w-[640px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-slate-200 text-[11px] uppercase tracking-[0.08em] text-slate-500">
-              <th className="py-2 pr-3 font-semibold">Источник · качество · клуб</th>
-              <th className="py-2 pr-3 font-semibold">Передано</th>
-              <th className="py-2 pr-3 font-semibold">Продано</th>
-              <th className="py-2 pr-3 font-semibold">Конверсия</th>
-              <th className="py-2 pr-3 font-semibold">Цикл</th>
-              <th className="py-2 pr-3 font-semibold">Проиграно</th>
-              <th className="py-2 pr-3 font-semibold">В работе</th>
-              <th className="py-2 font-semibold">Этапы в работе</th>
-            </tr>
-          </thead>
-          <tbody>
-            {manager.segments.map((segment) => (
-              <tr key={segment.id} className="border-b border-slate-100 align-top last:border-b-0">
-                <td className="min-w-[220px] py-2 pr-3">
-                  <div className="font-semibold text-slate-900">{segment.sourceLabel}</div>
-                  <div className="mt-0.5 text-xs text-slate-500">{segment.qualityLabel}</div>
-                  <div className="mt-1">
-                    <span className="inline-flex max-w-full rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                      {segment.customerLabel}
-                    </span>
-                  </div>
-                </td>
-                <td className="py-2 pr-3 font-semibold text-slate-900">
-                  {formatInteger(segment.stats.createdDeals)}
-                </td>
-                <td className="py-2 pr-3 font-semibold text-emerald-700">
-                  {formatInteger(segment.stats.wonDeals)}
-                </td>
-                <td className="py-2 pr-3 font-semibold text-slate-900">
-                  {formatSourceCohortPercent(segment.stats.winRate)}
-                </td>
-                <td className="whitespace-nowrap py-2 pr-3 text-slate-700">
-                  {formatSourceCohortDays(segment.stats.averageDaysToWin)}
-                </td>
-                <td className="py-2 pr-3 text-slate-700">{formatInteger(segment.stats.lostDeals)}</td>
-                <td className="py-2 pr-3 text-slate-700">{formatInteger(segment.stats.openDeals)}</td>
-                <td className="py-2 text-xs text-slate-600">
-                  {summarizeSourceCohortStages(segment.stats.openStageBreakdown)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
 
 type OperationalRiskFilter = 'all' | 'critical' | OperationalRiskRuleKey
 
@@ -7383,8 +6880,6 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
     message: string
   } | null>(null)
   const [viewYear, setViewYear] = useState<string | null>(null)
-  const [viewMode, setViewMode] = useState<'mix' | 'managers'>('mix')
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(() => new Set())
   const selectedMonth =
     monthOverride?.filterMonth === filterMonth ? monthOverride.month : ''
   const requestedMonth = selectedMonth || filterMonth
@@ -7470,29 +6965,6 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
   const displayedMonths = monthOptions.filter((month) =>
     month.cohortMonth.startsWith(displayedYear),
   )
-  const openStageTotals = useMemo(
-    () => aggregateSourceCohortOpenStages(report?.rows ?? []),
-    [report],
-  )
-  const targetGroupTotals = useMemo(
-    () => aggregateSourceCohortTargetGroups(report?.rows ?? []),
-    [report],
-  )
-  const managerViews = useMemo(
-    () => buildSourceCohortManagerViews(report?.rows ?? []),
-    [report],
-  )
-  const toggleRow = (rowKey: string) => {
-    setExpandedRows((current) => {
-      const next = new Set(current)
-      if (next.has(rowKey)) {
-        next.delete(rowKey)
-      } else {
-        next.add(rowKey)
-      }
-      return next
-    })
-  }
 
   return (
     <div className="grid min-w-0 gap-6">
@@ -7503,7 +6975,7 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
       >
         <PanelHeading
           title="Конверсии"
-          description="Когорта по месяцу создания сделки: сколько передано источниками и что с этими сделками стало к текущему моменту."
+          description="Выберите месяц анализа. Для пути это месяц создания сделки, для мероприятий — месяц проведения."
           right={
             <div className="flex flex-wrap items-center gap-2">
               {isLoading && report ? (
@@ -7515,7 +6987,7 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
                   Обновляю
                 </span>
               ) : null}
-              <span className="badge-chip badge-neutral">месяц создания сделки</span>
+              <span className="badge-chip badge-neutral">единый месяц анализа</span>
               <span className="badge-chip badge-neutral">{getFilterScopeLabel(filters)}</span>
             </div>
           }
@@ -7523,7 +6995,7 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
 
         <div className="mb-4 grid min-w-0 gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="subtle-label">Месяц создания</span>
+            <span className="subtle-label">Месяц анализа</span>
             {cohortYears.length > 1
               ? cohortYears.map((year) => (
                   <button
@@ -7533,8 +7005,8 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
                     onClick={() => setViewYear(year)}
                     className={
                       year === displayedYear
-                        ? 'rounded-full bg-slate-900 px-3 py-1 text-xs font-bold text-white'
-                        : 'rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-slate-300'
+                        ? 'min-h-10 rounded-full bg-slate-900 px-3 py-2 text-xs font-bold text-white outline-none transition-transform active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2'
+                        : 'min-h-10 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 outline-none transition-[border-color,transform] hover:border-slate-400 active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2'
                     }
                   >
                     {year}
@@ -7542,13 +7014,13 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
                 ))
               : null}
             <span className="ml-auto rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-500">
-              Когорта: <span className="text-slate-900">{selectedMonthLabel || '—'}</span> · передано{' '}
+              <span className="text-slate-900">{selectedMonthLabel || '—'}</span> · создано сделок{' '}
               <span className="text-slate-900">{formatInteger(report?.totalCreatedDeals ?? 0)}</span>
             </span>
           </div>
           <div
             role="group"
-            aria-label="Месяц создания сделки"
+            aria-label="Месяц анализа"
             className="flex min-w-0 flex-wrap gap-2"
           >
             {displayedMonths.length > 0 ? (
@@ -7565,8 +7037,8 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
                     }
                     className={
                       isActive
-                        ? 'rounded-full bg-slate-900 px-3 py-1.5 text-sm font-bold text-white'
-                        : 'rounded-full border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-600 transition hover:border-slate-300'
+                        ? 'min-h-10 rounded-full bg-slate-900 px-3 py-2 text-sm font-bold text-white outline-none transition-transform active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2'
+                        : 'min-h-10 rounded-full border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-600 outline-none transition-[border-color,transform] hover:border-slate-400 active:scale-[0.96] focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2'
                     }
                   >
                     {getSourceCohortMonthShortLabel(month.cohortMonth)}
@@ -7600,265 +7072,15 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
           </div>
         ) : null}
 
-        {report ? (
-          <>
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-              {[
-                ['Передано', formatInteger(report.totalCreatedDeals), 'создано в когорте'],
-                ['Продано', formatInteger(report.totalWonDeals), `${formatSourceCohortPercent(report.winRate)} конверсия`],
-                ['Цикл продажи', formatSourceCohortDays(report.averageDaysToWin), 'до первой продажи'],
-                ['Проиграно', formatInteger(report.totalLostDeals), 'текущий финальный статус'],
-                ['В работе', formatInteger(report.totalOpenDeals), 'текущие открытые этапы'],
-              ].map(([label, value, note]) => (
-                <div key={label} className="metric p-4">
-                  <p className="subtle-label">{label}</p>
-                  <p className="mt-1 text-xl font-bold text-slate-800">{value}</p>
-                  <p className="text-xs text-slate-500">{note}</p>
-                </div>
-              ))}
-            </div>
-
-            <SourceCohortOutcomeBar report={report} />
-          </>
-        ) : null}
       </section>
 
-      {report ? (
-        <section className="grid min-w-0 gap-6 lg:grid-cols-2">
-          <section
-            className="panel min-w-0 p-5"
-            data-comment-block-id="attraction-source-cohort-wip"
-            data-comment-block-label="Конверсии — в работе по этапам"
-          >
-            <PanelHeading
-              title="В работе по этапам"
-              description="Открытые сделки когорты по текущим этапам воронки Привлечение."
-              right={
-                <span className="badge-chip badge-neutral">
-                  {formatInteger(report.totalOpenDeals)} в работе
-                </span>
-              }
-            />
-            <SourceCohortStageBars
-              stages={openStageTotals}
-              emptyText="Открытых сделок в когорте нет."
-            />
-          </section>
 
-          <section
-            className="panel min-w-0 p-5"
-            data-comment-block-id="attraction-source-cohort-target-groups"
-            data-comment-block-label="Конверсии — продажи по таргет-группе"
-          >
-            <PanelHeading
-              title="Продажи по таргет-группе"
-              description="Мэппинг продаж когорты: бизнес-клуб заказчика при создании → таргет-группа / клуб продажи, с количеством и средним циклом."
-              right={
-                <span className="badge-chip badge-green">
-                  {formatInteger(report.totalWonDeals)} продаж
-                </span>
-              }
-            />
-            <SourceCohortTargetGroupList
-              groups={targetGroupTotals}
-              emptyText="Продаж в когорте пока нет."
-            />
-          </section>
+      {report?.totalCreatedDeals === 0 ? (
+        <section className="panel p-5">
+          <p className="font-bold text-slate-900">За выбранный месяц нет сделок.</p>
+          <p className="mt-1 text-sm text-slate-500">Проверьте месяц, менеджеров, источники и заказчиков в общих фильтрах.</p>
         </section>
-      ) : null}
-
-      {report ? (
-        <section
-          className="panel min-w-0 p-5"
-          data-comment-block-id="attraction-source-cohort-breakdown"
-          data-comment-block-label="Конверсии — разрез"
-        >
-          <PanelHeading
-            title="Разрез когорты"
-            description={
-              viewMode === 'mix'
-                ? 'Главный разрез: источник, итоговое качество и бизнес-клуб заказчика при создании сделки. Строка раскрывается до менеджеров, этапов в работе и таргет-групп.'
-                : 'Менеджеры по всей когорте. Строка раскрывается до разреза источник · качество · клуб; средний цикл менеджера — средневзвешенный по его продажам.'
-            }
-          />
-
-          <div className="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 p-2 text-sm">
-            {[
-              { id: 'mix' as const, label: 'Источник · качество · клуб' },
-              { id: 'managers' as const, label: 'По менеджерам' },
-            ].map((mode) => (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => setViewMode(mode.id)}
-                className={
-                  viewMode === mode.id
-                    ? 'rounded-full bg-slate-900 px-3 py-1.5 font-bold text-white'
-                    : 'rounded-full border border-slate-200 bg-white px-3 py-1.5 font-bold text-slate-600 transition hover:border-slate-300'
-                }
-              >
-                {mode.label}
-              </button>
-            ))}
-            <span className="ml-auto rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-slate-500">
-              {viewMode === 'mix'
-                ? `${formatInteger(report.rows.length)} строк разреза`
-                : `${formatInteger(managerViews.length)} менеджеров`}
-            </span>
-          </div>
-
-          {report.rows.length === 0 ? (
-            <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
-              <p className="font-semibold text-slate-900">
-                За выбранный месяц нет сделок в текущих фильтрах и whitelist менеджеров.
-              </p>
-              <p className="mt-1 text-xs text-slate-500">Месяц: {selectedMonthLabel}</p>
-            </div>
-          ) : (
-            <div className="max-w-full overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 text-xs uppercase tracking-[0.08em] text-slate-500">
-                    <th className="px-3 py-3 font-semibold">
-                      {viewMode === 'mix' ? 'Источник · качество · клуб' : 'Менеджер'}
-                    </th>
-                    <th className="px-3 py-3 font-semibold">Передано</th>
-                    <th className="px-3 py-3 font-semibold">Продано</th>
-                    <th className="px-3 py-3 font-semibold">Конверсия</th>
-                    <th className="px-3 py-3 font-semibold">Цикл</th>
-                    <th className="px-3 py-3 font-semibold">Проиграно</th>
-                    <th className="px-3 py-3 font-semibold">В работе</th>
-                    <th className="px-3 py-3 font-semibold">Этапы в работе</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {viewMode === 'mix'
-                    ? report.rows.map((row) => {
-                        const rowKey = `mix:${row.id}`
-                        const isExpanded = expandedRows.has(rowKey)
-                        return (
-                          <Fragment key={row.id}>
-                            <tr className="border-b border-slate-100 align-top">
-                              <td className="min-w-[220px] px-3 py-3">
-                                <div className="flex min-w-0 items-start gap-2">
-                                  <SourceCohortExpandToggle
-                                    isExpanded={isExpanded}
-                                    onToggle={() => toggleRow(rowKey)}
-                                  />
-                                  <div className="min-w-0 max-w-[280px]">
-                                    <div className="font-semibold text-slate-900">
-                                      {row.sourceLabel}
-                                    </div>
-                                    <div className="mt-0.5 text-xs text-slate-500">
-                                      {row.qualityLabel}
-                                    </div>
-                                    <div className="mt-1">
-                                      <span className="inline-flex max-w-full rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-700">
-                                        {row.customerLabel}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 font-semibold text-slate-900">
-                                {formatInteger(row.createdDeals)}
-                              </td>
-                              <td className="px-3 py-3 font-semibold text-emerald-700">
-                                {formatInteger(row.wonDeals)}
-                              </td>
-                              <td className="px-3 py-3 font-semibold text-slate-900">
-                                {formatSourceCohortPercent(row.winRate)}
-                              </td>
-                              <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                                {formatSourceCohortDays(row.averageDaysToWin)}
-                              </td>
-                              <td className="px-3 py-3 text-slate-700">
-                                {formatInteger(row.lostDeals)}
-                              </td>
-                              <td className="px-3 py-3 text-slate-700">
-                                {formatInteger(row.openDeals)}
-                              </td>
-                              <td className="px-3 py-3 text-xs text-slate-600">
-                                <div className="max-w-[220px]">
-                                  {summarizeSourceCohortStages(row.openStageBreakdown)}
-                                </div>
-                              </td>
-                            </tr>
-                            {isExpanded ? (
-                              <tr className="border-b border-slate-200">
-                                <td colSpan={8} className="bg-slate-50/70 px-4 py-4">
-                                  <SourceCohortRowDetails row={row} />
-                                </td>
-                              </tr>
-                            ) : null}
-                          </Fragment>
-                        )
-                      })
-                    : managerViews.map((manager) => {
-                        const rowKey = `managers:${manager.managerId}`
-                        const isExpanded = expandedRows.has(rowKey)
-                        return (
-                          <Fragment key={manager.managerId}>
-                            <tr className="border-b border-slate-100 align-top">
-                              <td className="min-w-[220px] px-3 py-3">
-                                <div className="flex min-w-0 items-start gap-2">
-                                  <SourceCohortExpandToggle
-                                    isExpanded={isExpanded}
-                                    onToggle={() => toggleRow(rowKey)}
-                                  />
-                                  <div className="min-w-0 max-w-[280px]">
-                                    <div className="font-semibold text-slate-900">
-                                      {manager.managerName}
-                                    </div>
-                                    <div className="mt-0.5 text-xs text-slate-500">
-                                      {formatInteger(manager.segments.length)}{' '}
-                                      {manager.segments.length === 1 ? 'разрез' : 'разрезов'}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td className="px-3 py-3 font-semibold text-slate-900">
-                                {formatInteger(manager.createdDeals)}
-                              </td>
-                              <td className="px-3 py-3 font-semibold text-emerald-700">
-                                {formatInteger(manager.wonDeals)}
-                              </td>
-                              <td className="px-3 py-3 font-semibold text-slate-900">
-                                {formatSourceCohortPercent(manager.winRate)}
-                              </td>
-                              <td className="whitespace-nowrap px-3 py-3 text-slate-700">
-                                {formatSourceCohortDays(manager.averageDaysToWin)}
-                              </td>
-                              <td className="px-3 py-3 text-slate-700">
-                                {formatInteger(manager.lostDeals)}
-                              </td>
-                              <td className="px-3 py-3 text-slate-700">
-                                {formatInteger(manager.openDeals)}
-                              </td>
-                              <td className="px-3 py-3 text-xs text-slate-600">
-                                <div className="max-w-[220px]">
-                                  {summarizeSourceCohortStages(manager.openStageBreakdown)}
-                                </div>
-                              </td>
-                            </tr>
-                            {isExpanded ? (
-                              <tr className="border-b border-slate-200">
-                                <td colSpan={8} className="bg-slate-50/70 px-4 py-4">
-                                  <SourceCohortManagerDetails manager={manager} />
-                                </td>
-                              </tr>
-                            ) : null}
-                          </Fragment>
-                        )
-                      })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      ) : null}
-
-      {report ? (
+      ) : report ? (
         <SourceCohortStageConversionSection
           selectedMonthLabel={selectedMonthLabel}
           totalCreatedDeals={report.totalCreatedDeals}

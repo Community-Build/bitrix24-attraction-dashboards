@@ -2,12 +2,15 @@ import type {
   DealSnapshot,
   DealStageFactSnapshot,
   DealTouchpointFactSnapshot,
+  EventSnapshot,
   EventVisitFactSnapshot,
   ManagerDirectoryEntry,
   ReportRange,
   SourceCohortTrajectoryActionKey,
   SourceCohortTrajectoryBreakdownRow,
   SourceCohortTrajectoryDataQuality,
+  SourceCohortEventPerformance,
+  SourceCohortEventPerformanceRow,
   SourceCohortTrajectoryFactStepKey,
   SourceCohortTrajectoryManagerRow,
   SourceCohortTrajectoryQualityStatus,
@@ -31,12 +34,13 @@ import { buildLossShape } from "./source-cohort-trajectory-loss-shape.js";
 import { buildManagerDiagnostics } from "./source-cohort-trajectory-manager-diagnostics.js";
 
 const LOW_SAMPLE_WARNING =
-  "Разрезы с N < 10 нельзя использовать для жесткого ранжирования менеджеров, источников или заказчиков.";
+  "Разрезы с N < 10 нельзя использовать для жесткого ранжирования менеджеров, источников, заказчиков или качества.";
 const CURRENT_MANAGER_ATTRIBUTION_WARNING =
   "Разрез менеджеров использует текущего ответственного сделки в снимке CRM; историческая атрибуция действий пока не считается.";
 const FALLBACK_CALL_WARNING =
   "Есть успешные звонки только с косвенной связью по контакту; они показаны отдельно и не входят в основной показатель первого звонка.";
 const DAY_MS = 86_400_000;
+const EVENT_OUTCOME_WINDOW_DAYS = 60;
 const LOW_SAMPLE_MIN_DEALS = 10;
 const RELIABLE_SAMPLE_MIN_DEALS = 30;
 const KNOWN_MEETING_STAGE_IDS = new Set(["C10:MEETING"]);
@@ -130,6 +134,7 @@ interface SourceCohortTrajectoryInput {
   dealStageFacts?: DealStageFactSnapshot[];
   dealTouchpointFacts?: DealTouchpointFactSnapshot[];
   eventVisitFacts?: EventVisitFactSnapshot[];
+  events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   now?: Date;
 }
@@ -145,6 +150,7 @@ interface DealTrajectoryFacts {
   deal: DealSnapshot;
   reachedStageIds: Set<string>;
   stageEnteredAt: Map<string, string>;
+  stageEnteredAts: Map<string, string[]>;
   stageDurationMs: Map<string, number>;
   currentStageEnteredAt: string | null;
   stageTransitions: Array<{
@@ -704,6 +710,7 @@ function buildDealTrajectoryFacts(input: {
   );
   const reachedStageIds = new Set<string>();
   const stageEnteredAt = new Map<string, string>();
+  const stageEnteredAts = new Map<string, string[]>();
   const stageDurationMs = new Map<string, number>();
 
   if (input.baseStageId) {
@@ -713,6 +720,9 @@ function buildDealTrajectoryFacts(input: {
 
   timelineRows.forEach((row, index) => {
     reachedStageIds.add(row.stageId);
+    const enteredAts = stageEnteredAts.get(row.stageId) ?? [];
+    enteredAts.push(row.enteredAt);
+    stageEnteredAts.set(row.stageId, enteredAts);
     if (!stageEnteredAt.has(row.stageId)) {
       stageEnteredAt.set(row.stageId, row.enteredAt);
     }
@@ -745,6 +755,7 @@ function buildDealTrajectoryFacts(input: {
     deal: input.deal,
     reachedStageIds,
     stageEnteredAt,
+    stageEnteredAts,
     stageDurationMs,
     currentStageEnteredAt: latestCurrentStageEntry(timelineRows, input.deal),
     stageTransitions: buildStageTransitions(timelineRows, input.baseStageId),
@@ -916,6 +927,278 @@ function toManagerRow(
     ...toBreakdownRow(row),
     managerId: row.key,
     managerName: resolveManagerName(row.key, managerDirectory)
+  };
+}
+
+interface EventPerformanceObservation {
+  eventKey: string;
+  eventLabel: string;
+  eventTypeKey: string;
+  eventTypeLabel: string;
+  eventDate: string;
+  managerKey: string;
+  managerLabel: string;
+  mature: boolean;
+  contractAfter: boolean;
+  transferredAfter: boolean;
+  contractDurationMs: number | null;
+}
+
+interface EventPerformanceAccumulator {
+  key: string;
+  label: string;
+  eventDate: string | null;
+  eventKeys: Set<string>;
+  attendedVisits: number;
+  matureVisits: number;
+  contractAfterVisits: number;
+  transferredAfterVisits: number;
+  contractDurationsMs: number[];
+}
+
+function createEventPerformanceAccumulator(
+  key: string,
+  label: string,
+  eventDate: string | null = null
+): EventPerformanceAccumulator {
+  return {
+    key,
+    label,
+    eventDate,
+    eventKeys: new Set<string>(),
+    attendedVisits: 0,
+    matureVisits: 0,
+    contractAfterVisits: 0,
+    transferredAfterVisits: 0,
+    contractDurationsMs: []
+  };
+}
+
+function addEventPerformanceObservation(
+  row: EventPerformanceAccumulator,
+  observation: EventPerformanceObservation
+) {
+  row.eventKeys.add(observation.eventKey);
+  row.attendedVisits += 1;
+  if (!observation.mature) {
+    return;
+  }
+
+  row.matureVisits += 1;
+  if (observation.contractAfter) {
+    row.contractAfterVisits += 1;
+  }
+  if (observation.transferredAfter) {
+    row.transferredAfterVisits += 1;
+  }
+  if (observation.contractDurationMs !== null) {
+    row.contractDurationsMs.push(observation.contractDurationMs);
+  }
+}
+
+function toEventPerformanceRow(
+  row: EventPerformanceAccumulator
+): SourceCohortEventPerformanceRow {
+  return {
+    key: row.key,
+    label: row.label,
+    eventDate: row.eventDate,
+    eventCount: row.eventKeys.size,
+    attendedVisits: row.attendedVisits,
+    matureVisits: row.matureVisits,
+    contractAfterVisits: row.contractAfterVisits,
+    contractRate:
+      row.matureVisits > 0
+        ? toRate(row.contractAfterVisits, row.matureVisits)
+        : null,
+    transferredAfterVisits: row.transferredAfterVisits,
+    transferredRate:
+      row.matureVisits > 0
+        ? toRate(row.transferredAfterVisits, row.matureVisits)
+        : null,
+    medianDaysToContract: median(row.contractDurationsMs),
+    dataQualityStatus: dataQualityStatus(row.matureVisits)
+  };
+}
+
+function firstTimestampInWindow(
+  timestamps: string[],
+  fromMs: number,
+  windowMs: number
+) {
+  const candidates = timestamps
+    .map((timestamp) => Date.parse(timestamp))
+    .filter(
+      (timestampMs) =>
+        Number.isFinite(timestampMs) &&
+        timestampMs >= fromMs &&
+        timestampMs - fromMs <= windowMs
+    );
+
+  return candidates.length > 0 ? Math.min(...candidates) : null;
+}
+
+function buildEventPerformance(input: {
+  range: ReportRange;
+  now: Date;
+  eventVisitFacts: EventVisitFactSnapshot[];
+  events: EventSnapshot[];
+  dealFacts: DealTrajectoryFacts[];
+  contractStageId: string | null;
+  managerDirectory: Map<string, string>;
+}): SourceCohortEventPerformance {
+  const fromMs = Date.parse(input.range.from);
+  const toMs = Date.parse(input.range.to);
+  const nowMs = input.now.getTime();
+  const outcomeWindowMs = EVENT_OUTCOME_WINDOW_DAYS * DAY_MS;
+  const eventById = new Map(input.events.map((event) => [event.eventId, event]));
+  const factsByDeal = new Map(input.dealFacts.map((facts) => [facts.deal.id, facts]));
+  const observations = new Map<string, EventPerformanceObservation>();
+
+  for (const fact of input.eventVisitFacts) {
+    if (fact.finalStatus !== "attended" || !isTrustedFact(fact) || !fact.dealId) {
+      continue;
+    }
+
+    const dealFacts = factsByDeal.get(fact.dealId);
+    const eventDate = fact.eventDate ?? fact.attendedAt;
+    const eventAtMs = Date.parse(eventDate ?? "");
+    if (
+      !dealFacts ||
+      !eventDate ||
+      !Number.isFinite(eventAtMs) ||
+      eventAtMs < fromMs ||
+      eventAtMs > toMs ||
+      eventAtMs > nowMs
+    ) {
+      continue;
+    }
+
+    const event = fact.eventId ? eventById.get(fact.eventId) ?? null : null;
+    const payload = parsePayload(fact.payloadJson);
+    const eventKey = fact.eventId?.trim() || `visit:${fact.visitId}`;
+    const eventLabel =
+      event?.title?.trim() ||
+      payloadString(payload, "eventName")?.trim() ||
+      "Мероприятие без названия";
+    const eventTypeKey = event?.eventTypeId?.trim() || "UNSPECIFIED_EVENT_TYPE";
+    const eventTypeLabel = event?.eventTypeLabel?.trim() || "Без типа мероприятия";
+    const managerKey = fact.managerId?.trim() || UNASSIGNED_MANAGER_ID;
+    const managerLabel = resolveManagerName(managerKey, input.managerDirectory);
+    const contractAtMs = input.contractStageId
+      ? firstTimestampInWindow(
+          dealFacts.stageEnteredAts.get(input.contractStageId) ?? [],
+          eventAtMs,
+          outcomeWindowMs
+        )
+      : null;
+    const transferredAtMs = Date.parse(dealFacts.wonAt ?? "");
+    const mature = eventAtMs + outcomeWindowMs <= nowMs;
+    const contractDurationMs =
+      mature &&
+      contractAtMs !== null
+        ? contractAtMs - eventAtMs
+        : null;
+    const transferredAfter =
+      mature &&
+      Number.isFinite(transferredAtMs) &&
+      transferredAtMs >= eventAtMs &&
+      transferredAtMs - eventAtMs <= outcomeWindowMs;
+    const observationKey = `${eventKey}:${fact.dealId}`;
+
+    if (!observations.has(observationKey)) {
+      observations.set(observationKey, {
+        eventKey,
+        eventLabel,
+        eventTypeKey,
+        eventTypeLabel,
+        eventDate,
+        managerKey,
+        managerLabel,
+        mature,
+        contractAfter: contractDurationMs !== null,
+        transferredAfter,
+        contractDurationMs
+      });
+    }
+  }
+
+  const overall = createEventPerformanceAccumulator("overall", "Все мероприятия");
+  const typeRows = new Map<string, EventPerformanceAccumulator>();
+  const eventRows = new Map<string, EventPerformanceAccumulator>();
+  const managerRows = new Map<string, EventPerformanceAccumulator>();
+
+  for (const observation of observations.values()) {
+    addEventPerformanceObservation(overall, observation);
+
+    const typeRow =
+      typeRows.get(observation.eventTypeKey) ??
+      createEventPerformanceAccumulator(
+        observation.eventTypeKey,
+        observation.eventTypeLabel
+      );
+    addEventPerformanceObservation(typeRow, observation);
+    typeRows.set(observation.eventTypeKey, typeRow);
+
+    const eventRow =
+      eventRows.get(observation.eventKey) ??
+      createEventPerformanceAccumulator(
+        observation.eventKey,
+        observation.eventLabel,
+        observation.eventDate
+      );
+    addEventPerformanceObservation(eventRow, observation);
+    eventRows.set(observation.eventKey, eventRow);
+
+    const managerRow =
+      managerRows.get(observation.managerKey) ??
+      createEventPerformanceAccumulator(
+        observation.managerKey,
+        observation.managerLabel
+      );
+    addEventPerformanceObservation(managerRow, observation);
+    managerRows.set(observation.managerKey, managerRow);
+  }
+
+  const toRows = (rows: Map<string, EventPerformanceAccumulator>) =>
+    Array.from(rows.values()).map(toEventPerformanceRow);
+  const eventTypeRows = toRows(typeRows).sort(
+    (left, right) =>
+      right.matureVisits - left.matureVisits ||
+      right.attendedVisits - left.attendedVisits ||
+      left.label.localeCompare(right.label, "ru")
+  );
+  const individualEventRows = toRows(eventRows).sort((left, right) => {
+    const byDate = (right.eventDate ?? "").localeCompare(left.eventDate ?? "");
+    return byDate !== 0 ? byDate : left.label.localeCompare(right.label, "ru");
+  });
+  const eventManagerRows = toRows(managerRows).sort(
+    (left, right) =>
+      right.attendedVisits - left.attendedVisits ||
+      left.label.localeCompare(right.label, "ru")
+  );
+  const overallRow = toEventPerformanceRow(overall);
+  const warnings = [
+    `Конверсия после мероприятия — наблюдаемый результат в течение ${EVENT_OUTCOME_WINDOW_DAYS} дней, а не доказанный причинный эффект.`,
+    "Один контракт может учитываться после нескольких посещений; строки нельзя складывать между собой.",
+    "Ответственный по мероприятию — текущий владелец записи посещения в снимке CRM."
+  ];
+  if (overallRow.matureVisits === 0 && overallRow.attendedVisits > 0) {
+    warnings.push("Посещения выбранного периода еще не созрели для сравнения конверсии.");
+  }
+
+  return {
+    range: input.range,
+    outcomeWindowDays: EVENT_OUTCOME_WINDOW_DAYS,
+    totalEvents: overallRow.eventCount,
+    attendedVisits: overallRow.attendedVisits,
+    matureVisits: overallRow.matureVisits,
+    contractAfterVisits: overallRow.contractAfterVisits,
+    transferredAfterVisits: overallRow.transferredAfterVisits,
+    eventTypeRows,
+    eventRows: individualEventRows,
+    managerRows: eventManagerRows,
+    warnings
   };
 }
 
@@ -1598,12 +1881,28 @@ export function buildSourceCohortTrajectoryReport(
   const eventVisitFactsByDeal = groupFactsByDeal(input.eventVisitFacts);
   const managerDirectory = buildManagerDirectoryMap(input.managerDirectory ?? []);
   const sourceLabels = buildSourceLabelMap(input.stageCatalog);
-  const scopedDeals = input.deals.filter(
-    (deal) =>
-      allowedCategoryIds.has(normalizeCategoryId(deal.categoryId)) &&
-      isWithinRange(deal.dateCreate, fromMs, toMs)
+  const scopedDeals = input.deals.filter((deal) =>
+    allowedCategoryIds.has(normalizeCategoryId(deal.categoryId))
   );
-  const dealFacts = scopedDeals.map((deal) =>
+  const cohortDeals = scopedDeals.filter((deal) =>
+    isWithinRange(deal.dateCreate, fromMs, toMs)
+  );
+  const cohortDealIds = new Set(cohortDeals.map((deal) => deal.id));
+  const eventDealIds = new Set(
+    (input.eventVisitFacts ?? [])
+      .filter(
+        (fact) =>
+          fact.finalStatus === "attended" &&
+          isTrustedFact(fact) &&
+          isWithinRange(fact.eventDate ?? fact.attendedAt, fromMs, toMs)
+      )
+      .map((fact) => fact.dealId)
+      .filter((dealId): dealId is string => Boolean(dealId))
+  );
+  const candidateDeals = scopedDeals.filter(
+    (deal) => cohortDealIds.has(deal.id) || eventDealIds.has(deal.id)
+  );
+  const candidateDealFacts = candidateDeals.map((deal) =>
     buildDealTrajectoryFacts({
       deal,
       baseStageId,
@@ -1614,9 +1913,13 @@ export function buildSourceCohortTrajectoryReport(
       eventVisitFactsByDeal
     })
   );
+  const dealFacts = candidateDealFacts.filter((facts) =>
+    cohortDealIds.has(facts.deal.id)
+  );
   const managerRows = new Map<string, BreakdownAccumulator>();
   const sourceRows = new Map<string, BreakdownAccumulator>();
   const customerRows = new Map<string, BreakdownAccumulator>();
+  const qualityRows = new Map<string, BreakdownAccumulator>();
   const overall = createBreakdownAccumulator("overall", "Все сделки");
 
   for (const facts of dealFacts) {
@@ -1624,6 +1927,8 @@ export function buildSourceCohortTrajectoryReport(
     const source = resolveDealSource(facts.deal, sourceLabels);
     const customerLabel =
       facts.deal.businessClubValue?.trim() || "Без бизнес-клуба заказчика";
+    const qualityLabel =
+      facts.deal.qualityValue?.trim() || "Без итогового качества";
     const currentStage = meetingStage;
     const nextStageAfterCompletedMeetingAt = firstForwardStageAfter({
       facts,
@@ -1704,6 +2009,21 @@ export function buildSourceCohortTrajectoryReport(
       staleOpenContractStage
     });
     customerRows.set(customerLabel, customerRow);
+
+    const qualityRow =
+      qualityRows.get(qualityLabel) ??
+      createBreakdownAccumulator(qualityLabel, qualityLabel);
+    addTrajectoryToBreakdown({
+      row: qualityRow,
+      facts,
+      meetingStageId: meetingStage?.stageId ?? null,
+      contractStageId: contractStage?.stageId ?? null,
+      hasCompletedMeetingWithoutNextStage,
+      dealIsOpen,
+      staleAfterCompletedMeeting,
+      staleOpenContractStage
+    });
+    qualityRows.set(qualityLabel, qualityRow);
   }
 
   const stageNodes = stageSequence.map((stage) => {
@@ -1871,6 +2191,15 @@ export function buildSourceCohortTrajectoryReport(
     })),
     asOf: reportNowIso
   });
+  const eventPerformance = buildEventPerformance({
+    range: input.range,
+    now: reportNow,
+    eventVisitFacts: input.eventVisitFacts ?? [],
+    events: input.events ?? [],
+    dealFacts: candidateDealFacts,
+    contractStageId: contractStage?.stageId ?? null,
+    managerDirectory
+  });
 
   return {
     range: input.range,
@@ -1891,9 +2220,13 @@ export function buildSourceCohortTrajectoryReport(
     customerRows: Array.from(customerRows.values())
       .sort((left, right) => right.totalDeals - left.totalDeals)
       .map(toBreakdownRow),
+    qualityRows: Array.from(qualityRows.values())
+      .sort((left, right) => right.totalDeals - left.totalDeals)
+      .map(toBreakdownRow),
+    eventPerformance,
     dataQuality: buildDataQuality({
       totalDeals: dealFacts.length,
-      scopedDeals,
+      scopedDeals: cohortDeals,
       stageFactMap,
       stageHistoryMap,
       touchpointFactsByDeal,

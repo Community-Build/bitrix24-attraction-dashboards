@@ -45,6 +45,8 @@ Stable dashboard anchors used by ontology report bindings:
   the line percentage is calculated from deals that reached `fromStageId`, or
   from the full cohort for the initial `null -> first stage` transition.
 - Action trajectory sources:
+  - first call attempt: first high-confidence direct outgoing call after deal
+    creation, regardless of connection result;
   - first successful call: `deal_touchpoint_facts.kind = call`, high-confidence
     direct deal link, outgoing, `payload.connected = true`,
     `payload.overThirtySeconds = true`, occurred on or after deal creation;
@@ -55,6 +57,16 @@ Stable dashboard anchors used by ontology report bindings:
     deal link, `payload.completed = true`, occurred on or after deal creation;
   - attended event: `event_visit_facts.final_status = attended`,
     direct/trusted deal link, occurred on or after deal creation.
+- The default participant journey is exposed through
+  `SourceCohortConversionReport.trajectory.conversionJourney` as
+  `created -> first_call -> confirmed_conversation -> meeting_completed ->
+  contract -> transferred`. Event visits are an optional branch and are not a
+  mandatory step between meeting and contract.
+- `meeting_scheduled` remains available as a process diagnostic: it means that
+  a meeting date was recorded in the deal or a linked CRM meeting was created.
+  It is not proof that the meeting happened and it is not the denominator for
+  `meeting_completed`; completed-meeting conversion is conditional on the
+  confirmed-conversation step.
 - Fact-step chain:
   `SourceCohortConversionReport.trajectory.factSteps` is the canonical ordered
   chain `created -> first_successful_call -> meeting_stage -> completed_meeting
@@ -91,6 +103,22 @@ Stable dashboard anchors used by ontology report bindings:
 - Repeat event attendance: a deal is counted in `repeatAttendedEventDeals`
   when it has two or more trusted attended event visits after deal creation;
   `repeatAttendedEventVisits` counts additional visits beyond the first.
+- Event performance is exposed through
+  `SourceCohortConversionReport.trajectory.eventPerformance` and uses an
+  event-date cohort, not the deal-creation cohort:
+  - include trusted attended visits whose event date is inside the selected
+    range;
+  - use a fixed 60-day outcome window after attendance;
+  - only visits whose full 60-day window has elapsed enter `matureVisits` and
+    rate denominators;
+  - `contractRate = contractAfterVisits / matureVisits` and
+    `transferredRate = transferredAfterVisits / matureVisits`;
+  - rows are available by event type, individual event and current visit owner;
+    a later contract can be observed after more than one event exposure, so row
+    totals are non-additive;
+  - observed post-event conversion is descriptive and must not be presented as
+    causal event impact;
+  - individual rows with `N < 10` are descriptive and must not be ranked.
 - Stage and action facts are intentionally separate. `Встреча-знакомство` in CRM
   does not prove that a meeting happened; the report surfaces
   `meetingStageWithoutFactDeals` as a process/data-quality gap.
@@ -140,6 +168,14 @@ Stable dashboard anchors used by ontology report bindings:
 - Manager rows use the current deal responsible from the local CRM snapshot. They
   are safe for current-owner operational review; historical action-owner
   ranking requires a separate attribution layer.
+- Source rows are the current CRM proxy for a supplier slice; there is no
+  canonical supplier entity in this report contract yet.
+- `qualityRows` groups deals by the final-quality value in the current local
+  snapshot. It is an outcome/descriptive slice, not an intake-quality feature
+  and not a causal driver.
+- Event-manager rows use the current visit owner from the local snapshot. They
+  do not prove who invited, conducted a reflection, or owned the deal at the
+  time of attendance.
 - Диагностика менеджеров lives in
   `SourceCohortConversionReport.trajectory.managerDiagnostics`. It is
   deterministic, not LLM-generated, and uses the same canonical row facts as
@@ -196,7 +232,7 @@ Stable dashboard anchors used by ontology report bindings:
   business-club value, the customer slice is descriptive and must not be used as
   a hard ranking.
 - Every slice must show denominator and data-quality status. Rows with `N < 10`
-  must not be used for hard manager/source/customer ranking.
+  must not be used for hard manager/source/customer/quality ranking.
 - Dashboard rendering reads cached API/SQLite data only and must not perform
   direct Bitrix reads.
 

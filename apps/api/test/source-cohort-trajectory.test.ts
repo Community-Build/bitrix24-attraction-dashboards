@@ -4,6 +4,7 @@ import type {
   DealSnapshot,
   DealStageFactSnapshot,
   DealTouchpointFactSnapshot,
+  EventSnapshot,
   EventVisitFactSnapshot,
   StageCatalogEntry,
   StageHistorySnapshot
@@ -214,6 +215,28 @@ function eventVisit(
     linkReason: "event_visit_deal",
     payloadJson: null,
     ...input
+  };
+}
+
+function event(
+  input: Partial<EventSnapshot> & Pick<EventSnapshot, "eventId" | "eventDate">
+): EventSnapshot {
+  return {
+    eventId: input.eventId,
+    entityTypeId: input.entityTypeId ?? 1042,
+    categoryId: input.categoryId ?? 10,
+    title: input.title ?? input.eventId,
+    eventDate: input.eventDate,
+    startAt: input.startAt ?? input.eventDate,
+    endAt: input.endAt ?? input.eventDate,
+    stageId: input.stageId ?? "DT:SUCCESS",
+    stageName: input.stageName ?? "Проведено",
+    status: input.status ?? "completed",
+    eventTypeId: input.eventTypeId ?? "intro",
+    eventTypeLabel: input.eventTypeLabel ?? "Знакомство с клубом",
+    formatId: input.formatId ?? "offline",
+    createdTime: input.createdTime ?? input.eventDate,
+    updatedTime: input.updatedTime ?? input.eventDate
   };
 }
 
@@ -973,8 +996,178 @@ describe("buildSourceCohortTrajectoryReport", () => {
       })
     ]);
     expect(report.dataQuality.warnings).toContain(
-      "Разрезы с N < 10 нельзя использовать для жесткого ранжирования менеджеров, источников или заказчиков."
+      "Разрезы с N < 10 нельзя использовать для жесткого ранжирования менеджеров, источников, заказчиков или качества."
     );
+  });
+
+  it("builds quality and mature event-date breakdowns without mixing immature outcomes", () => {
+    const report = buildSourceCohortTrajectoryReport({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      now: new Date("2026-07-20T09:00:00.000Z"),
+      wonStageIds: ["C10:WON"],
+      deals: [
+        deal({
+          id: "mature-event-won",
+          qualityValue: "3.1 Готов ко встрече",
+          dateCreate: "2026-04-01T09:00:00.000Z",
+          stageId: "C10:WON",
+          stageSemanticId: "S",
+          dateClosed: "2026-04-25T09:00:00.000Z"
+        }),
+        deal({
+          id: "recent-event-open",
+          qualityValue: "Без итогового качества",
+          dateCreate: "2026-06-01T09:00:00.000Z"
+        })
+      ],
+      stageCatalog,
+      dealStageFacts: [
+        stageFact({
+          factId: "mature-event-contract",
+          dealId: "mature-event-won",
+          stageId: "C10:CONTRACT",
+          enteredAt: "2026-04-20T09:00:00.000Z",
+          leftAt: "2026-04-25T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "mature-event-transferred",
+          dealId: "mature-event-won",
+          stageId: "C10:WON",
+          stageSemanticId: "S",
+          enteredAt: "2026-04-25T09:00:00.000Z"
+        })
+      ],
+      events: [
+        event({
+          eventId: "old-event",
+          title: "Апрельское знакомство",
+          eventDate: "2026-04-10T09:00:00.000Z"
+        }),
+        event({
+          eventId: "recent-event",
+          title: "Июньское знакомство",
+          eventDate: "2026-06-20T09:00:00.000Z"
+        })
+      ],
+      eventVisitFacts: [
+        eventVisit({
+          visitId: "old-event-visit",
+          eventId: "old-event",
+          dealId: "mature-event-won",
+          eventDate: "2026-04-10T09:00:00.000Z"
+        }),
+        eventVisit({
+          visitId: "recent-event-visit",
+          eventId: "recent-event",
+          dealId: "recent-event-open",
+          eventDate: "2026-06-20T09:00:00.000Z"
+        })
+      ]
+    });
+
+    expect(report.qualityRows.map((row) => [row.label, row.totalDeals])).toEqual([
+      ["3.1 Готов ко встрече", 1],
+      ["Без итогового качества", 1]
+    ]);
+    expect(report.eventPerformance).toEqual(
+      expect.objectContaining({
+        outcomeWindowDays: 60,
+        totalEvents: 2,
+        attendedVisits: 2,
+        matureVisits: 1,
+        contractAfterVisits: 1,
+        transferredAfterVisits: 1
+      })
+    );
+    expect(report.eventPerformance.eventRows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          key: "old-event",
+          matureVisits: 1,
+          contractRate: 100,
+          transferredRate: 100,
+          medianDaysToContract: 10
+        }),
+        expect.objectContaining({
+          key: "recent-event",
+          matureVisits: 0,
+          contractRate: null,
+          transferredRate: null
+        })
+      ])
+    );
+  });
+
+  it("attributes a contract re-entry that happens after an attended event", () => {
+    const report = buildSourceCohortTrajectoryReport({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      now: new Date("2026-07-20T09:00:00.000Z"),
+      wonStageIds: ["C10:WON"],
+      deals: [
+        deal({
+          id: "contract-reentry-after-event",
+          dateCreate: "2026-04-01T09:00:00.000Z",
+          stageId: "C10:CONTRACT"
+        })
+      ],
+      stageCatalog,
+      dealStageFacts: [
+        stageFact({
+          factId: "contract-before-event",
+          dealId: "contract-reentry-after-event",
+          stageId: "C10:CONTRACT",
+          enteredAt: "2026-04-05T09:00:00.000Z",
+          leftAt: "2026-04-07T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "left-contract-before-event",
+          dealId: "contract-reentry-after-event",
+          stageId: "C10:DEMO",
+          enteredAt: "2026-04-07T09:00:00.000Z",
+          leftAt: "2026-04-20T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "contract-after-event",
+          dealId: "contract-reentry-after-event",
+          stageId: "C10:CONTRACT",
+          enteredAt: "2026-04-20T09:00:00.000Z"
+        })
+      ],
+      events: [
+        event({
+          eventId: "event-before-contract-reentry",
+          eventDate: "2026-04-10T09:00:00.000Z"
+        })
+      ],
+      eventVisitFacts: [
+        eventVisit({
+          visitId: "contract-reentry-visit",
+          eventId: "event-before-contract-reentry",
+          dealId: "contract-reentry-after-event",
+          eventDate: "2026-04-10T09:00:00.000Z"
+        })
+      ]
+    });
+
+    expect(report.eventPerformance).toEqual(
+      expect.objectContaining({
+        matureVisits: 1,
+        contractAfterVisits: 1
+      })
+    );
+    expect(report.eventPerformance.eventRows).toEqual([
+      expect.objectContaining({
+        key: "event-before-contract-reentry",
+        contractRate: 100,
+        medianDaysToContract: 10
+      })
+    ]);
   });
 
   it("counts repeat event attendance separately from first attended event", () => {

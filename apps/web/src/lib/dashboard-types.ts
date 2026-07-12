@@ -1191,6 +1191,35 @@ export interface SourceCohortConversionJourney {
   eventDepthRows: SourceCohortConversionEventDepthRow[]
 }
 
+export interface SourceCohortEventPerformanceRow {
+  key: string
+  label: string
+  eventDate: string | null
+  eventCount: number
+  attendedVisits: number
+  matureVisits: number
+  contractAfterVisits: number
+  contractRate: number | null
+  transferredAfterVisits: number
+  transferredRate: number | null
+  medianDaysToContract: number | null
+  dataQualityStatus: SourceCohortTrajectoryQualityStatus
+}
+
+export interface SourceCohortEventPerformance {
+  range: ReportRange
+  outcomeWindowDays: number
+  totalEvents: number
+  attendedVisits: number
+  matureVisits: number
+  contractAfterVisits: number
+  transferredAfterVisits: number
+  eventTypeRows: SourceCohortEventPerformanceRow[]
+  eventRows: SourceCohortEventPerformanceRow[]
+  managerRows: SourceCohortEventPerformanceRow[]
+  warnings: string[]
+}
+
 export interface SourceCohortTrajectoryReport {
   range: ReportRange
   totalDeals: number
@@ -1206,6 +1235,8 @@ export interface SourceCohortTrajectoryReport {
   managerRows: SourceCohortTrajectoryManagerRow[]
   sourceRows: SourceCohortTrajectoryBreakdownRow[]
   customerRows: SourceCohortTrajectoryBreakdownRow[]
+  qualityRows: SourceCohortTrajectoryBreakdownRow[]
+  eventPerformance: SourceCohortEventPerformance
   dataQuality: SourceCohortTrajectoryDataQuality
 }
 

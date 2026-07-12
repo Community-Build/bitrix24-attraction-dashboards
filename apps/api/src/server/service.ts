@@ -2457,10 +2457,11 @@ export function createReportingService(
       filters
     }) {
       const scopedFilters = await normalizeAttractionReportFilters(filters);
-      const [deals, stageCatalog, wonStageIds] = await Promise.all([
+      const [deals, stageCatalog, wonStageIds, events] = await Promise.all([
         input.repository.getAllDeals(),
         getScopedStageCatalog(true),
-        input.repository.getWonStageIds()
+        input.repository.getWonStageIds(),
+        input.repository.getAllEventSnapshots()
       ]);
       const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
       const canonical = await loadScopedCanonicalReportInputs(
@@ -2468,7 +2469,10 @@ export function createReportingService(
       );
       const managerDirectory = await ensureManagerDirectory(
         uniqueStrings(
-          scopedDeals.map((deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID)
+          [
+            ...scopedDeals.map((deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID),
+            ...canonical.eventVisitFacts.map((fact) => fact.managerId)
+          ]
         )
       );
       const reportNow = nowFactory();
@@ -2484,6 +2488,7 @@ export function createReportingService(
           dealStageFacts: canonical.dealStageFacts,
           dealTouchpointFacts: canonical.dealTouchpointFacts,
           eventVisitFacts: canonical.eventVisitFacts,
+          events,
           managerDirectory,
           includeTrajectory: true,
           now: reportNow

@@ -168,6 +168,24 @@ vi.mock('@/lib/api-client', () => ({
       trajectory: {
         range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
         totalDeals: 77,
+        conversionJourney: {
+          coreSteps: [
+            { stepKey: 'created', label: 'Создана', deals: 77, rateFromCohort: 100, transitionDeals: 77, rateFromPrevious: 100, dropoffDeals: 0, medianDaysFromCreate: 0, medianDaysFromPrevious: 0, evidence: 'Создание сделки.' },
+            { stepKey: 'first_call', label: 'Первый звонок', deals: 55, rateFromCohort: 71.43, transitionDeals: 55, rateFromPrevious: 71.43, dropoffDeals: 22, medianDaysFromCreate: 0.5, medianDaysFromPrevious: 0.5, evidence: 'Первая попытка.' },
+            { stepKey: 'confirmed_conversation', label: 'Подтвержденный разговор', deals: 45, rateFromCohort: 58.44, transitionDeals: 45, rateFromPrevious: 81.82, dropoffDeals: 10, medianDaysFromCreate: 1, medianDaysFromPrevious: 0.5, evidence: 'Успешный разговор.' },
+            { stepKey: 'meeting_scheduled', label: 'Встреча назначена', deals: 32, rateFromCohort: 41.56, transitionDeals: 32, rateFromPrevious: 71.11, dropoffDeals: 13, medianDaysFromCreate: 3, medianDaysFromPrevious: 2, evidence: 'Дата встречи.' },
+            { stepKey: 'meeting_completed', label: 'Встреча состоялась', deals: 20, rateFromCohort: 25.97, transitionDeals: 20, rateFromPrevious: 44.44, dropoffDeals: 25, medianDaysFromCreate: 5, medianDaysFromPrevious: 4, evidence: 'Выполненная встреча.' },
+            { stepKey: 'contract', label: 'Контракт', deals: 8, rateFromCohort: 10.39, transitionDeals: 8, rateFromPrevious: 40, dropoffDeals: 12, medianDaysFromCreate: 14, medianDaysFromPrevious: 9, evidence: 'Этап контракта.' },
+            { stepKey: 'transferred', label: 'Передано в клуб', deals: 1, rateFromCohort: 1.3, transitionDeals: 1, rateFromPrevious: 12.5, dropoffDeals: 7, medianDaysFromCreate: 21, medianDaysFromPrevious: 7, evidence: 'Успешный этап.' },
+          ],
+          eventSteps: [],
+          eventDepthRows: [
+            { depthKey: '0', label: 'Без посещений', deals: 11, rateFromCompletedMeeting: 55, contractDeals: 3, contractRate: 27.27, transferredDeals: 0, transferredRate: 0, medianDaysToContract: 8 },
+            { depthKey: '1', label: '1 мероприятие', deals: 6, rateFromCompletedMeeting: 30, contractDeals: 3, contractRate: 50, transferredDeals: 1, transferredRate: 16.67, medianDaysToContract: 5 },
+            { depthKey: '2', label: '2 мероприятия', deals: 2, rateFromCompletedMeeting: 10, contractDeals: 1, contractRate: 50, transferredDeals: 0, transferredRate: 0, medianDaysToContract: 4 },
+            { depthKey: '3_plus', label: '3+ мероприятия', deals: 1, rateFromCompletedMeeting: 5, contractDeals: 1, contractRate: 100, transferredDeals: 0, transferredRate: 0, medianDaysToContract: 3 },
+          ],
+        },
         stageNodes: [
           {
             stageId: 'C10:NEW',
@@ -713,6 +731,22 @@ vi.mock('@/lib/api-client', () => ({
             },
           },
         ],
+        qualityRows: [],
+        eventPerformance: {
+          range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
+          outcomeWindowDays: 60,
+          totalEvents: 2,
+          attendedVisits: 12,
+          matureVisits: 10,
+          contractAfterVisits: 3,
+          transferredAfterVisits: 1,
+          eventTypeRows: [
+            { key: 'intro', label: 'Знакомство с клубом', eventDate: null, eventCount: 2, attendedVisits: 12, matureVisits: 10, contractAfterVisits: 3, contractRate: 30, transferredAfterVisits: 1, transferredRate: 10, medianDaysToContract: 6, dataQualityStatus: 'limited' },
+          ],
+          eventRows: [],
+          managerRows: [],
+          warnings: ['Наблюдаемая конверсия после события не доказывает причинность.'],
+        },
         dataQuality: {
           totalDeals: 77,
           stageHistoryDeals: 70,
@@ -2160,94 +2194,36 @@ describe('App', () => {
     expect(screen.queryByRole('button', { name: '2024' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /декабрь 2024 · 12/i })).not.toBeInTheDocument()
     expect(screen.getAllByText('77').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/1[,.]3%/).length).toBeGreaterThan(0)
-    expect(screen.getByText('Лидген УС')).toBeInTheDocument()
-    expect(screen.getAllByText(/ClubFirst Future/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/Встреча-знакомство 6/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/Без таргет-группы/i).length).toBeGreaterThan(0)
-    expect(
-      screen.getByRole('heading', { name: /конверсии по этапам и фактам/i }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /диагностика переходов/i })).toBeInTheDocument()
-    expect(screen.getAllByText(/фактическая цепочка/i).length).toBeGreaterThan(0)
-    expect(screen.getByText(/где разрывается движение/i)).toBeInTheDocument()
-    expect(screen.getByText(/этап встречи в CRM/i)).toBeInTheDocument()
-    expect(screen.getByText(/нет успешного звонка/i)).toBeInTheDocument()
-    expect(screen.getByText(/почему после дозвона не назначили встречу/i)).toBeInTheDocument()
-    expect(screen.queryByText(/successful_call_without_meeting_stage/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /сроки и зависания/i })).toBeInTheDocument()
-    expect(screen.getAllByText(/нет факта/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/норма 3 дн/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/медленно/i).length).toBeGreaterThan(0)
-    expect(screen.queryByText(/no_fact/i)).not.toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: /траектория участника/i })).toBeInTheDocument()
-    expect(screen.getAllByText(/первый успешный звонок/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/повторные мероприятия/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/контракт/i).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: /сроки на этапах/i })).toBeInTheDocument()
-    expect(screen.getAllByText(/CRM-встреча без факта/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/звонок позже нормы/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/зависли на контракте/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/после встречи без движения/i).length).toBeGreaterThan(0)
-    expect(screen.getByRole('heading', { name: /диагностика менеджеров/i })).toBeInTheDocument()
-    expect(screen.getByText(/оценка по текущему ответственному сделки/i)).toBeInTheDocument()
-    expect(screen.getByText(/Проверить назначение встреч/i)).toBeInTheDocument()
-    expect(screen.queryByText(/повторные события/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/meeting_stage_without_fact/i)).not.toBeInTheDocument()
-    expect(screen.getAllByText(/Анастасия Кузнецова/i).length).toBeGreaterThan(0)
 
     const trajectoryBlock = document.querySelector(
       '[data-comment-block-id="attraction-source-cohort-trajectory-conversions"]',
     )
     expect(trajectoryBlock).toBeInTheDocument()
-    expect(
-      within(trajectoryBlock as HTMLElement).getByRole('columnheader', { name: 'Проигрыш' }),
-    ).toBeInTheDocument()
-    expect(
-      within(trajectoryBlock as HTMLElement).queryByRole('columnheader', { name: 'Корзина' }),
-    ).not.toBeInTheDocument()
+    const trajectory = within(trajectoryBlock as HTMLElement)
 
-    const successfulCallHintButton = within(trajectoryBlock as HTMLElement).getAllByRole('button', {
-      name: /Считается первый прямой доверенный исходящий звонок/i,
-    })[0]
-    expect(successfulCallHintButton).toBeDefined()
-    const successfulCallHintButtonElement = successfulCallHintButton as HTMLElement
-    fireEvent.focus(successfulCallHintButtonElement)
-    const successfulCallTooltip = screen.getByRole('tooltip')
-    expect(successfulCallTooltip).toHaveTextContent(/Короткие соединения и неуспешные попытки/i)
-    expect(successfulCallTooltip).toHaveClass('fixed')
-    expect(trajectoryBlock as HTMLElement).not.toContainElement(successfulCallTooltip)
-    fireEvent.blur(successfulCallHintButtonElement)
-    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    expect(trajectory.getByRole('heading', { name: /путь участника по фактам и CRM/i })).toBeInTheDocument()
+    expect(trajectory.getByRole('button', { name: 'Путь участника' })).toHaveAttribute('aria-pressed', 'true')
+    expect(trajectory.getByText('Первая попытка')).toBeInTheDocument()
+    expect(trajectory.getByText('Успешный разговор')).toBeInTheDocument()
+    expect(trajectory.getByText(/дата встречи зафиксирована/i)).toBeInTheDocument()
+    expect(trajectory.getAllByText(/после прошлого шага/i).length).toBeGreaterThan(0)
+    expect(trajectory.getByRole('heading', { name: /кто лучше доводит/i })).toBeInTheDocument()
+    expect(trajectory.getByText('Анастасия Кузнецова')).toBeInTheDocument()
+    expect(trajectory.queryByText(/successful_call_without_meeting_stage/i)).not.toBeInTheDocument()
 
-    fireEvent.click(
-      within(trajectoryBlock as HTMLElement).getByRole('button', { name: 'Источники' }),
-    )
-    expect(
-      screen.getByRole('heading', { name: /какие источники где теряют движение/i }),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText('Лидген УС').length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/профиль потерь/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/терминальный проигрыш/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/какая причина проигрыша повторяется/i).length).toBeGreaterThan(0)
-    expect(screen.queryByText(/Егоров Андрей/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/terminal_loss/i)).not.toBeInTheDocument()
+    fireEvent.click(trajectory.getByRole('button', { name: 'Расхождения' }))
+    expect(trajectory.getByText('Нет успешного звонка')).toBeInTheDocument()
+    expect(trajectory.getByText(/почему не довели до успешного дозвона/i)).toBeInTheDocument()
 
-    fireEvent.click(
-      within(trajectoryBlock as HTMLElement).getByRole('button', { name: 'Заказчики' }),
-    )
-    expect(
-      screen.getByRole('heading', { name: /какие заказчики как проходят траекторию/i }),
-    ).toBeInTheDocument()
-    expect(screen.getAllByText(/контракт без продажи/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/что блокирует закрытие контракта/i).length).toBeGreaterThan(0)
+    fireEvent.click(trajectory.getByRole('button', { name: 'Поставщики / источники' }))
+    expect(trajectory.getByText('Лидген УС')).toBeInTheDocument()
+    fireEvent.click(trajectory.getByRole('button', { name: 'Заказчики' }))
+    expect(trajectory.getByText('ClubFirst Future')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: /раскрыть строку/i }))
-    expect(screen.getByText(/Егоров Андрей/i)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /по менеджерам/i }))
-    expect(await screen.findByText(/1 разрез/i)).toBeInTheDocument()
-    expect(screen.getByText(/Егоров Андрей/i)).toBeInTheDocument()
+    fireEvent.click(trajectory.getByRole('button', { name: 'Мероприятия' }))
+    expect(trajectory.getByRole('heading', { name: /какие мероприятия связаны/i })).toBeInTheDocument()
+    expect(trajectory.getByText('Знакомство с клубом')).toBeInTheDocument()
+    expect(trajectory.getAllByText(/60 дней/i).length).toBeGreaterThan(0)
     expect(apiClient.getAttractionOntology).not.toHaveBeenCalled()
   })
 
@@ -2347,7 +2323,7 @@ describe('App', () => {
     )
   })
 
-  it('does not keep stale source cohort rows while a selected month is loading', async () => {
+  it('does not keep a stale conversion report while a selected month is loading', async () => {
     const loadedReport: SourceCohortConversionReport = {
       range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
       totalCreatedDeals: 77,
@@ -2395,7 +2371,7 @@ describe('App', () => {
       await screen.findByRole('button', { name: /^конверсии$/i }),
     )
 
-    expect(await screen.findByText('Лидген УС')).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: /траектория пока недоступна/i })).toBeInTheDocument()
 
     const callsBeforeMonthChange = vi.mocked(apiClient.getSourceCohortConversionReport)
       .mock.calls.length
@@ -2409,7 +2385,7 @@ describe('App', () => {
       expect(vi.mocked(apiClient.getSourceCohortConversionReport).mock.calls.length)
         .toBeGreaterThan(callsBeforeMonthChange),
     )
-    expect(screen.queryByText('Лидген УС')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /траектория пока недоступна/i })).not.toBeInTheDocument()
     expect(screen.getByText(/считаю когорту/i)).toBeInTheDocument()
   })
 

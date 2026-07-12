@@ -2659,6 +2659,26 @@ function normalizeSourceCohortTrajectoryBreakdownRow(value: unknown) {
   }
 }
 
+function normalizeSourceCohortEventPerformanceRow(value: unknown) {
+  const row = isRecord(value) ? value : {}
+  return {
+    key: asString(row.key),
+    label: asString(row.label, asString(row.key)),
+    eventDate: asNullableString(row.eventDate),
+    eventCount: asNumber(row.eventCount),
+    attendedVisits: asNumber(row.attendedVisits),
+    matureVisits: asNumber(row.matureVisits),
+    contractAfterVisits: asNumber(row.contractAfterVisits),
+    contractRate: asNullableNumber(row.contractRate),
+    transferredAfterVisits: asNumber(row.transferredAfterVisits),
+    transferredRate: asNullableNumber(row.transferredRate),
+    medianDaysToContract: asNullableNumber(row.medianDaysToContract),
+    dataQualityStatus: normalizeSourceCohortTrajectoryQualityStatus(
+      row.dataQualityStatus,
+    ),
+  }
+}
+
 function normalizeSourceCohortTrajectoryReport(value: unknown) {
   if (!isRecord(value)) {
     return undefined
@@ -2682,6 +2702,9 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
 
   const signals = isRecord(value.overallSignals) ? value.overallSignals : {}
   const dataQuality = isRecord(value.dataQuality) ? value.dataQuality : {}
+  const eventPerformance = isRecord(value.eventPerformance)
+    ? value.eventPerformance
+    : {}
   const conversionJourney = normalizeSourceCohortConversionJourney(
     value.conversionJourney,
   )
@@ -2859,6 +2882,34 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
       value.customerRows,
       normalizeSourceCohortTrajectoryBreakdownRow,
     ),
+    qualityRows: asArray(
+      value.qualityRows,
+      normalizeSourceCohortTrajectoryBreakdownRow,
+    ),
+    eventPerformance: {
+      range: normalizeRange(eventPerformance.range ?? value.range),
+      outcomeWindowDays: asNumber(eventPerformance.outcomeWindowDays, 60),
+      totalEvents: asNumber(eventPerformance.totalEvents),
+      attendedVisits: asNumber(eventPerformance.attendedVisits),
+      matureVisits: asNumber(eventPerformance.matureVisits),
+      contractAfterVisits: asNumber(eventPerformance.contractAfterVisits),
+      transferredAfterVisits: asNumber(eventPerformance.transferredAfterVisits),
+      eventTypeRows: asArray(
+        eventPerformance.eventTypeRows,
+        normalizeSourceCohortEventPerformanceRow,
+      ),
+      eventRows: asArray(
+        eventPerformance.eventRows,
+        normalizeSourceCohortEventPerformanceRow,
+      ),
+      managerRows: asArray(
+        eventPerformance.managerRows,
+        normalizeSourceCohortEventPerformanceRow,
+      ),
+      warnings: asArray(eventPerformance.warnings, (entry) =>
+        asString(entry),
+      ).filter(Boolean),
+    },
     dataQuality: {
       totalDeals: asNumber(dataQuality.totalDeals),
       stageHistoryDeals: asNumber(dataQuality.stageHistoryDeals),

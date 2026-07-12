@@ -2,6 +2,7 @@ import type {
   DealSnapshot,
   DealStageFactSnapshot,
   DealTouchpointFactSnapshot,
+  EventSnapshot,
   EventVisitFactSnapshot,
   ManagerDirectoryEntry,
   ReportRange,
@@ -39,6 +40,7 @@ export interface SourceCohortConversionInput {
   dealStageFacts?: DealStageFactSnapshot[];
   dealTouchpointFacts?: DealTouchpointFactSnapshot[];
   eventVisitFacts?: EventVisitFactSnapshot[];
+  events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   includeTrajectory?: boolean;
   now?: Date;
@@ -572,6 +574,7 @@ export function buildSourceCohortConversionReport(
           dealStageFacts: input.dealStageFacts ?? [],
           dealTouchpointFacts: input.dealTouchpointFacts ?? [],
           eventVisitFacts: input.eventVisitFacts ?? [],
+          events: input.events ?? [],
           managerDirectory: input.managerDirectory ?? [],
           ...(input.now ? { now: input.now } : {})
         })
