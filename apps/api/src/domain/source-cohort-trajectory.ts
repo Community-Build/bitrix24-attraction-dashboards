@@ -938,6 +938,7 @@ interface EventPerformanceObservation {
   managerKey: string;
   managerLabel: string;
   attended: boolean;
+  contractEligible: boolean;
   contractAfter: boolean;
   transferredAfter: boolean;
   contractDurationMs: number | null;
@@ -950,6 +951,7 @@ interface EventPerformanceAccumulator {
   eventKeys: Set<string>;
   invitedVisits: number;
   attendedVisits: number;
+  contractEligibleVisits: number;
   contractAfterVisits: number;
   transferredAfterVisits: number;
   contractDurationsMs: number[];
@@ -967,6 +969,7 @@ function createEventPerformanceAccumulator(
     eventKeys: new Set<string>(),
     invitedVisits: 0,
     attendedVisits: 0,
+    contractEligibleVisits: 0,
     contractAfterVisits: 0,
     transferredAfterVisits: 0,
     contractDurationsMs: []
@@ -984,6 +987,9 @@ function addEventPerformanceObservation(
   }
 
   row.attendedVisits += 1;
+  if (observation.contractEligible) {
+    row.contractEligibleVisits += 1;
+  }
   if (observation.contractAfter) {
     row.contractAfterVisits += 1;
   }
@@ -1006,10 +1012,11 @@ function toEventPerformanceRow(
     invitedVisits: row.invitedVisits,
     attendedVisits: row.attendedVisits,
     attendanceRate: toRate(row.attendedVisits, row.invitedVisits),
+    contractEligibleVisits: row.contractEligibleVisits,
     contractAfterVisits: row.contractAfterVisits,
     contractRate:
-      row.attendedVisits > 0
-        ? toRate(row.contractAfterVisits, row.attendedVisits)
+      row.contractEligibleVisits > 0
+        ? toRate(row.contractAfterVisits, row.contractEligibleVisits)
         : null,
     transferredAfterVisits: row.transferredAfterVisits,
     transferredRate:
@@ -1020,19 +1027,10 @@ function toEventPerformanceRow(
   };
 }
 
-function firstTimestampBetween(
-  timestamps: string[],
-  fromMs: number,
-  toMs: number
-) {
+function firstTimestamp(timestamps: string[]) {
   const candidates = timestamps
     .map((timestamp) => Date.parse(timestamp))
-    .filter(
-      (timestampMs) =>
-        Number.isFinite(timestampMs) &&
-        timestampMs >= fromMs &&
-        timestampMs <= toMs
-    );
+    .filter((timestampMs) => Number.isFinite(timestampMs));
 
   return candidates.length > 0 ? Math.min(...candidates) : null;
 }
@@ -1092,13 +1090,17 @@ function buildEventPerformance(input: {
     const managerKey = fact.managerId?.trim() || UNASSIGNED_MANAGER_ID;
     const managerLabel = resolveManagerName(managerKey, input.managerDirectory);
     const attended = fact.finalStatus === "attended";
-    const contractAtMs = attended && input.contractStageId
-      ? firstTimestampBetween(
-          dealFacts.stageEnteredAts.get(input.contractStageId) ?? [],
-          eventAtMs,
-          nowMs
-        )
+    const firstContractAtMs = attended && input.contractStageId
+      ? firstTimestamp(dealFacts.stageEnteredAts.get(input.contractStageId) ?? [])
       : null;
+    const contractEligible =
+      attended && (firstContractAtMs === null || firstContractAtMs >= eventAtMs);
+    const contractAtMs =
+      contractEligible &&
+      firstContractAtMs !== null &&
+      firstContractAtMs <= nowMs
+        ? firstContractAtMs
+        : null;
     const transferredAtMs = Date.parse(dealFacts.wonAt ?? "");
     const contractDurationMs =
       attended &&
@@ -1121,6 +1123,7 @@ function buildEventPerformance(input: {
       managerKey,
       managerLabel,
       attended,
+      contractEligible,
       contractAfter: contractDurationMs !== null,
       transferredAfter,
       contractDurationMs
@@ -1197,6 +1200,7 @@ function buildEventPerformance(input: {
     invitedVisits: overallRow.invitedVisits,
     attendedVisits: overallRow.attendedVisits,
     attendanceRate: overallRow.attendanceRate,
+    contractEligibleVisits: overallRow.contractEligibleVisits,
     contractAfterVisits: overallRow.contractAfterVisits,
     transferredAfterVisits: overallRow.transferredAfterVisits,
     eventTypeRows,
@@ -1712,14 +1716,15 @@ function firstForwardStageAfter(input: {
   }
 
   return input.stageSequence
-    .map((stage) => ({
-      stage,
-      enteredAt: input.facts.stageEnteredAt.get(stage.stageId) ?? null
-    }))
-    .filter((entry): entry is { stage: StageSequenceEntry; enteredAt: string } => {
-      const enteredMs = Date.parse(entry.enteredAt ?? "");
+    .flatMap((stage) =>
+      (input.facts.stageEnteredAts.get(stage.stageId) ?? []).map((enteredAt) => ({
+        stage,
+        enteredAt
+      }))
+    )
+    .filter((entry) => {
+      const enteredMs = Date.parse(entry.enteredAt);
       return (
-        entry.enteredAt !== null &&
         Number.isFinite(enteredMs) &&
         enteredMs > afterMs &&
         entry.stage.sortOrder > currentStage.sortOrder &&

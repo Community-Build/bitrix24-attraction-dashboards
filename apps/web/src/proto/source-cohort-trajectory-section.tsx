@@ -95,11 +95,13 @@ function formatDays(value: number | null) {
 function formatEventOutcome(
   outcomeVisits: number,
   rate: number | null,
-  attendedVisits: number,
+  denominator: number | null,
+  emptyLabel = 'Нет посещений',
 ) {
-  if (attendedVisits === 0) return 'Нет посещений'
+  if (denominator === null) return 'Нет данных'
+  if (denominator === 0) return emptyLabel
 
-  return `${formatInteger(outcomeVisits)} из ${formatInteger(attendedVisits)} · ${formatRate(rate)}`
+  return `${formatInteger(outcomeVisits)} из ${formatInteger(denominator)} · ${formatRate(rate)}`
 }
 
 function rateFromCounts(part: number, total: number) {
@@ -129,19 +131,7 @@ function formatDate(value: string | null) {
 function getEventPerformance(
   trajectory: SourceCohortTrajectoryReport,
 ): SourceCohortEventPerformance {
-  return trajectory.eventPerformance ?? {
-    range: trajectory.range,
-    totalEvents: 0,
-    invitedVisits: null,
-    attendedVisits: 0,
-    attendanceRate: null,
-    contractAfterVisits: 0,
-    transferredAfterVisits: 0,
-    eventTypeRows: [],
-    eventRows: [],
-    managerRows: [],
-    warnings: ['Событийный расчет отсутствует в этом снимке API.'],
-  }
+  return trajectory.eventPerformance
 }
 
 function SegmentControl<T extends string>({
@@ -528,7 +518,7 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
         />
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">
-        Когорта строится по дате мероприятия. Приглашенные считаются по уникальным связкам мероприятия и сделки; явка — доля посетивших среди приглашенных. Контракт и передача учитываются, если произошли после посещения, без ограничения по сроку и до текущего снимка. Одна связка представлена в каждом из трех разрезов, поэтому суммы между разрезами не складываются.
+        Когорта строится по дате мероприятия. Приглашенные считаются по уникальным связкам мероприятия и сделки; явка — доля посетивших среди приглашенных. Контракт после считается только для посетивших, у которых до мероприятия еще не было контракта. Передача считается среди всех посетивших. Одна связка представлена в каждом из трех разрезов, поэтому суммы между разрезами не складываются.
       </p>
       <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
         <table className="min-w-[1040px] text-sm">
@@ -563,7 +553,12 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
                   {formatEventAttendance(row.attendedVisits, row.invitedVisits, row.attendanceRate)}
                 </td>
                 <td className="px-3 py-3 font-bold tabular-nums text-slate-900">
-                  {formatEventOutcome(row.contractAfterVisits, row.contractRate, row.attendedVisits)}
+                  {formatEventOutcome(
+                    row.contractAfterVisits,
+                    row.contractRate,
+                    row.contractEligibleVisits,
+                    'Нет доступных сделок',
+                  )}
                 </td>
                 <td className="px-3 py-3 font-bold tabular-nums text-slate-900">
                   {formatEventOutcome(row.transferredAfterVisits, row.transferredRate, row.attendedVisits)}
@@ -591,8 +586,8 @@ function Methodology({ trajectory }: { trajectory: SourceCohortTrajectoryReport 
           <p className="mt-2"><strong className="text-slate-800">CRM-этапы:</strong> считаются отдельно и нужны для поиска расхождений с фактами.</p>
         </div>
         <div>
-          <p><strong className="text-slate-800">Когорта мероприятий:</strong> уникальные связки мероприятия и сделки по дате мероприятия в выбранном месяце. Явка считается от приглашенных; контракт и передача — от посетивших, если результат произошел после посещения и до текущего снимка.</p>
-          <p className="mt-2"><strong className="text-slate-800">Срок до контракта:</strong> медиана дней от даты посещенного мероприятия до первого последующего входа сделки в этап контракта.</p>
+          <p><strong className="text-slate-800">Когорта мероприятий:</strong> уникальные связки мероприятия и сделки по дате мероприятия в выбранном месяце. Явка считается от приглашенных. Контракт после — от посетивших без контракта до мероприятия; передача после — от всех посетивших.</p>
+          <p className="mt-2"><strong className="text-slate-800">Срок до контракта:</strong> медиана дней от даты посещенного мероприятия до первого входа сделки в этап контракта, если до мероприятия контракта еще не было.</p>
           <p className="mt-2"><strong className="text-slate-800">Атрибуция:</strong> менеджер сделки и ответственный посещения взяты из текущего снимка; это не исторические владельцы действий.</p>
           <p className="mt-2"><strong className="text-slate-800">Причинность:</strong> отчет показывает наблюдаемую конверсию после события, но не доказывает, что именно событие вызвало результат.</p>
         </div>
@@ -705,10 +700,16 @@ export function SourceCohortStageConversionSection({
               label="Контракт после"
               value={formatEventOutcome(
                 performance.contractAfterVisits,
-                rateFromCounts(performance.contractAfterVisits, performance.attendedVisits),
-                performance.attendedVisits,
+                performance.contractEligibleVisits === null
+                  ? null
+                  : rateFromCounts(
+                      performance.contractAfterVisits,
+                      performance.contractEligibleVisits,
+                    ),
+                performance.contractEligibleVisits,
+                'Нет доступных сделок',
               )}
-              note="от фактически посетивших"
+              note="из посетивших без контракта до мероприятия"
             />
             <SummaryMetric
               label="Передано после"

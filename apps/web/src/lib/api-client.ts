@@ -2664,6 +2664,7 @@ function normalizeSourceCohortEventPerformanceRow(value: unknown) {
   const attendedVisits = asNumber(row.attendedVisits)
   const invitedVisits = asNullableNumber(row.invitedVisits)
   const attendanceRate = asNullableNumber(row.attendanceRate)
+  const contractEligibleVisits = asNullableNumber(row.contractEligibleVisits)
   const contractAfterVisits = asNumber(row.contractAfterVisits)
   const transferredAfterVisits = asNumber(row.transferredAfterVisits)
   return {
@@ -2678,10 +2679,12 @@ function normalizeSourceCohortEventPerformanceRow(value: unknown) {
         ? null
         : attendanceRate ??
           (invitedVisits > 0 ? (attendedVisits / invitedVisits) * 100 : null),
+    contractEligibleVisits,
     contractAfterVisits,
     contractRate:
-      asNullableNumber(row.contractRate) ??
-      (attendedVisits > 0 ? (contractAfterVisits / attendedVisits) * 100 : null),
+      contractEligibleVisits !== null && contractEligibleVisits > 0
+        ? (contractAfterVisits / contractEligibleVisits) * 100
+        : null,
     transferredAfterVisits,
     transferredRate:
       asNullableNumber(row.transferredRate) ??
@@ -2695,6 +2698,19 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
     return undefined
   }
 
+  const eventPerformance = isRecord(value.eventPerformance)
+    ? value.eventPerformance
+    : null
+  const hasMinimumEventPerformance =
+    eventPerformance !== null &&
+    asNullableNumber(eventPerformance.totalEvents) !== null &&
+    asNullableNumber(eventPerformance.attendedVisits) !== null &&
+    asNullableNumber(eventPerformance.contractAfterVisits) !== null &&
+    asNullableNumber(eventPerformance.transferredAfterVisits) !== null &&
+    Array.isArray(eventPerformance.eventTypeRows) &&
+    Array.isArray(eventPerformance.eventRows) &&
+    Array.isArray(eventPerformance.managerRows) &&
+    Array.isArray(eventPerformance.warnings)
   const hasMinimumTrajectoryPayload =
     Array.isArray(value.stageNodes) &&
     Array.isArray(value.stageTransitions) &&
@@ -2702,23 +2718,29 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
     Array.isArray(value.factSteps) &&
     Array.isArray(value.conversionGaps) &&
     Array.isArray(value.speedSteps) &&
+    Array.isArray(value.managerDiagnostics) &&
     Array.isArray(value.managerRows) &&
     Array.isArray(value.sourceRows) &&
     Array.isArray(value.customerRows) &&
+    Array.isArray(value.qualityRows) &&
     isRecord(value.overallSignals) &&
-    isRecord(value.dataQuality)
+    isRecord(value.dataQuality) &&
+    hasMinimumEventPerformance
   if (!hasMinimumTrajectoryPayload) {
     return undefined
   }
 
   const signals = isRecord(value.overallSignals) ? value.overallSignals : {}
   const dataQuality = isRecord(value.dataQuality) ? value.dataQuality : {}
-  const eventPerformance = isRecord(value.eventPerformance)
-    ? value.eventPerformance
-    : {}
+  if (!eventPerformance) {
+    return undefined
+  }
   const eventAttendedVisits = asNumber(eventPerformance.attendedVisits)
   const eventInvitedVisits = asNullableNumber(eventPerformance.invitedVisits)
   const eventAttendanceRate = asNullableNumber(eventPerformance.attendanceRate)
+  const eventContractEligibleVisits = asNullableNumber(
+    eventPerformance.contractEligibleVisits,
+  )
   const conversionJourney = normalizeSourceCohortConversionJourney(
     value.conversionJourney,
   )
@@ -2912,6 +2934,7 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
             (eventInvitedVisits > 0
               ? (eventAttendedVisits / eventInvitedVisits) * 100
               : null),
+      contractEligibleVisits: eventContractEligibleVisits,
       contractAfterVisits: asNumber(eventPerformance.contractAfterVisits),
       transferredAfterVisits: asNumber(eventPerformance.transferredAfterVisits),
       eventTypeRows: asArray(
@@ -2932,6 +2955,11 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
         ),
         ...(eventInvitedVisits === null
           ? ['API не передал данные о приглашениях; явка недоступна.']
+          : []),
+        ...(eventContractEligibleVisits === null
+          ? [
+              'API не передал базу сделок без контракта до мероприятия; конверсия в контракт недоступна.',
+            ]
           : []),
       ],
     },

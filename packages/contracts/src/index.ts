@@ -1694,6 +1694,7 @@ export interface SourceCohortEventPerformanceRow {
   invitedVisits: number;
   attendedVisits: number;
   attendanceRate: number | null;
+  contractEligibleVisits: number;
   contractAfterVisits: number;
   contractRate: number | null;
   transferredAfterVisits: number;
@@ -1707,6 +1708,7 @@ export interface SourceCohortEventPerformance {
   invitedVisits: number;
   attendedVisits: number;
   attendanceRate: number | null;
+  contractEligibleVisits: number;
   contractAfterVisits: number;
   transferredAfterVisits: number;
   eventTypeRows: SourceCohortEventPerformanceRow[];

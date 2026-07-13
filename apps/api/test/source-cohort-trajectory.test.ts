@@ -1084,6 +1084,7 @@ describe("buildSourceCohortTrajectoryReport", () => {
         invitedVisits: 2,
         attendedVisits: 2,
         attendanceRate: 100,
+        contractEligibleVisits: 2,
         contractAfterVisits: 1,
         transferredAfterVisits: 1
       })
@@ -1095,6 +1096,7 @@ describe("buildSourceCohortTrajectoryReport", () => {
           invitedVisits: 1,
           attendedVisits: 1,
           attendanceRate: 100,
+          contractEligibleVisits: 1,
           contractRate: 100,
           transferredRate: 100,
           medianDaysToContract: 71
@@ -1104,6 +1106,7 @@ describe("buildSourceCohortTrajectoryReport", () => {
           invitedVisits: 1,
           attendedVisits: 1,
           attendanceRate: 100,
+          contractEligibleVisits: 1,
           contractRate: 0,
           transferredRate: 0
         })
@@ -1164,7 +1167,7 @@ describe("buildSourceCohortTrajectoryReport", () => {
     ]);
   });
 
-  it("attributes a contract re-entry that happens after an attended event", () => {
+  it("excludes attendees already contracted before the event from contract conversion", () => {
     const report = buildSourceCohortTrajectoryReport({
       range: {
         from: "2026-04-01T00:00:00.000Z",
@@ -1220,16 +1223,92 @@ describe("buildSourceCohortTrajectoryReport", () => {
 
     expect(report.eventPerformance).toEqual(
       expect.objectContaining({
-        contractAfterVisits: 1
+        attendedVisits: 1,
+        contractEligibleVisits: 0,
+        contractAfterVisits: 0
       })
     );
     expect(report.eventPerformance.eventRows).toEqual([
       expect.objectContaining({
         key: "event-before-contract-reentry",
-        contractRate: 100,
-        medianDaysToContract: 10
+        contractEligibleVisits: 0,
+        contractAfterVisits: 0,
+        contractRate: null,
+        medianDaysToContract: null
       })
     ]);
+  });
+
+  it("counts a forward-stage re-entry after a completed meeting as movement", () => {
+    const report = buildSourceCohortTrajectoryReport({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      now: new Date("2026-06-30T23:59:59.999Z"),
+      wonStageIds: ["C10:WON"],
+      deals: [
+        deal({
+          id: "forward-stage-reentry",
+          stageId: "C10:DEMO",
+          dateModify: "2026-06-10T09:00:00.000Z"
+        })
+      ],
+      stageCatalog,
+      dealStageFacts: [
+        stageFact({
+          factId: "reentry-base",
+          dealId: "forward-stage-reentry",
+          stageId: "C10:NEW",
+          enteredAt: "2026-06-01T09:00:00.000Z",
+          leftAt: "2026-06-02T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "reentry-demo-before-meeting",
+          dealId: "forward-stage-reentry",
+          stageId: "C10:DEMO",
+          enteredAt: "2026-06-02T09:00:00.000Z",
+          leftAt: "2026-06-04T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "reentry-meeting-stage",
+          dealId: "forward-stage-reentry",
+          stageId: "C10:MEETING",
+          enteredAt: "2026-06-04T09:00:00.000Z",
+          leftAt: "2026-06-10T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "reentry-demo-after-meeting",
+          dealId: "forward-stage-reentry",
+          stageId: "C10:DEMO",
+          enteredAt: "2026-06-10T09:00:00.000Z"
+        })
+      ],
+      dealTouchpointFacts: [
+        touchpoint({
+          factId: "reentry-completed-meeting",
+          kind: "meeting",
+          dealId: "forward-stage-reentry",
+          occurredAt: "2026-06-05T09:00:00.000Z",
+          payloadJson: JSON.stringify({ completed: true })
+        })
+      ]
+    });
+
+    expect(report.overallSignals).toEqual(
+      expect.objectContaining({
+        completedMeetingWithoutNextStageDeals: 0,
+        staleAfterCompletedMeetingDeals: 0
+      })
+    );
+    expect(
+      report.speedSteps.find((step) => step.stepKey === "post_meeting_next_stage")
+    ).toEqual(
+      expect.objectContaining({
+        totalDeals: 1,
+        medianDays: 5
+      })
+    );
   });
 
   it("counts repeat event attendance separately from first attended event", () => {

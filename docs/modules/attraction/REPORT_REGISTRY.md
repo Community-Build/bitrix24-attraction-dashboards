@@ -114,13 +114,14 @@ Stable dashboard anchors used by ontology report bindings:
   - the web client must show attendance as unavailable when invitation fields
     are missing from an incompatible or incomplete API response; it must not
     infer `invitedVisits = attendedVisits`;
-  - count a contract or transfer when its timestamp is after the attended
-    event, with no upper time cutoff; the observation ends at the current local
-    snapshot;
-  - `contractRate = contractAfterVisits / attendedVisits` and
+  - a visit is contract-eligible only when the deal had not entered the contract
+    stage before that event; a later re-entry does not count as a new contract;
+  - count a transfer when its timestamp is after the attended event, with no
+    upper time cutoff; the observation ends at the current local snapshot;
+  - `contractRate = contractAfterVisits / contractEligibleVisits` and
     `transferredRate = transferredAfterVisits / attendedVisits`;
-  - `medianDaysToContract` is measured from the event date to the first later
-    entry into the contract stage;
+  - `medianDaysToContract` is measured from the event date to the first-ever
+    contract-stage entry, only for contract-eligible visits;
   - rows are available by event type, individual event and current visit owner;
     a later contract can be observed after more than one event exposure, so row
     totals are non-additive;

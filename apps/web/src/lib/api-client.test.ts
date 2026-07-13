@@ -44,7 +44,62 @@ describe('apiClient', () => {
     expect(report.trajectory).toBeUndefined()
   })
 
-  it('normalizes the conversion journey without making it part of the legacy minimum payload', async () => {
+  it('does not turn a missing event performance section into zero metrics', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range: {
+          from: '2026-06-01T00:00:00.000Z',
+          to: '2026-06-30T23:59:59.999Z',
+        },
+        totalCreatedDeals: 1,
+        totalWonDeals: 0,
+        totalLostDeals: 0,
+        totalOpenDeals: 1,
+        winRate: 0,
+        averageDaysToWin: 0,
+        cohortMonths: [],
+        rows: [],
+        trajectoryStatus: 'available',
+        trajectoryUnavailableReason: null,
+        trajectory: {
+          range: {
+            from: '2026-06-01T00:00:00.000Z',
+            to: '2026-06-30T23:59:59.999Z',
+          },
+          totalDeals: 1,
+          stageNodes: [],
+          stageTransitions: [],
+          actionNodes: [],
+          factSteps: [],
+          conversionGaps: [],
+          speedSteps: [],
+          managerDiagnostics: [],
+          managerRows: [],
+          sourceRows: [],
+          customerRows: [],
+          qualityRows: [],
+          overallSignals: {},
+          dataQuality: {},
+        },
+        comparisons: [],
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const report = await apiClient.getSourceCohortConversionReport({
+      preset: 'custom',
+      from: '2026-06-01',
+      to: '2026-06-30',
+    })
+
+    expect(report.trajectoryStatus).toBe('unavailable')
+    expect(report.trajectoryUnavailableReason).toBe('Траектория конверсии передана не полностью.')
+    expect(report.trajectory).toBeUndefined()
+  })
+
+  it('normalizes the conversion journey from a complete trajectory payload', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -108,7 +163,25 @@ describe('apiClient', () => {
           managerRows: [],
           sourceRows: [],
           customerRows: [],
+          qualityRows: [],
           overallSignals: {},
+          eventPerformance: {
+            range: {
+              from: '2026-06-01T00:00:00.000Z',
+              to: '2026-06-30T23:59:59.999Z',
+            },
+            totalEvents: 0,
+            invitedVisits: 0,
+            attendedVisits: 0,
+            attendanceRate: null,
+            contractEligibleVisits: 0,
+            contractAfterVisits: 0,
+            transferredAfterVisits: 0,
+            eventTypeRows: [],
+            eventRows: [],
+            managerRows: [],
+            warnings: [],
+          },
           dataQuality: {},
         },
         comparisons: [],
@@ -166,6 +239,7 @@ describe('apiClient', () => {
           managerRows: [],
           sourceRows: [],
           customerRows: [],
+          qualityRows: [],
           overallSignals: {},
           eventPerformance: {
             range,
@@ -208,15 +282,21 @@ describe('apiClient', () => {
     expect(report.trajectoryStatus).toBe('available')
     expect(report.trajectory?.eventPerformance.invitedVisits).toBeNull()
     expect(report.trajectory?.eventPerformance.attendanceRate).toBeNull()
+    expect(report.trajectory?.eventPerformance.contractEligibleVisits).toBeNull()
     expect(report.trajectory?.eventPerformance.eventTypeRows[0]).toEqual(
       expect.objectContaining({
         invitedVisits: null,
         attendedVisits: 4,
         attendanceRate: null,
+        contractEligibleVisits: null,
+        contractRate: null,
       }),
     )
     expect(report.trajectory?.eventPerformance.warnings).toContain(
       'API не передал данные о приглашениях; явка недоступна.',
+    )
+    expect(report.trajectory?.eventPerformance.warnings).toContain(
+      'API не передал базу сделок без контракта до мероприятия; конверсия в контракт недоступна.',
     )
   })
 
