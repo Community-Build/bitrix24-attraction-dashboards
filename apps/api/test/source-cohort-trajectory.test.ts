@@ -1000,7 +1000,7 @@ describe("buildSourceCohortTrajectoryReport", () => {
     );
   });
 
-  it("builds quality and mature event-date breakdowns without mixing immature outcomes", () => {
+  it("builds event-date cohorts and includes later outcomes without a time cutoff", () => {
     const report = buildSourceCohortTrajectoryReport({
       range: {
         from: "2026-04-01T00:00:00.000Z",
@@ -1015,7 +1015,7 @@ describe("buildSourceCohortTrajectoryReport", () => {
           dateCreate: "2026-04-01T09:00:00.000Z",
           stageId: "C10:WON",
           stageSemanticId: "S",
-          dateClosed: "2026-04-25T09:00:00.000Z"
+          dateClosed: "2026-06-25T09:00:00.000Z"
         }),
         deal({
           id: "recent-event-open",
@@ -1029,15 +1029,21 @@ describe("buildSourceCohortTrajectoryReport", () => {
           factId: "mature-event-contract",
           dealId: "mature-event-won",
           stageId: "C10:CONTRACT",
-          enteredAt: "2026-04-20T09:00:00.000Z",
-          leftAt: "2026-04-25T09:00:00.000Z"
+          enteredAt: "2026-06-20T09:00:00.000Z",
+          leftAt: "2026-06-25T09:00:00.000Z"
         }),
         stageFact({
           factId: "mature-event-transferred",
           dealId: "mature-event-won",
           stageId: "C10:WON",
           stageSemanticId: "S",
-          enteredAt: "2026-04-25T09:00:00.000Z"
+          enteredAt: "2026-06-25T09:00:00.000Z"
+        }),
+        stageFact({
+          factId: "future-contract-after-recent-event",
+          dealId: "recent-event-open",
+          stageId: "C10:CONTRACT",
+          enteredAt: "2026-08-01T09:00:00.000Z"
         })
       ],
       events: [
@@ -1063,12 +1069,7 @@ describe("buildSourceCohortTrajectoryReport", () => {
           visitId: "recent-event-visit",
           eventId: "recent-event",
           dealId: "recent-event-open",
-          eventDate: "2026-06-20T09:00:00.000Z",
-          currentStageId: "DT:PREPARATION",
-          currentStageName: "Пойду",
-          confirmedAt: "2026-06-10T09:00:00.000Z",
-          attendedAt: null,
-          finalStatus: "confirmed"
+          eventDate: "2026-06-20T09:00:00.000Z"
         })
       ]
     });
@@ -1079,12 +1080,10 @@ describe("buildSourceCohortTrajectoryReport", () => {
     ]);
     expect(report.eventPerformance).toEqual(
       expect.objectContaining({
-        outcomeWindowDays: 60,
         totalEvents: 2,
         invitedVisits: 2,
-        attendedVisits: 1,
-        attendanceRate: 50,
-        matureVisits: 1,
+        attendedVisits: 2,
+        attendanceRate: 100,
         contractAfterVisits: 1,
         transferredAfterVisits: 1
       })
@@ -1096,19 +1095,17 @@ describe("buildSourceCohortTrajectoryReport", () => {
           invitedVisits: 1,
           attendedVisits: 1,
           attendanceRate: 100,
-          matureVisits: 1,
           contractRate: 100,
           transferredRate: 100,
-          medianDaysToContract: 10
+          medianDaysToContract: 71
         }),
         expect.objectContaining({
           key: "recent-event",
           invitedVisits: 1,
-          attendedVisits: 0,
-          attendanceRate: 0,
-          matureVisits: 0,
-          contractRate: null,
-          transferredRate: null
+          attendedVisits: 1,
+          attendanceRate: 100,
+          contractRate: 0,
+          transferredRate: 0
         })
       ])
     );
@@ -1223,7 +1220,6 @@ describe("buildSourceCohortTrajectoryReport", () => {
 
     expect(report.eventPerformance).toEqual(
       expect.objectContaining({
-        matureVisits: 1,
         contractAfterVisits: 1
       })
     );

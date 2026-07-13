@@ -114,18 +114,20 @@ Stable dashboard anchors used by ontology report bindings:
   - the web client must show attendance as unavailable when invitation fields
     are missing from an incompatible or incomplete API response; it must not
     infer `invitedVisits = attendedVisits`;
-  - use a fixed 60-day outcome window after attendance;
-  - only visits whose full 60-day window has elapsed enter `matureVisits` and
-    rate denominators;
-  - `contractRate = contractAfterVisits / matureVisits` and
-    `transferredRate = transferredAfterVisits / matureVisits`;
+  - count a contract or transfer when its timestamp is after the attended
+    event, with no upper time cutoff; the observation ends at the current local
+    snapshot;
+  - `contractRate = contractAfterVisits / attendedVisits` and
+    `transferredRate = transferredAfterVisits / attendedVisits`;
+  - `medianDaysToContract` is measured from the event date to the first later
+    entry into the contract stage;
   - rows are available by event type, individual event and current visit owner;
     a later contract can be observed after more than one event exposure, so row
     totals are non-additive;
   - observed post-event conversion is descriptive and must not be presented as
     causal event impact;
-  - post-event reliability uses mature attended visits; individual rows with
-    `N < 10` are descriptive and must not be ranked.
+  - recent event cohorts naturally have less follow-up time, so comparisons
+    across cohort months must show the cohort month and snapshot date.
 - Stage and action facts are intentionally separate. `Встреча-знакомство` in CRM
   does not prove that a meeting happened; the report surfaces
   `meetingStageWithoutFactDeals` as a process/data-quality gap.

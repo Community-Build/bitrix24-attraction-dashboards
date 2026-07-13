@@ -734,17 +734,15 @@ vi.mock('@/lib/api-client', () => ({
         qualityRows: [],
         eventPerformance: {
           range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
-          outcomeWindowDays: 60,
           totalEvents: 3,
           invitedVisits: 16,
           attendedVisits: 12,
           attendanceRate: 75,
-          matureVisits: 10,
           contractAfterVisits: 3,
           transferredAfterVisits: 1,
           eventTypeRows: [
-            { key: 'intro', label: 'Знакомство с клубом', eventDate: null, eventCount: 2, invitedVisits: 15, attendedVisits: 12, attendanceRate: 80, matureVisits: 10, contractAfterVisits: 3, contractRate: 30, transferredAfterVisits: 1, transferredRate: 10, medianDaysToContract: 6, dataQualityStatus: 'limited' },
-            { key: 'no-show', label: 'Экспертная встреча', eventDate: null, eventCount: 1, invitedVisits: 1, attendedVisits: 0, attendanceRate: 0, matureVisits: 0, contractAfterVisits: 0, contractRate: null, transferredAfterVisits: 0, transferredRate: null, medianDaysToContract: null, dataQualityStatus: 'low_sample' },
+            { key: 'intro', label: 'Знакомство с клубом', eventDate: null, eventCount: 2, invitedVisits: 15, attendedVisits: 12, attendanceRate: 80, contractAfterVisits: 3, contractRate: 25, transferredAfterVisits: 1, transferredRate: 8.33, medianDaysToContract: 6 },
+            { key: 'no-show', label: 'Экспертная встреча', eventDate: null, eventCount: 1, invitedVisits: 1, attendedVisits: 0, attendanceRate: 0, contractAfterVisits: 0, contractRate: null, transferredAfterVisits: 0, transferredRate: null, medianDaysToContract: null },
           ],
           eventRows: [],
           managerRows: [],
@@ -2226,7 +2224,7 @@ describe('App', () => {
     expect(trajectory.getByText('ClubFirst Future')).toBeInTheDocument()
 
     fireEvent.click(trajectory.getByRole('button', { name: 'Мероприятия' }))
-    expect(trajectory.getByRole('heading', { name: /какие мероприятия связаны/i })).toBeInTheDocument()
+    expect(trajectory.getByRole('heading', { name: /эффективность мероприятий/i })).toBeInTheDocument()
     expect(trajectory.getByText('Знакомство с клубом')).toBeInTheDocument()
     expect(trajectory.queryByText('Зрелая база')).not.toBeInTheDocument()
     expect(trajectory.getAllByText('Приглашены').length).toBeGreaterThan(0)
@@ -2234,18 +2232,10 @@ describe('App', () => {
     expect(trajectory.getByText('Явка')).toBeInTheDocument()
     expect(trajectory.getByText('12 из 15 · 80%')).toBeInTheDocument()
     expect(trajectory.getAllByText('Нет посещений').length).toBe(2)
-    expect(
-      trajectory.getByText('Надежность результата').getAttribute('title'),
-    ).toMatch(/по посещениям с полным окном 60 дней/i)
-    expect(trajectory.getByText('10 из 12')).toBeInTheDocument()
-    expect(trajectory.getByText('3 из 10 · 30%')).toBeInTheDocument()
-    expect(trajectory.getByText('1 из 10 · 10%')).toBeInTheDocument()
-    expect(trajectory.getByText('Прошло 60 дней')).toBeInTheDocument()
-    expect(trajectory.getByText('только они входят в оценку результата')).toBeInTheDocument()
-    expect(
-      trajectory.getByText('Прошло 60 дней: 10 из 12'),
-    ).toBeInTheDocument()
-    expect(trajectory.getAllByText(/60 дней/i).length).toBeGreaterThan(0)
+    expect(trajectory.getAllByText('3 из 12 · 25%').length).toBe(2)
+    expect(trajectory.getAllByText('1 из 12 · 8,3%').length).toBe(2)
+    expect(trajectory.queryByText('Надежность результата')).not.toBeInTheDocument()
+    expect(trajectory.queryByText(/60 дней/i)).not.toBeInTheDocument()
     expect(apiClient.getAttractionOntology).not.toHaveBeenCalled()
   })
 

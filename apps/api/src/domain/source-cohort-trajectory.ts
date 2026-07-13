@@ -40,7 +40,6 @@ const CURRENT_MANAGER_ATTRIBUTION_WARNING =
 const FALLBACK_CALL_WARNING =
   "Есть успешные звонки только с косвенной связью по контакту; они показаны отдельно и не входят в основной показатель первого звонка.";
 const DAY_MS = 86_400_000;
-const EVENT_OUTCOME_WINDOW_DAYS = 60;
 const LOW_SAMPLE_MIN_DEALS = 10;
 const RELIABLE_SAMPLE_MIN_DEALS = 30;
 const KNOWN_MEETING_STAGE_IDS = new Set(["C10:MEETING"]);
@@ -939,7 +938,6 @@ interface EventPerformanceObservation {
   managerKey: string;
   managerLabel: string;
   attended: boolean;
-  mature: boolean;
   contractAfter: boolean;
   transferredAfter: boolean;
   contractDurationMs: number | null;
@@ -952,7 +950,6 @@ interface EventPerformanceAccumulator {
   eventKeys: Set<string>;
   invitedVisits: number;
   attendedVisits: number;
-  matureVisits: number;
   contractAfterVisits: number;
   transferredAfterVisits: number;
   contractDurationsMs: number[];
@@ -970,7 +967,6 @@ function createEventPerformanceAccumulator(
     eventKeys: new Set<string>(),
     invitedVisits: 0,
     attendedVisits: 0,
-    matureVisits: 0,
     contractAfterVisits: 0,
     transferredAfterVisits: 0,
     contractDurationsMs: []
@@ -988,11 +984,6 @@ function addEventPerformanceObservation(
   }
 
   row.attendedVisits += 1;
-  if (!observation.mature) {
-    return;
-  }
-
-  row.matureVisits += 1;
   if (observation.contractAfter) {
     row.contractAfterVisits += 1;
   }
@@ -1015,26 +1006,24 @@ function toEventPerformanceRow(
     invitedVisits: row.invitedVisits,
     attendedVisits: row.attendedVisits,
     attendanceRate: toRate(row.attendedVisits, row.invitedVisits),
-    matureVisits: row.matureVisits,
     contractAfterVisits: row.contractAfterVisits,
     contractRate:
-      row.matureVisits > 0
-        ? toRate(row.contractAfterVisits, row.matureVisits)
+      row.attendedVisits > 0
+        ? toRate(row.contractAfterVisits, row.attendedVisits)
         : null,
     transferredAfterVisits: row.transferredAfterVisits,
     transferredRate:
-      row.matureVisits > 0
-        ? toRate(row.transferredAfterVisits, row.matureVisits)
+      row.attendedVisits > 0
+        ? toRate(row.transferredAfterVisits, row.attendedVisits)
         : null,
-    medianDaysToContract: median(row.contractDurationsMs),
-    dataQualityStatus: dataQualityStatus(row.matureVisits)
+    medianDaysToContract: median(row.contractDurationsMs)
   };
 }
 
-function firstTimestampInWindow(
+function firstTimestampBetween(
   timestamps: string[],
   fromMs: number,
-  windowMs: number
+  toMs: number
 ) {
   const candidates = timestamps
     .map((timestamp) => Date.parse(timestamp))
@@ -1042,7 +1031,7 @@ function firstTimestampInWindow(
       (timestampMs) =>
         Number.isFinite(timestampMs) &&
         timestampMs >= fromMs &&
-        timestampMs - fromMs <= windowMs
+        timestampMs <= toMs
     );
 
   return candidates.length > 0 ? Math.min(...candidates) : null;
@@ -1068,7 +1057,6 @@ function buildEventPerformance(input: {
   const fromMs = Date.parse(input.range.from);
   const toMs = Date.parse(input.range.to);
   const nowMs = input.now.getTime();
-  const outcomeWindowMs = EVENT_OUTCOME_WINDOW_DAYS * DAY_MS;
   const eventById = new Map(input.events.map((event) => [event.eventId, event]));
   const factsByDeal = new Map(input.dealFacts.map((facts) => [facts.deal.id, facts]));
   const observations = new Map<string, EventPerformanceObservation>();
@@ -1105,24 +1093,23 @@ function buildEventPerformance(input: {
     const managerLabel = resolveManagerName(managerKey, input.managerDirectory);
     const attended = fact.finalStatus === "attended";
     const contractAtMs = attended && input.contractStageId
-      ? firstTimestampInWindow(
+      ? firstTimestampBetween(
           dealFacts.stageEnteredAts.get(input.contractStageId) ?? [],
           eventAtMs,
-          outcomeWindowMs
+          nowMs
         )
       : null;
     const transferredAtMs = Date.parse(dealFacts.wonAt ?? "");
-    const mature = attended && eventAtMs + outcomeWindowMs <= nowMs;
     const contractDurationMs =
-      mature &&
+      attended &&
       contractAtMs !== null
         ? contractAtMs - eventAtMs
         : null;
     const transferredAfter =
-      mature &&
+      attended &&
       Number.isFinite(transferredAtMs) &&
       transferredAtMs >= eventAtMs &&
-      transferredAtMs - eventAtMs <= outcomeWindowMs;
+      transferredAtMs <= nowMs;
     const observationKey = `${eventKey}:${fact.dealId}`;
 
     const observation: EventPerformanceObservation = {
@@ -1134,7 +1121,6 @@ function buildEventPerformance(input: {
       managerKey,
       managerLabel,
       attended,
-      mature,
       contractAfter: contractDurationMs !== null,
       transferredAfter,
       contractDurationMs
@@ -1186,7 +1172,6 @@ function buildEventPerformance(input: {
     Array.from(rows.values()).map(toEventPerformanceRow);
   const eventTypeRows = toRows(typeRows).sort(
     (left, right) =>
-      right.matureVisits - left.matureVisits ||
       right.attendedVisits - left.attendedVisits ||
       left.label.localeCompare(right.label, "ru")
   );
@@ -1201,22 +1186,17 @@ function buildEventPerformance(input: {
   );
   const overallRow = toEventPerformanceRow(overall);
   const warnings = [
-    `Конверсия после мероприятия — наблюдаемый результат в течение ${EVENT_OUTCOME_WINDOW_DAYS} дней, а не доказанный причинный эффект.`,
+    "Конверсия после мероприятия — наблюдаемый результат после фактического посещения до текущего снимка, а не доказанный причинный эффект.",
     "Один контракт может учитываться после нескольких посещений; строки нельзя складывать между собой.",
     "Ответственный по мероприятию — текущий владелец записи посещения в снимке CRM."
   ];
-  if (overallRow.matureVisits === 0 && overallRow.attendedVisits > 0) {
-    warnings.push("Посещения выбранного периода еще не созрели для сравнения конверсии.");
-  }
 
   return {
     range: input.range,
-    outcomeWindowDays: EVENT_OUTCOME_WINDOW_DAYS,
     totalEvents: overallRow.eventCount,
     invitedVisits: overallRow.invitedVisits,
     attendedVisits: overallRow.attendedVisits,
     attendanceRate: overallRow.attendanceRate,
-    matureVisits: overallRow.matureVisits,
     contractAfterVisits: overallRow.contractAfterVisits,
     transferredAfterVisits: overallRow.transferredAfterVisits,
     eventTypeRows,

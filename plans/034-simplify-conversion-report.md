@@ -45,10 +45,11 @@ observable post-event conversion without scrolling through duplicate reports.
   linear funnel step.
 - `meeting_scheduled` is labelled as a CRM scheduling signal, not proof that a
   meeting occurred.
-- Event conversion is an observed 60-day post-attendance outcome. Only mature
-  event visits enter its denominator; one later contract may be observed after
-  more than one event, so row totals are non-additive.
-- Individual event rows with `N < 10` remain descriptive and are not ranked.
+- Event conversion is the observed post-attendance outcome through the current
+  local snapshot, with no fixed time cutoff. All attended event visits enter
+  its denominator; one later contract may be observed after more than one
+  event, so row totals are non-additive.
+- Event rows remain descriptive and are not presented as a causal ranking.
 - Manager trajectory rows continue to mean current deal owner. Event-manager
   rows mean current visit owner. Both limitations stay visible in the UI.
 - `Итоговое качество` is descriptive current-snapshot segmentation, not intake
@@ -56,7 +57,7 @@ observable post-event conversion without scrolling through duplicate reports.
 - The month selector is a shared analysis period: creation month in participant
   mode and event month in event-performance mode. The UI states this explicitly.
 - Repeat-attendance depth is withheld from the primary screen because its
-  creation-cohort denominator is not comparable with the event-date 60-day
+  creation-cohort denominator is not comparable with the event-date cohort
   denominator. Showing both together would imply a false comparison.
 
 ## Work Packets
@@ -81,16 +82,18 @@ report composition.
 - The default conversion screen has no duplicate cohort breakdowns.
 - All four requested dimensions are available in one comparison table.
 - Facts, stages and gaps are explicit modes of one participant report.
-- Event type, event and visit-owner rows show mature post-event outcomes.
+- Event type, event and visit-owner rows show post-event outcomes from actual
+  attendees through the current snapshot.
 - Metric definitions and attribution limits are visible and tested.
 - Focused and workspace checks pass; browser evidence is accepted.
 - Work is committed locally and not deployed.
 
 ## Verification
 
-- API trajectory tests: 19 passed, including contract re-entry after an event.
-- Web tests: 171 passed; focused app tests: 19 passed.
-- API/web typecheck and lint passed; web production build and `git diff --check`
-  passed.
-- In-app browser: both report modes rendered, labels and cohort context checked,
-  no page/report overflow, no console errors, viewport override reset.
+- API trajectory tests: 20 passed, including a contract 71 days after an event
+  and exclusion of a future-dated contract.
+- Focused web tests: 55 passed; workspace typecheck and lint passed;
+  `git diff --check` passed.
+- In-app browser: July and April event cohorts plus all three breakdowns
+  rendered; labels, denominators and absence of the old 60-day gate checked,
+  with no page/report overflow observed in the desktop screenshot.

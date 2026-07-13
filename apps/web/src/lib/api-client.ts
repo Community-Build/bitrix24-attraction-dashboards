@@ -2664,6 +2664,8 @@ function normalizeSourceCohortEventPerformanceRow(value: unknown) {
   const attendedVisits = asNumber(row.attendedVisits)
   const invitedVisits = asNullableNumber(row.invitedVisits)
   const attendanceRate = asNullableNumber(row.attendanceRate)
+  const contractAfterVisits = asNumber(row.contractAfterVisits)
+  const transferredAfterVisits = asNumber(row.transferredAfterVisits)
   return {
     key: asString(row.key),
     label: asString(row.label, asString(row.key)),
@@ -2676,15 +2678,15 @@ function normalizeSourceCohortEventPerformanceRow(value: unknown) {
         ? null
         : attendanceRate ??
           (invitedVisits > 0 ? (attendedVisits / invitedVisits) * 100 : null),
-    matureVisits: asNumber(row.matureVisits),
-    contractAfterVisits: asNumber(row.contractAfterVisits),
-    contractRate: asNullableNumber(row.contractRate),
-    transferredAfterVisits: asNumber(row.transferredAfterVisits),
-    transferredRate: asNullableNumber(row.transferredRate),
+    contractAfterVisits,
+    contractRate:
+      asNullableNumber(row.contractRate) ??
+      (attendedVisits > 0 ? (contractAfterVisits / attendedVisits) * 100 : null),
+    transferredAfterVisits,
+    transferredRate:
+      asNullableNumber(row.transferredRate) ??
+      (attendedVisits > 0 ? (transferredAfterVisits / attendedVisits) * 100 : null),
     medianDaysToContract: asNullableNumber(row.medianDaysToContract),
-    dataQualityStatus: normalizeSourceCohortTrajectoryQualityStatus(
-      row.dataQualityStatus,
-    ),
   }
 }
 
@@ -2900,7 +2902,6 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
     ),
     eventPerformance: {
       range: normalizeRange(eventPerformance.range ?? value.range),
-      outcomeWindowDays: asNumber(eventPerformance.outcomeWindowDays, 60),
       totalEvents: asNumber(eventPerformance.totalEvents),
       invitedVisits: eventInvitedVisits,
       attendedVisits: eventAttendedVisits,
@@ -2911,7 +2912,6 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
             (eventInvitedVisits > 0
               ? (eventAttendedVisits / eventInvitedVisits) * 100
               : null),
-      matureVisits: asNumber(eventPerformance.matureVisits),
       contractAfterVisits: asNumber(eventPerformance.contractAfterVisits),
       transferredAfterVisits: asNumber(eventPerformance.transferredAfterVisits),
       eventTypeRows: asArray(

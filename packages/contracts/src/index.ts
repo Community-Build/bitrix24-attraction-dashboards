@@ -1694,23 +1694,19 @@ export interface SourceCohortEventPerformanceRow {
   invitedVisits: number;
   attendedVisits: number;
   attendanceRate: number | null;
-  matureVisits: number;
   contractAfterVisits: number;
   contractRate: number | null;
   transferredAfterVisits: number;
   transferredRate: number | null;
   medianDaysToContract: number | null;
-  dataQualityStatus: SourceCohortTrajectoryQualityStatus;
 }
 
 export interface SourceCohortEventPerformance {
   range: ReportRange;
-  outcomeWindowDays: number;
   totalEvents: number;
   invitedVisits: number;
   attendedVisits: number;
   attendanceRate: number | null;
-  matureVisits: number;
   contractAfterVisits: number;
   transferredAfterVisits: number;
   eventTypeRows: SourceCohortEventPerformanceRow[];
