@@ -1048,6 +1048,14 @@ function firstTimestampInWindow(
   return candidates.length > 0 ? Math.min(...candidates) : null;
 }
 
+function resolveEventPerformanceDate(
+  fact: EventVisitFactSnapshot,
+  eventById: Map<string, EventSnapshot>
+) {
+  const event = fact.eventId ? eventById.get(fact.eventId) ?? null : null;
+  return fact.eventDate ?? event?.eventDate ?? fact.attendedAt;
+}
+
 function buildEventPerformance(input: {
   range: ReportRange;
   now: Date;
@@ -1072,7 +1080,7 @@ function buildEventPerformance(input: {
 
     const dealFacts = factsByDeal.get(fact.dealId);
     const event = fact.eventId ? eventById.get(fact.eventId) ?? null : null;
-    const eventDate = fact.eventDate ?? event?.eventDate ?? fact.attendedAt;
+    const eventDate = resolveEventPerformanceDate(fact, eventById);
     const eventAtMs = Date.parse(eventDate ?? "");
     if (
       !dealFacts ||
@@ -1897,6 +1905,9 @@ export function buildSourceCohortTrajectoryReport(
   const eventVisitFactsByDeal = groupFactsByDeal(input.eventVisitFacts);
   const managerDirectory = buildManagerDirectoryMap(input.managerDirectory ?? []);
   const sourceLabels = buildSourceLabelMap(input.stageCatalog);
+  const eventById = new Map(
+    (input.events ?? []).map((event) => [event.eventId, event])
+  );
   const scopedDeals = input.deals.filter((deal) =>
     allowedCategoryIds.has(normalizeCategoryId(deal.categoryId))
   );
@@ -1908,9 +1919,12 @@ export function buildSourceCohortTrajectoryReport(
     (input.eventVisitFacts ?? [])
       .filter(
         (fact) =>
-          fact.finalStatus === "attended" &&
           isTrustedFact(fact) &&
-          isWithinRange(fact.eventDate ?? fact.attendedAt, fromMs, toMs)
+          isWithinRange(
+            resolveEventPerformanceDate(fact, eventById),
+            fromMs,
+            toMs
+          )
       )
       .map((fact) => fact.dealId)
       .filter((dealId): dealId is string => Boolean(dealId))

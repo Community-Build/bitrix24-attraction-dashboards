@@ -107,9 +107,11 @@ function formatEventOutcome(
 
 function formatEventAttendance(
   attendedVisits: number,
-  invitedVisits: number,
+  invitedVisits: number | null,
   rate: number | null,
 ) {
+  if (invitedVisits === null) return 'Нет данных'
+
   return invitedVisits > 0
     ? `${formatInteger(attendedVisits)} из ${formatInteger(invitedVisits)} · ${formatRate(rate)}`
     : '—'
@@ -130,7 +132,7 @@ function getEventPerformance(
     range: trajectory.range,
     outcomeWindowDays: 60,
     totalEvents: 0,
-    invitedVisits: 0,
+    invitedVisits: null,
     attendedVisits: 0,
     attendanceRate: null,
     matureVisits: 0,
@@ -514,6 +516,7 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
   const rows = getEventRows(trajectory, breakdown)
   const performance = getEventPerformance(trajectory)
   const windowDays = performance.outcomeWindowDays
+  const reliabilityExplanation = `Надежность результата после мероприятия оценивается по посещениям с полным окном ${windowDays} дней: до 10 — мало данных, 10–29 — ограниченно, от 30 — надежно.`
 
   return (
     <>
@@ -544,7 +547,14 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
               <th className="px-3 py-3">Контракт после</th>
               <th className="px-3 py-3">Передано после</th>
               <th className="px-3 py-3">До контракта</th>
-              <th className="px-3 py-3">Надежность</th>
+              <th className="px-3 py-3">
+                <span
+                  className="cursor-help border-b border-dotted border-slate-400"
+                  title={reliabilityExplanation}
+                >
+                  Надежность результата
+                </span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -555,7 +565,9 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
                 <td className="max-w-[320px] px-4 py-3 font-bold leading-5 text-slate-900">{row.label}</td>
                 {breakdown === 'events' ? <td className="px-3 py-3 tabular-nums">{formatDate(row.eventDate)}</td> : null}
                 <td className="px-3 py-3 tabular-nums">{formatInteger(row.eventCount)}</td>
-                <td className="px-3 py-3 tabular-nums">{formatInteger(row.invitedVisits)}</td>
+                <td className="px-3 py-3 tabular-nums">
+                  {row.invitedVisits === null ? 'Нет данных' : formatInteger(row.invitedVisits)}
+                </td>
                 <td className="px-3 py-3 tabular-nums">
                   <p>{formatInteger(row.attendedVisits)}</p>
                   {row.matureVisits < row.attendedVisits ? (
@@ -574,7 +586,9 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
                   {formatEventOutcome(row.transferredAfterVisits, row.matureVisits, row.transferredRate, row.attendedVisits)}
                 </td>
                 <td className="px-3 py-3 tabular-nums">{formatDays(row.medianDaysToContract)}</td>
-                <td className="px-3 py-3"><ReliabilityBadge status={row.dataQualityStatus} /></td>
+                <td className="px-3 py-3" title={reliabilityExplanation}>
+                  <ReliabilityBadge status={row.dataQualityStatus} />
+                </td>
               </tr>
             ))}
           </tbody>
@@ -598,6 +612,7 @@ function Methodology({ trajectory }: { trajectory: SourceCohortTrajectoryReport 
         </div>
         <div>
           <p><strong className="text-slate-800">Когорта мероприятий:</strong> уникальные связки мероприятия и сделки в выбранном диапазоне. Явка считается от приглашенных, а контракт и передача — в окне {getEventPerformance(trajectory).outcomeWindowDays} дней после фактического посещения.</p>
+          <p className="mt-2"><strong className="text-slate-800">Надежность результата:</strong> оценивается по посещениям с полным окном наблюдения, а не по числу приглашенных.</p>
           <p className="mt-2"><strong className="text-slate-800">Атрибуция:</strong> менеджер сделки и ответственный посещения взяты из текущего снимка; это не исторические владельцы действий.</p>
           <p className="mt-2"><strong className="text-slate-800">Причинность:</strong> отчет показывает наблюдаемую конверсию после события, но не доказывает, что именно событие вызвало результат.</p>
         </div>
@@ -696,8 +711,16 @@ export function SourceCohortStageConversionSection({
         <>
           <div className="mt-5 grid gap-4 border-y border-slate-200 py-4 sm:grid-cols-2 lg:grid-cols-5">
             <SummaryMetric label="Мероприятий" value={formatInteger(performance.totalEvents)} note="в выбранном диапазоне" />
-            <SummaryMetric label="Приглашены" value={formatInteger(performance.invitedVisits)} note="связаны с мероприятиями" />
-            <SummaryMetric label="Посетили" value={formatInteger(performance.attendedVisits)} note={`${formatRate(performance.attendanceRate)} явка`} />
+            <SummaryMetric
+              label="Приглашены"
+              value={performance.invitedVisits === null ? '—' : formatInteger(performance.invitedVisits)}
+              note={performance.invitedVisits === null ? 'данные не переданы API' : 'связаны с мероприятиями'}
+            />
+            <SummaryMetric
+              label="Посетили"
+              value={formatInteger(performance.attendedVisits)}
+              note={performance.attendanceRate === null ? 'явка недоступна' : `${formatRate(performance.attendanceRate)} явка`}
+            />
             <SummaryMetric label="В расчете" value={`${formatInteger(performance.matureVisits)} из ${formatInteger(performance.attendedVisits)}`} note={`посещений с полным окном ${performance.outcomeWindowDays} дней`} />
             <SummaryMetric label="Контракт после" value={formatInteger(performance.contractAfterVisits)} note="наблюдаемый результат" />
           </div>

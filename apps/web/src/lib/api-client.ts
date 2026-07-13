@@ -2662,7 +2662,7 @@ function normalizeSourceCohortTrajectoryBreakdownRow(value: unknown) {
 function normalizeSourceCohortEventPerformanceRow(value: unknown) {
   const row = isRecord(value) ? value : {}
   const attendedVisits = asNumber(row.attendedVisits)
-  const invitedVisits = asNumber(row.invitedVisits, attendedVisits)
+  const invitedVisits = asNullableNumber(row.invitedVisits)
   const attendanceRate = asNullableNumber(row.attendanceRate)
   return {
     key: asString(row.key),
@@ -2672,8 +2672,10 @@ function normalizeSourceCohortEventPerformanceRow(value: unknown) {
     invitedVisits,
     attendedVisits,
     attendanceRate:
-      attendanceRate ??
-      (invitedVisits > 0 ? (attendedVisits / invitedVisits) * 100 : null),
+      invitedVisits === null
+        ? null
+        : attendanceRate ??
+          (invitedVisits > 0 ? (attendedVisits / invitedVisits) * 100 : null),
     matureVisits: asNumber(row.matureVisits),
     contractAfterVisits: asNumber(row.contractAfterVisits),
     contractRate: asNullableNumber(row.contractRate),
@@ -2713,10 +2715,7 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
     ? value.eventPerformance
     : {}
   const eventAttendedVisits = asNumber(eventPerformance.attendedVisits)
-  const eventInvitedVisits = asNumber(
-    eventPerformance.invitedVisits,
-    eventAttendedVisits,
-  )
+  const eventInvitedVisits = asNullableNumber(eventPerformance.invitedVisits)
   const eventAttendanceRate = asNullableNumber(eventPerformance.attendanceRate)
   const conversionJourney = normalizeSourceCohortConversionJourney(
     value.conversionJourney,
@@ -2906,10 +2905,12 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
       invitedVisits: eventInvitedVisits,
       attendedVisits: eventAttendedVisits,
       attendanceRate:
-        eventAttendanceRate ??
-        (eventInvitedVisits > 0
-          ? (eventAttendedVisits / eventInvitedVisits) * 100
-          : null),
+        eventInvitedVisits === null
+          ? null
+          : eventAttendanceRate ??
+            (eventInvitedVisits > 0
+              ? (eventAttendedVisits / eventInvitedVisits) * 100
+              : null),
       matureVisits: asNumber(eventPerformance.matureVisits),
       contractAfterVisits: asNumber(eventPerformance.contractAfterVisits),
       transferredAfterVisits: asNumber(eventPerformance.transferredAfterVisits),
@@ -2925,9 +2926,14 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
         eventPerformance.managerRows,
         normalizeSourceCohortEventPerformanceRow,
       ),
-      warnings: asArray(eventPerformance.warnings, (entry) =>
-        asString(entry),
-      ).filter(Boolean),
+      warnings: [
+        ...asArray(eventPerformance.warnings, (entry) => asString(entry)).filter(
+          Boolean,
+        ),
+        ...(eventInvitedVisits === null
+          ? ['API не передал данные о приглашениях; явка недоступна.']
+          : []),
+      ],
     },
     dataQuality: {
       totalDeals: asNumber(dataQuality.totalDeals),

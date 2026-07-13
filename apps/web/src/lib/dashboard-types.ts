@@ -1196,7 +1196,7 @@ export interface SourceCohortEventPerformanceRow {
   label: string
   eventDate: string | null
   eventCount: number
-  invitedVisits: number
+  invitedVisits: number | null
   attendedVisits: number
   attendanceRate: number | null
   matureVisits: number
@@ -1212,7 +1212,7 @@ export interface SourceCohortEventPerformance {
   range: ReportRange
   outcomeWindowDays: number
   totalEvents: number
-  invitedVisits: number
+  invitedVisits: number | null
   attendedVisits: number
   attendanceRate: number | null
   matureVisits: number

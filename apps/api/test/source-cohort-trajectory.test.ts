@@ -1114,6 +1114,59 @@ describe("buildSourceCohortTrajectoryReport", () => {
     );
   });
 
+  it("keeps non-attended deals created before the event cohort in the invitation denominator", () => {
+    const report = buildSourceCohortTrajectoryReport({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      now: new Date("2026-07-20T09:00:00.000Z"),
+      wonStageIds: ["C10:WON"],
+      deals: [
+        deal({
+          id: "prior-cohort-no-show",
+          dateCreate: "2026-03-01T09:00:00.000Z"
+        })
+      ],
+      stageCatalog,
+      events: [
+        event({
+          eventId: "april-event",
+          eventDate: "2026-04-10T09:00:00.000Z"
+        })
+      ],
+      eventVisitFacts: [
+        eventVisit({
+          visitId: "prior-cohort-no-show-visit",
+          eventId: "april-event",
+          dealId: "prior-cohort-no-show",
+          eventDate: "2026-04-10T09:00:00.000Z",
+          confirmedAt: "2026-04-05T09:00:00.000Z",
+          attendedAt: null,
+          finalStatus: "confirmed"
+        })
+      ]
+    });
+
+    expect(report.totalDeals).toBe(0);
+    expect(report.eventPerformance).toEqual(
+      expect.objectContaining({
+        totalEvents: 1,
+        invitedVisits: 1,
+        attendedVisits: 0,
+        attendanceRate: 0
+      })
+    );
+    expect(report.eventPerformance.eventRows).toEqual([
+      expect.objectContaining({
+        key: "april-event",
+        invitedVisits: 1,
+        attendedVisits: 0,
+        attendanceRate: 0
+      })
+    ]);
+  });
+
   it("attributes a contract re-entry that happens after an attended event", () => {
     const report = buildSourceCohortTrajectoryReport({
       range: {

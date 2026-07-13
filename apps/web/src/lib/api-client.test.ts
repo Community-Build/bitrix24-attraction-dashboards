@@ -134,6 +134,96 @@ describe('apiClient', () => {
     expect(report.trajectory?.conversionJourney?.eventDepthRows[0]?.depthKey).toBe('0')
   })
 
+  it('does not fabricate attendance when invitation fields are missing', async () => {
+    const range = {
+      from: '2026-06-01T00:00:00.000Z',
+      to: '2026-06-30T23:59:59.999Z',
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range,
+        totalCreatedDeals: 1,
+        totalWonDeals: 0,
+        totalLostDeals: 0,
+        totalOpenDeals: 1,
+        winRate: 0,
+        averageDaysToWin: 0,
+        cohortMonths: [],
+        rows: [],
+        trajectoryStatus: 'available',
+        trajectoryUnavailableReason: null,
+        trajectory: {
+          range,
+          totalDeals: 1,
+          stageNodes: [],
+          stageTransitions: [],
+          actionNodes: [],
+          factSteps: [],
+          conversionGaps: [],
+          speedSteps: [],
+          managerDiagnostics: [],
+          managerRows: [],
+          sourceRows: [],
+          customerRows: [],
+          overallSignals: {},
+          eventPerformance: {
+            range,
+            outcomeWindowDays: 60,
+            totalEvents: 1,
+            attendedVisits: 4,
+            matureVisits: 4,
+            contractAfterVisits: 1,
+            transferredAfterVisits: 0,
+            eventTypeRows: [
+              {
+                key: 'legacy-event',
+                label: 'Старый ответ API',
+                eventDate: null,
+                eventCount: 1,
+                attendedVisits: 4,
+                matureVisits: 4,
+                contractAfterVisits: 1,
+                contractRate: 25,
+                transferredAfterVisits: 0,
+                transferredRate: 0,
+                medianDaysToContract: 8,
+                dataQualityStatus: 'low_sample',
+              },
+            ],
+            eventRows: [],
+            managerRows: [],
+            warnings: [],
+          },
+          dataQuality: {},
+        },
+        comparisons: [],
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const report = await apiClient.getSourceCohortConversionReport({
+      preset: 'custom',
+      from: '2026-06-01',
+      to: '2026-06-30',
+    })
+
+    expect(report.trajectoryStatus).toBe('available')
+    expect(report.trajectory?.eventPerformance.invitedVisits).toBeNull()
+    expect(report.trajectory?.eventPerformance.attendanceRate).toBeNull()
+    expect(report.trajectory?.eventPerformance.eventTypeRows[0]).toEqual(
+      expect.objectContaining({
+        invitedVisits: null,
+        attendedVisits: 4,
+        attendanceRate: null,
+      }),
+    )
+    expect(report.trajectory?.eventPerformance.warnings).toContain(
+      'API не передал данные о приглашениях; явка недоступна.',
+    )
+  })
+
   it('does not expose trajectory when API marks it unavailable', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,

@@ -111,6 +111,9 @@ Stable dashboard anchors used by ontology report bindings:
   - `invitedVisits` counts all included event/deal pairs, `attendedVisits`
     counts the pairs with a trusted attended status, and
     `attendanceRate = attendedVisits / invitedVisits`;
+  - the web client must show attendance as unavailable when invitation fields
+    are missing from an incompatible or incomplete API response; it must not
+    infer `invitedVisits = attendedVisits`;
   - use a fixed 60-day outcome window after attendance;
   - only visits whose full 60-day window has elapsed enter `matureVisits` and
     rate denominators;

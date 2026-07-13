@@ -2234,6 +2234,9 @@ describe('App', () => {
     expect(trajectory.getByText('Явка')).toBeInTheDocument()
     expect(trajectory.getByText('12 из 15 · 80%')).toBeInTheDocument()
     expect(trajectory.getAllByText('Нет посещений').length).toBe(2)
+    expect(
+      trajectory.getByText('Надежность результата').getAttribute('title'),
+    ).toMatch(/по посещениям с полным окном 60 дней/i)
     expect(trajectory.getByText('10 из 12')).toBeInTheDocument()
     expect(trajectory.getByText('3 из 10 · 30%')).toBeInTheDocument()
     expect(trajectory.getByText('1 из 10 · 10%')).toBeInTheDocument()
