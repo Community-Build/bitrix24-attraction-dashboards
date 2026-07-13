@@ -81,6 +81,17 @@ import type {
   SalesPlanQuarterInput,
   SourceCohortConversionReport,
   SourceCohortConversionReportSnapshot,
+  SourceCohortConversionEventDepthKey,
+  SourceCohortConversionJourneyStepKey,
+  SourceCohortTrajectoryActionKey,
+  SourceCohortTrajectoryAvailabilityStatus,
+  SourceCohortTrajectoryDiagnosticSeverity,
+  SourceCohortTrajectoryDiagnosticStatus,
+  SourceCohortTrajectoryFactStepKey,
+  SourceCohortTrajectoryGapKey,
+  SourceCohortTrajectoryLossShapeKey,
+  SourceCohortTrajectoryQualityStatus,
+  SourceCohortTrajectorySpeedStepKey,
   SourceQualityConversionReport,
   SourceQualityConversionReportSnapshot,
   SnapshotStats,
@@ -1838,7 +1849,10 @@ function normalizeSyncHealth(value: unknown): MetaResponse['syncHealth'] {
     return {
       code: normalizedCode,
       severity: issue.severity === 'warning' ? ('warning' as const) : ('blocking' as const),
-      message: asString(issue.message, 'Нет подтвержденного покрытия локального snapshot.'),
+      message: asString(
+        issue.message,
+        'Локальный снимок данных не подтвержден последней синхронизацией.',
+      ),
     }
   })
   const blocking =
@@ -2359,12 +2373,636 @@ function normalizeSourceCohortOpenStageRows(value: unknown) {
   })
 }
 
+function normalizeSourceCohortTrajectoryQualityStatus(
+  value: unknown,
+): SourceCohortTrajectoryQualityStatus {
+  const status = asString(value, 'low_sample')
+  return status === 'reliable' || status === 'limited' || status === 'low_sample'
+    ? status
+    : 'low_sample'
+}
+
+function normalizeSourceCohortTrajectoryAvailabilityStatus(
+  value: unknown,
+): SourceCohortTrajectoryAvailabilityStatus {
+  return asString(value, 'unavailable') === 'available' ? 'available' : 'unavailable'
+}
+
+function normalizeSourceCohortConversionJourneyStepKey(
+  value: unknown,
+): SourceCohortConversionJourneyStepKey {
+  const stepKey = asString(value, 'created')
+  return stepKey === 'created' ||
+    stepKey === 'first_call' ||
+    stepKey === 'confirmed_conversation' ||
+    stepKey === 'meeting_scheduled' ||
+    stepKey === 'meeting_completed' ||
+    stepKey === 'event_1' ||
+    stepKey === 'event_2' ||
+    stepKey === 'event_3_plus' ||
+    stepKey === 'contract' ||
+    stepKey === 'transferred'
+    ? stepKey
+    : 'created'
+}
+
+function normalizeSourceCohortConversionEventDepthKey(
+  value: unknown,
+): SourceCohortConversionEventDepthKey {
+  const depthKey = asString(value, '0')
+  return depthKey === '0' ||
+    depthKey === '1' ||
+    depthKey === '2' ||
+    depthKey === '3_plus'
+    ? depthKey
+    : '0'
+}
+
+function normalizeSourceCohortConversionJourney(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  if (
+    !Array.isArray(value.coreSteps) ||
+    !Array.isArray(value.eventSteps) ||
+    !Array.isArray(value.eventDepthRows)
+  ) {
+    return undefined
+  }
+
+  const normalizeStep = (entry: unknown) => {
+    const step = isRecord(entry) ? entry : {}
+    return {
+      stepKey: normalizeSourceCohortConversionJourneyStepKey(step.stepKey),
+      label: asString(step.label, asString(step.stepKey)),
+      deals: asNumber(step.deals),
+      rateFromCohort: asNumber(step.rateFromCohort),
+      transitionDeals: asNumber(step.transitionDeals),
+      rateFromPrevious: asNumber(step.rateFromPrevious),
+      dropoffDeals: asNumber(step.dropoffDeals),
+      medianDaysFromCreate: asNullableNumber(step.medianDaysFromCreate),
+      medianDaysFromPrevious: asNullableNumber(step.medianDaysFromPrevious),
+      evidence: asString(step.evidence),
+    }
+  }
+
+  return {
+    coreSteps: asArray(value.coreSteps, normalizeStep),
+    eventSteps: asArray(value.eventSteps, normalizeStep),
+    eventDepthRows: asArray(value.eventDepthRows, (entry) => {
+      const row = isRecord(entry) ? entry : {}
+      return {
+        depthKey: normalizeSourceCohortConversionEventDepthKey(row.depthKey),
+        label: asString(row.label, asString(row.depthKey)),
+        deals: asNumber(row.deals),
+        rateFromCompletedMeeting: asNumber(row.rateFromCompletedMeeting),
+        contractDeals: asNumber(row.contractDeals),
+        contractRate: asNumber(row.contractRate),
+        transferredDeals: asNumber(row.transferredDeals),
+        transferredRate: asNumber(row.transferredRate),
+        medianDaysToContract: asNullableNumber(row.medianDaysToContract),
+      }
+    }),
+  }
+}
+
+function normalizeSourceCohortTrajectoryActionKey(
+  value: unknown,
+): SourceCohortTrajectoryActionKey {
+  const actionKey = asString(value, 'first_successful_call')
+  return actionKey === 'first_successful_call' ||
+    actionKey === 'completed_meeting' ||
+    actionKey === 'attended_event'
+    ? actionKey
+    : 'first_successful_call'
+}
+
+function normalizeSourceCohortTrajectoryFactStepKey(
+  value: unknown,
+): SourceCohortTrajectoryFactStepKey {
+  const stepKey = asString(value, 'created')
+  return stepKey === 'created' ||
+    stepKey === 'first_successful_call' ||
+    stepKey === 'meeting_stage' ||
+    stepKey === 'completed_meeting' ||
+    stepKey === 'attended_event' ||
+    stepKey === 'contract_stage' ||
+    stepKey === 'won'
+    ? stepKey
+    : 'created'
+}
+
+function normalizeSourceCohortTrajectoryGapKey(
+  value: unknown,
+): SourceCohortTrajectoryGapKey {
+  const gapKey = asString(value, 'no_successful_call')
+  return gapKey === 'no_successful_call' ||
+    gapKey === 'successful_call_without_meeting_stage' ||
+    gapKey === 'meeting_stage_without_fact' ||
+    gapKey === 'completed_meeting_without_next_stage' ||
+    gapKey === 'attended_event_without_contract' ||
+    gapKey === 'contract_without_win'
+    ? gapKey
+    : 'no_successful_call'
+}
+
+function normalizeSourceCohortTrajectorySpeedStepKey(
+  value: unknown,
+): SourceCohortTrajectorySpeedStepKey {
+  const stepKey = asString(value, 'first_successful_call')
+  return stepKey === 'first_successful_call' ||
+    stepKey === 'completed_meeting' ||
+    stepKey === 'attended_event' ||
+    stepKey === 'contract_stage' ||
+    stepKey === 'post_meeting_next_stage'
+    ? stepKey
+    : 'first_successful_call'
+}
+
+function normalizeSourceCohortTrajectoryDiagnosticStatus(
+  value: unknown,
+): SourceCohortTrajectoryDiagnosticStatus {
+  const status = asString(value, 'mixed')
+  return status === 'strength' ||
+    status === 'bottleneck' ||
+    status === 'mixed' ||
+    status === 'low_sample'
+    ? status
+    : 'mixed'
+}
+
+function normalizeSourceCohortTrajectoryDiagnosticSeverity(
+  value: unknown,
+): SourceCohortTrajectoryDiagnosticSeverity {
+  const severity = asString(value, 'neutral')
+  return severity === 'positive' || severity === 'warning' || severity === 'neutral'
+    ? severity
+    : 'neutral'
+}
+
+function normalizeSourceCohortTrajectoryLossShapeKey(
+  value: unknown,
+): SourceCohortTrajectoryLossShapeKey {
+  const shapeKey = asString(value, 'open_wip')
+  return shapeKey === 'not_reached_successful_call' ||
+    shapeKey === 'call_without_meeting_stage' ||
+    shapeKey === 'meeting_stage_without_fact' ||
+    shapeKey === 'meeting_fact_without_next_stage' ||
+    shapeKey === 'event_without_contract' ||
+    shapeKey === 'contract_without_win' ||
+    shapeKey === 'terminal_loss' ||
+    shapeKey === 'open_wip'
+    ? shapeKey
+    : 'open_wip'
+}
+
+const SOURCE_COHORT_TRAJECTORY_LOSS_SHAPE_LABELS: Record<
+  SourceCohortTrajectoryLossShapeKey,
+  string
+> = {
+  not_reached_successful_call: 'Нет успешного звонка',
+  call_without_meeting_stage: 'Звонок без этапа встречи',
+  meeting_stage_without_fact: 'Этап встречи без факта',
+  meeting_fact_without_next_stage: 'Факт встречи без следующего этапа',
+  event_without_contract: 'Событие без контракта',
+  contract_without_win: 'Контракт без продажи',
+  terminal_loss: 'Терминальный проигрыш',
+  open_wip: 'Открытые сделки',
+}
+
+function normalizeSourceCohortTrajectoryLossShape(value: unknown) {
+  const shape = isRecord(value) ? value : {}
+  const dominantShapeKey = normalizeSourceCohortTrajectoryLossShapeKey(
+    shape.dominantShapeKey,
+  )
+  const fallbackLabel = SOURCE_COHORT_TRAJECTORY_LOSS_SHAPE_LABELS[dominantShapeKey]
+
+  return {
+    dominantShapeKey,
+    dominantShapeLabel: asString(shape.dominantShapeLabel, fallbackLabel),
+    dominantDeals: asNumber(shape.dominantDeals),
+    dominantRate: asNumber(shape.dominantRate),
+    terminalLossDeals: asNumber(shape.terminalLossDeals),
+    openWipDeals: asNumber(shape.openWipDeals),
+    reasons: asArray(shape.reasons, (entry) => {
+      const reason = isRecord(entry) ? entry : {}
+      const shapeKey = normalizeSourceCohortTrajectoryLossShapeKey(
+        reason.shapeKey,
+      )
+      return {
+        shapeKey,
+        label: asString(reason.label, SOURCE_COHORT_TRAJECTORY_LOSS_SHAPE_LABELS[shapeKey]),
+        deals: asNumber(reason.deals),
+        rate: asNumber(reason.rate),
+        evidence: asString(reason.evidence),
+        recommendedQuestion: asString(reason.recommendedQuestion),
+      }
+    }).filter((reason) => reason.deals > 0),
+  }
+}
+
+function normalizeSourceCohortTrajectoryBreakdownRow(value: unknown) {
+  const row = isRecord(value) ? value : {}
+  return {
+    key: asString(row.key),
+    label: asString(row.label, asString(row.key)),
+    totalDeals: asNumber(row.totalDeals),
+    noSuccessfulCallDeals: asNumber(row.noSuccessfulCallDeals),
+    firstSuccessfulCallDeals: asNumber(row.firstSuccessfulCallDeals),
+    firstSuccessfulCallFallbackDeals: asNumber(row.firstSuccessfulCallFallbackDeals),
+    firstSuccessfulCallRate: asNumber(row.firstSuccessfulCallRate),
+    medianDaysToFirstSuccessfulCall: asNullableNumber(
+      row.medianDaysToFirstSuccessfulCall,
+    ),
+    successfulCallWithoutMeetingStageDeals: asNumber(
+      row.successfulCallWithoutMeetingStageDeals,
+    ),
+    meetingStageDeals: asNumber(row.meetingStageDeals),
+    meetingStageRate: asNumber(row.meetingStageRate),
+    completedMeetingDeals: asNumber(row.completedMeetingDeals),
+    completedMeetingRate: asNumber(row.completedMeetingRate),
+    medianDaysToCompletedMeeting: asNullableNumber(
+      row.medianDaysToCompletedMeeting,
+    ),
+    attendedEventDeals: asNumber(row.attendedEventDeals),
+    attendedEventRate: asNumber(row.attendedEventRate),
+    medianDaysToAttendedEvent: asNullableNumber(row.medianDaysToAttendedEvent),
+    attendedEventWithoutContractDeals: asNumber(
+      row.attendedEventWithoutContractDeals,
+    ),
+    wonDeals: asNumber(row.wonDeals),
+    wonRate: asNumber(row.wonRate),
+    lostDeals: asNumber(row.lostDeals),
+    openDeals: asNumber(row.openDeals),
+    meetingStageWithoutFactDeals: asNumber(row.meetingStageWithoutFactDeals),
+    completedMeetingWithoutNextStageDeals: asNumber(
+      row.completedMeetingWithoutNextStageDeals,
+    ),
+    repeatAttendedEventDeals: asNumber(row.repeatAttendedEventDeals),
+    repeatAttendedEventVisits: asNumber(row.repeatAttendedEventVisits),
+    contractStageDeals: asNumber(row.contractStageDeals),
+    contractStageRate: asNumber(row.contractStageRate),
+    contractWithoutWinDeals: asNumber(row.contractWithoutWinDeals),
+    slowFirstSuccessfulCallDeals: asNumber(row.slowFirstSuccessfulCallDeals),
+    slowCompletedMeetingDeals: asNumber(row.slowCompletedMeetingDeals),
+    slowAttendedEventDeals: asNumber(row.slowAttendedEventDeals),
+    slowContractStageDeals: asNumber(row.slowContractStageDeals),
+    staleAfterCompletedMeetingDeals: asNumber(row.staleAfterCompletedMeetingDeals),
+    staleOpenContractStageDeals: asNumber(row.staleOpenContractStageDeals),
+    medianDaysToContractStage: asNullableNumber(row.medianDaysToContractStage),
+    medianDaysOnContractStage: asNullableNumber(row.medianDaysOnContractStage),
+    dataQualityStatus: normalizeSourceCohortTrajectoryQualityStatus(
+      row.dataQualityStatus,
+    ),
+    lossShape: normalizeSourceCohortTrajectoryLossShape(row.lossShape),
+  }
+}
+
+function normalizeSourceCohortEventPerformanceRow(value: unknown) {
+  const row = isRecord(value) ? value : {}
+  const attendedVisits = asNumber(row.attendedVisits)
+  const invitedVisits = asNullableNumber(row.invitedVisits)
+  const attendanceRate = asNullableNumber(row.attendanceRate)
+  const contractEligibleVisits = asNullableNumber(row.contractEligibleVisits)
+  const contractAfterVisits = asNumber(row.contractAfterVisits)
+  const transferredAfterVisits = asNumber(row.transferredAfterVisits)
+  return {
+    key: asString(row.key),
+    label: asString(row.label, asString(row.key)),
+    eventDate: asNullableString(row.eventDate),
+    eventCount: asNumber(row.eventCount),
+    invitedVisits,
+    attendedVisits,
+    attendanceRate:
+      invitedVisits === null
+        ? null
+        : attendanceRate ??
+          (invitedVisits > 0 ? (attendedVisits / invitedVisits) * 100 : null),
+    contractEligibleVisits,
+    contractAfterVisits,
+    contractRate:
+      contractEligibleVisits !== null && contractEligibleVisits > 0
+        ? (contractAfterVisits / contractEligibleVisits) * 100
+        : null,
+    transferredAfterVisits,
+    transferredRate:
+      asNullableNumber(row.transferredRate) ??
+      (attendedVisits > 0 ? (transferredAfterVisits / attendedVisits) * 100 : null),
+    medianDaysToContract: asNullableNumber(row.medianDaysToContract),
+  }
+}
+
+function normalizeSourceCohortTrajectoryReport(value: unknown) {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const eventPerformance = isRecord(value.eventPerformance)
+    ? value.eventPerformance
+    : null
+  const hasMinimumEventPerformance =
+    eventPerformance !== null &&
+    asNullableNumber(eventPerformance.totalEvents) !== null &&
+    asNullableNumber(eventPerformance.attendedVisits) !== null &&
+    asNullableNumber(eventPerformance.contractAfterVisits) !== null &&
+    asNullableNumber(eventPerformance.transferredAfterVisits) !== null &&
+    Array.isArray(eventPerformance.eventTypeRows) &&
+    Array.isArray(eventPerformance.eventRows) &&
+    Array.isArray(eventPerformance.managerRows) &&
+    Array.isArray(eventPerformance.warnings)
+  const hasMinimumTrajectoryPayload =
+    Array.isArray(value.stageNodes) &&
+    Array.isArray(value.stageTransitions) &&
+    Array.isArray(value.actionNodes) &&
+    Array.isArray(value.factSteps) &&
+    Array.isArray(value.conversionGaps) &&
+    Array.isArray(value.speedSteps) &&
+    Array.isArray(value.managerDiagnostics) &&
+    Array.isArray(value.managerRows) &&
+    Array.isArray(value.sourceRows) &&
+    Array.isArray(value.customerRows) &&
+    Array.isArray(value.qualityRows) &&
+    isRecord(value.overallSignals) &&
+    isRecord(value.dataQuality) &&
+    hasMinimumEventPerformance
+  if (!hasMinimumTrajectoryPayload) {
+    return undefined
+  }
+
+  const signals = isRecord(value.overallSignals) ? value.overallSignals : {}
+  const dataQuality = isRecord(value.dataQuality) ? value.dataQuality : {}
+  if (!eventPerformance) {
+    return undefined
+  }
+  const eventAttendedVisits = asNumber(eventPerformance.attendedVisits)
+  const eventInvitedVisits = asNullableNumber(eventPerformance.invitedVisits)
+  const eventAttendanceRate = asNullableNumber(eventPerformance.attendanceRate)
+  const eventContractEligibleVisits = asNullableNumber(
+    eventPerformance.contractEligibleVisits,
+  )
+  const conversionJourney = normalizeSourceCohortConversionJourney(
+    value.conversionJourney,
+  )
+
+  return {
+    range: normalizeRange(value.range),
+    totalDeals: asNumber(value.totalDeals),
+    ...(conversionJourney ? { conversionJourney } : {}),
+    stageNodes: asArray(value.stageNodes, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        stageId: asString(item.stageId),
+        stageName: asString(item.stageName, asString(item.stageId)),
+        sortOrder: asNumber(item.sortOrder),
+        reachedDeals: asNumber(item.reachedDeals),
+        reachedRate: asNumber(item.reachedRate),
+        medianDaysFromCreate: asNullableNumber(item.medianDaysFromCreate),
+        medianDaysOnStage: asNullableNumber(item.medianDaysOnStage),
+      }
+    }),
+    stageTransitions: asArray(value.stageTransitions, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        id: asString(item.id),
+        fromStageId: asNullableString(item.fromStageId),
+        fromStageName: asNullableString(item.fromStageName),
+        fromSortOrder: asNullableNumber(item.fromSortOrder),
+        toStageId: asString(item.toStageId),
+        toStageName: asString(item.toStageName, asString(item.toStageId)),
+        toSortOrder: asNumber(item.toSortOrder),
+        deals: asNumber(item.deals),
+        conversionRate: asNumber(item.conversionRate),
+      }
+    }),
+    actionNodes: asArray(value.actionNodes, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        actionKey: normalizeSourceCohortTrajectoryActionKey(item.actionKey),
+        label: asString(item.label, asString(item.actionKey)),
+        reachedDeals: asNumber(item.reachedDeals),
+        reachedRate: asNumber(item.reachedRate),
+        medianDaysFromCreate: asNullableNumber(item.medianDaysFromCreate),
+        evidence: asString(item.evidence),
+      }
+    }),
+    factSteps: asArray(value.factSteps, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        stepKey: normalizeSourceCohortTrajectoryFactStepKey(item.stepKey),
+        label: asString(item.label, asString(item.stepKey)),
+        deals: asNumber(item.deals),
+        rateFromCohort: asNumber(item.rateFromCohort),
+        rateFromPrevious: asNumber(item.rateFromPrevious),
+        medianDaysFromCreate: asNullableNumber(item.medianDaysFromCreate),
+        evidence: asString(item.evidence),
+      }
+    }),
+    conversionGaps: asArray(value.conversionGaps, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        gapKey: normalizeSourceCohortTrajectoryGapKey(item.gapKey),
+        label: asString(item.label, asString(item.gapKey)),
+        deals: asNumber(item.deals),
+        rate: asNumber(item.rate),
+        denominatorStepKey: normalizeSourceCohortTrajectoryFactStepKey(
+          item.denominatorStepKey,
+        ),
+        evidence: asString(item.evidence),
+        managementQuestion: asString(item.managementQuestion),
+      }
+    }),
+    speedSteps: asArray(value.speedSteps, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      return {
+        stepKey: normalizeSourceCohortTrajectorySpeedStepKey(item.stepKey),
+        label: asString(item.label, asString(item.stepKey)),
+        totalDeals: asNumber(item.totalDeals),
+        medianDays: asNullableNumber(item.medianDays),
+        slaDays: asNumber(item.slaDays),
+        slowDeals: asNumber(item.slowDeals),
+        slowRate: asNumber(item.slowRate),
+        buckets: asArray(item.buckets, (bucketEntry) => {
+          const bucket = isRecord(bucketEntry) ? bucketEntry : {}
+          return {
+            bucketKey: asString(bucket.bucketKey),
+            label: asString(bucket.label, asString(bucket.bucketKey)),
+            minDays: asNullableNumber(bucket.minDays),
+            maxDays: asNullableNumber(bucket.maxDays),
+            deals: asNumber(bucket.deals),
+            rate: asNumber(bucket.rate),
+          }
+        }),
+      }
+    }),
+    overallSignals: {
+      noSuccessfulCallDeals: asNumber(signals.noSuccessfulCallDeals),
+      firstSuccessfulCallDeals: asNumber(signals.firstSuccessfulCallDeals),
+      firstSuccessfulCallFallbackDeals: asNumber(
+        signals.firstSuccessfulCallFallbackDeals,
+      ),
+      successfulCallWithoutMeetingStageDeals: asNumber(
+        signals.successfulCallWithoutMeetingStageDeals,
+      ),
+      meetingStageDeals: asNumber(signals.meetingStageDeals),
+      meetingStageWithoutFactDeals: asNumber(
+        signals.meetingStageWithoutFactDeals,
+      ),
+      completedMeetingDeals: asNumber(signals.completedMeetingDeals),
+      completedMeetingWithoutNextStageDeals: asNumber(
+        signals.completedMeetingWithoutNextStageDeals,
+      ),
+      attendedEventDeals: asNumber(signals.attendedEventDeals),
+      attendedEventWithoutContractDeals: asNumber(
+        signals.attendedEventWithoutContractDeals,
+      ),
+      contractWithoutWinDeals: asNumber(signals.contractWithoutWinDeals),
+      slowFirstSuccessfulCallDeals: asNumber(signals.slowFirstSuccessfulCallDeals),
+      slowCompletedMeetingDeals: asNumber(signals.slowCompletedMeetingDeals),
+      slowAttendedEventDeals: asNumber(signals.slowAttendedEventDeals),
+      slowContractStageDeals: asNumber(signals.slowContractStageDeals),
+      staleAfterCompletedMeetingDeals: asNumber(
+        signals.staleAfterCompletedMeetingDeals,
+      ),
+      staleOpenContractStageDeals: asNumber(signals.staleOpenContractStageDeals),
+      repeatAttendedEventDeals: asNumber(signals.repeatAttendedEventDeals),
+      repeatAttendedEventVisits: asNumber(signals.repeatAttendedEventVisits),
+      contractStageDeals: asNumber(signals.contractStageDeals),
+      contractStageRate: asNumber(signals.contractStageRate),
+      medianDaysToContractStage: asNullableNumber(signals.medianDaysToContractStage),
+      medianDaysOnContractStage: asNullableNumber(signals.medianDaysOnContractStage),
+      wonDeals: asNumber(signals.wonDeals),
+      lostDeals: asNumber(signals.lostDeals),
+      openDeals: asNumber(signals.openDeals),
+    },
+    managerDiagnostics: asArray(value.managerDiagnostics, (entry) => {
+      const item = isRecord(entry) ? entry : {}
+      const normalizeSignal = (signalEntry: unknown) => {
+        const signal = isRecord(signalEntry) ? signalEntry : {}
+        return {
+          signalKey: asString(signal.signalKey),
+          label: asString(signal.label, asString(signal.signalKey)),
+          value: asNumber(signal.value),
+          benchmarkValue: asNullableNumber(signal.benchmarkValue),
+          delta: asNullableNumber(signal.delta),
+          unit: asString(signal.unit),
+          severity: normalizeSourceCohortTrajectoryDiagnosticSeverity(
+            signal.severity,
+          ),
+        }
+      }
+
+      return {
+        managerId: asString(item.managerId),
+        managerName: asString(item.managerName, asString(item.managerId)),
+        totalDeals: asNumber(item.totalDeals),
+        status: normalizeSourceCohortTrajectoryDiagnosticStatus(item.status),
+        headline: asString(item.headline),
+        strengths: asArray(item.strengths, normalizeSignal),
+        bottlenecks: asArray(item.bottlenecks, normalizeSignal),
+        recommendedFocus: asString(item.recommendedFocus),
+        sampleWarning: asNullableString(item.sampleWarning),
+      }
+    }),
+    managerRows: asArray(value.managerRows, (entry) => {
+      const row = normalizeSourceCohortTrajectoryBreakdownRow(entry)
+      const item = isRecord(entry) ? entry : {}
+      return {
+        ...row,
+        managerId: asString(item.managerId, row.key),
+        managerName: asString(item.managerName, row.label),
+      }
+    }),
+    sourceRows: asArray(value.sourceRows, normalizeSourceCohortTrajectoryBreakdownRow),
+    customerRows: asArray(
+      value.customerRows,
+      normalizeSourceCohortTrajectoryBreakdownRow,
+    ),
+    qualityRows: asArray(
+      value.qualityRows,
+      normalizeSourceCohortTrajectoryBreakdownRow,
+    ),
+    eventPerformance: {
+      range: normalizeRange(eventPerformance.range ?? value.range),
+      totalEvents: asNumber(eventPerformance.totalEvents),
+      invitedVisits: eventInvitedVisits,
+      attendedVisits: eventAttendedVisits,
+      attendanceRate:
+        eventInvitedVisits === null
+          ? null
+          : eventAttendanceRate ??
+            (eventInvitedVisits > 0
+              ? (eventAttendedVisits / eventInvitedVisits) * 100
+              : null),
+      contractEligibleVisits: eventContractEligibleVisits,
+      contractAfterVisits: asNumber(eventPerformance.contractAfterVisits),
+      transferredAfterVisits: asNumber(eventPerformance.transferredAfterVisits),
+      eventTypeRows: asArray(
+        eventPerformance.eventTypeRows,
+        normalizeSourceCohortEventPerformanceRow,
+      ),
+      eventRows: asArray(
+        eventPerformance.eventRows,
+        normalizeSourceCohortEventPerformanceRow,
+      ),
+      managerRows: asArray(
+        eventPerformance.managerRows,
+        normalizeSourceCohortEventPerformanceRow,
+      ),
+      warnings: [
+        ...asArray(eventPerformance.warnings, (entry) => asString(entry)).filter(
+          Boolean,
+        ),
+        ...(eventInvitedVisits === null
+          ? ['API не передал данные о приглашениях; явка недоступна.']
+          : []),
+        ...(eventContractEligibleVisits === null
+          ? [
+              'API не передал базу сделок без контракта до мероприятия; конверсия в контракт недоступна.',
+            ]
+          : []),
+      ],
+    },
+    dataQuality: {
+      totalDeals: asNumber(dataQuality.totalDeals),
+      stageHistoryDeals: asNumber(dataQuality.stageHistoryDeals),
+      stageHistoryCoverageRate: asNumber(dataQuality.stageHistoryCoverageRate),
+      touchpointDeals: asNumber(dataQuality.touchpointDeals),
+      touchpointCoverageRate: asNumber(dataQuality.touchpointCoverageRate),
+      eventVisitDeals: asNumber(dataQuality.eventVisitDeals),
+      eventVisitCoverageRate: asNumber(dataQuality.eventVisitCoverageRate),
+      businessClubDeals: asNumber(dataQuality.businessClubDeals),
+      businessClubCoverageRate: asNumber(dataQuality.businessClubCoverageRate),
+      businessClubMissingDeals: asNumber(dataQuality.businessClubMissingDeals),
+      warnings: asArray(dataQuality.warnings, (entry) => asString(entry)).filter(
+        Boolean,
+      ),
+    },
+  }
+}
+
 function normalizeSourceCohortConversionSnapshot(
   value: unknown,
 ): SourceCohortConversionReportSnapshot {
   const data = isRecord(value) ? value : {}
+  const trajectory = normalizeSourceCohortTrajectoryReport(data.trajectory)
+  const serverTrajectoryStatus = normalizeSourceCohortTrajectoryAvailabilityStatus(
+    data.trajectoryStatus,
+  )
+  const trajectoryStatus =
+    trajectory &&
+    (serverTrajectoryStatus === 'available' || data.trajectoryStatus === undefined)
+      ? 'available'
+      : 'unavailable'
+  const trajectoryUnavailableReason =
+    trajectoryStatus === 'available'
+      ? null
+      : asNullableString(data.trajectoryUnavailableReason) ??
+        (data.trajectory === undefined
+          ? 'Траектория конверсии не передана API.'
+          : 'Траектория конверсии передана не полностью.')
 
-  return {
+  const snapshot: SourceCohortConversionReportSnapshot = {
     range: normalizeRange(data.range),
     totalCreatedDeals: asNumber(data.totalCreatedDeals),
     totalWonDeals: asNumber(data.totalWonDeals),
@@ -2372,6 +3010,8 @@ function normalizeSourceCohortConversionSnapshot(
     totalOpenDeals: asNumber(data.totalOpenDeals),
     winRate: asNumber(data.winRate),
     averageDaysToWin: asNumber(data.averageDaysToWin),
+    trajectoryStatus,
+    trajectoryUnavailableReason,
     cohortMonths: asArray(data.cohortMonths, (entry) => {
       const item = isRecord(entry) ? entry : {}
       return {
@@ -2430,6 +3070,10 @@ function normalizeSourceCohortConversionSnapshot(
       }
     }),
   }
+
+  return trajectoryStatus === 'available' && trajectory
+    ? { ...snapshot, trajectory }
+    : snapshot
 }
 
 function normalizeSourceCohortConversionReport(

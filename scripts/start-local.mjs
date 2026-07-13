@@ -9,6 +9,7 @@ import { prepareLocalDev } from './prepare-local-dev.mjs'
 const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NODE_MODULES_PATH = resolve(ROOT_DIR, 'node_modules')
 const DEV_PORTS = [5173, 5174, 8787]
+const EXPECTED_PNPM_MAJOR = 10
 
 function runCommand(command, args, options = {}) {
   return spawnSync(command, args, {
@@ -19,16 +20,46 @@ function runCommand(command, args, options = {}) {
   })
 }
 
+function getPnpmRunner() {
+  if (process.env.npm_execpath) {
+    return {
+      command: process.execPath,
+      args: [process.env.npm_execpath],
+    }
+  }
+
+  return {
+    command: 'pnpm',
+    args: [],
+  }
+}
+
+function runPnpm(args, options = {}) {
+  const runner = getPnpmRunner()
+
+  return runCommand(runner.command, [...runner.args, ...args], options)
+}
+
 function ensurePnpm() {
-  const result = spawnSync('pnpm', ['--version'], {
+  const result = runPnpm(['--version'], {
     cwd: ROOT_DIR,
     encoding: 'utf8',
     stdio: 'pipe',
   })
 
   if (result.error || result.status !== 0) {
-    console.error('[launcher] pnpm is required but was not found in PATH.')
+    console.error('[launcher] pnpm is required but was not found.')
     process.exit(result.status ?? 1)
+  }
+
+  const version = result.stdout.trim()
+  const major = Number(version.split('.')[0] ?? 0)
+
+  if (major !== EXPECTED_PNPM_MAJOR) {
+    console.error(
+      `[launcher] pnpm ${EXPECTED_PNPM_MAJOR}.x is required, got ${version}. Start with: corepack pnpm@10.9.0 start:local`,
+    )
+    process.exit(1)
   }
 }
 
@@ -60,7 +91,7 @@ function ensureDependencies() {
   }
 
   console.log('[launcher] Installing dependencies with pnpm...')
-  const result = runCommand('pnpm', ['install'])
+  const result = runPnpm(['install'])
 
   if (result.status !== 0) {
     process.exit(result.status ?? 1)
@@ -108,6 +139,7 @@ function isProjectDevProcess(command) {
     command.includes(ROOT_DIR) &&
     (command.includes('vite') ||
       command.includes('tsx watch') ||
+      (command.includes('tsx') && command.includes('watch src/index.ts')) ||
       command.includes('bitrix24-reporting-local@ start'))
   )
 }
@@ -162,7 +194,8 @@ function pipeOutput(stream, prefix, onLine) {
 }
 
 function spawnPrefixedProcess(name, args, onLine) {
-  const child = spawn('pnpm', args, {
+  const runner = getPnpmRunner()
+  const child = spawn(runner.command, [...runner.args, ...args], {
     cwd: ROOT_DIR,
     env: process.env,
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -206,8 +239,8 @@ console.log('[launcher] Refresh inside the UI starts the manual sync flow.')
 let browserOpened = false
 let shuttingDown = false
 const processes = [
-  spawnPrefixedProcess('api', ['dev:api']),
-  spawnPrefixedProcess('web', ['dev:web'], (line) => {
+  spawnPrefixedProcess('api', ['--filter', '@bitrix24-reporting/api', 'dev']),
+  spawnPrefixedProcess('web', ['--filter', '@bitrix24-reporting/web', 'dev'], (line) => {
     if (browserOpened) {
       return
     }

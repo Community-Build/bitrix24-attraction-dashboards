@@ -900,6 +900,352 @@ export interface SourceCohortConversionMonthOption {
   totalCreatedDeals: number
 }
 
+export type SourceCohortTrajectoryActionKey =
+  | 'first_successful_call'
+  | 'completed_meeting'
+  | 'attended_event'
+
+export type SourceCohortTrajectoryFactStepKey =
+  | 'created'
+  | 'first_successful_call'
+  | 'meeting_stage'
+  | 'completed_meeting'
+  | 'attended_event'
+  | 'contract_stage'
+  | 'won'
+
+export type SourceCohortTrajectoryGapKey =
+  | 'no_successful_call'
+  | 'successful_call_without_meeting_stage'
+  | 'meeting_stage_without_fact'
+  | 'completed_meeting_without_next_stage'
+  | 'attended_event_without_contract'
+  | 'contract_without_win'
+
+export type SourceCohortTrajectoryQualityStatus =
+  | 'reliable'
+  | 'limited'
+  | 'low_sample'
+
+export interface SourceCohortTrajectoryStageNode {
+  stageId: string
+  stageName: string
+  sortOrder: number
+  reachedDeals: number
+  reachedRate: number
+  medianDaysFromCreate: number | null
+  medianDaysOnStage: number | null
+}
+
+export interface SourceCohortTrajectoryActionNode {
+  actionKey: SourceCohortTrajectoryActionKey
+  label: string
+  reachedDeals: number
+  reachedRate: number
+  medianDaysFromCreate: number | null
+  evidence: string
+}
+
+export interface SourceCohortTrajectoryStageTransition {
+  id: string
+  fromStageId: string | null
+  fromStageName: string | null
+  fromSortOrder: number | null
+  toStageId: string
+  toStageName: string
+  toSortOrder: number
+  deals: number
+  conversionRate: number
+}
+
+export interface SourceCohortTrajectoryFactStepNode {
+  stepKey: SourceCohortTrajectoryFactStepKey
+  label: string
+  deals: number
+  rateFromCohort: number
+  rateFromPrevious: number
+  medianDaysFromCreate: number | null
+  evidence: string
+}
+
+export interface SourceCohortTrajectoryGapRow {
+  gapKey: SourceCohortTrajectoryGapKey
+  label: string
+  deals: number
+  rate: number
+  denominatorStepKey: SourceCohortTrajectoryFactStepKey
+  evidence: string
+  managementQuestion: string
+}
+
+export type SourceCohortTrajectorySpeedStepKey =
+  | 'first_successful_call'
+  | 'completed_meeting'
+  | 'attended_event'
+  | 'contract_stage'
+  | 'post_meeting_next_stage'
+
+export interface SourceCohortTrajectorySpeedBucket {
+  bucketKey: string
+  label: string
+  minDays: number | null
+  maxDays: number | null
+  deals: number
+  rate: number
+}
+
+export interface SourceCohortTrajectorySpeedStep {
+  stepKey: SourceCohortTrajectorySpeedStepKey
+  label: string
+  totalDeals: number
+  medianDays: number | null
+  slaDays: number
+  slowDeals: number
+  slowRate: number
+  buckets: SourceCohortTrajectorySpeedBucket[]
+}
+
+export type SourceCohortTrajectoryDiagnosticStatus =
+  | 'strength'
+  | 'bottleneck'
+  | 'mixed'
+  | 'low_sample'
+
+export type SourceCohortTrajectoryDiagnosticSeverity =
+  | 'positive'
+  | 'warning'
+  | 'neutral'
+
+export interface SourceCohortTrajectoryDiagnosticSignal {
+  signalKey: string
+  label: string
+  value: number
+  benchmarkValue: number | null
+  delta: number | null
+  unit: string
+  severity: SourceCohortTrajectoryDiagnosticSeverity
+}
+
+export interface SourceCohortTrajectoryManagerDiagnostic {
+  managerId: string
+  managerName: string
+  totalDeals: number
+  status: SourceCohortTrajectoryDiagnosticStatus
+  headline: string
+  strengths: SourceCohortTrajectoryDiagnosticSignal[]
+  bottlenecks: SourceCohortTrajectoryDiagnosticSignal[]
+  recommendedFocus: string
+  sampleWarning: string | null
+}
+
+export type SourceCohortTrajectoryLossShapeKey =
+  | 'not_reached_successful_call'
+  | 'call_without_meeting_stage'
+  | 'meeting_stage_without_fact'
+  | 'meeting_fact_without_next_stage'
+  | 'event_without_contract'
+  | 'contract_without_win'
+  | 'terminal_loss'
+  | 'open_wip'
+
+export interface SourceCohortTrajectoryLossShapeReason {
+  shapeKey: SourceCohortTrajectoryLossShapeKey
+  label: string
+  deals: number
+  rate: number
+  evidence: string
+  recommendedQuestion: string
+}
+
+export interface SourceCohortTrajectoryLossShape {
+  dominantShapeKey: SourceCohortTrajectoryLossShapeKey
+  dominantShapeLabel: string
+  dominantDeals: number
+  dominantRate: number
+  terminalLossDeals: number
+  openWipDeals: number
+  reasons: SourceCohortTrajectoryLossShapeReason[]
+}
+
+export interface SourceCohortTrajectorySignals {
+  noSuccessfulCallDeals: number
+  firstSuccessfulCallDeals: number
+  firstSuccessfulCallFallbackDeals: number
+  successfulCallWithoutMeetingStageDeals: number
+  meetingStageDeals: number
+  meetingStageWithoutFactDeals: number
+  completedMeetingDeals: number
+  completedMeetingWithoutNextStageDeals: number
+  attendedEventDeals: number
+  attendedEventWithoutContractDeals: number
+  contractWithoutWinDeals: number
+  slowFirstSuccessfulCallDeals: number
+  slowCompletedMeetingDeals: number
+  slowAttendedEventDeals: number
+  slowContractStageDeals: number
+  staleAfterCompletedMeetingDeals: number
+  staleOpenContractStageDeals: number
+  repeatAttendedEventDeals: number
+  repeatAttendedEventVisits: number
+  contractStageDeals: number
+  contractStageRate: number
+  medianDaysToContractStage: number | null
+  medianDaysOnContractStage: number | null
+  wonDeals: number
+  lostDeals: number
+  openDeals: number
+}
+
+export interface SourceCohortTrajectoryDataQuality {
+  totalDeals: number
+  stageHistoryDeals: number
+  stageHistoryCoverageRate: number
+  touchpointDeals: number
+  touchpointCoverageRate: number
+  eventVisitDeals: number
+  eventVisitCoverageRate: number
+  businessClubDeals: number
+  businessClubCoverageRate: number
+  businessClubMissingDeals: number
+  warnings: string[]
+}
+
+export interface SourceCohortTrajectoryBreakdownRow
+  extends SourceCohortTrajectorySignals {
+  key: string
+  label: string
+  totalDeals: number
+  firstSuccessfulCallDeals: number
+  firstSuccessfulCallRate: number
+  medianDaysToFirstSuccessfulCall: number | null
+  meetingStageDeals: number
+  meetingStageRate: number
+  completedMeetingDeals: number
+  completedMeetingRate: number
+  medianDaysToCompletedMeeting: number | null
+  attendedEventDeals: number
+  attendedEventRate: number
+  medianDaysToAttendedEvent: number | null
+  wonDeals: number
+  wonRate: number
+  lostDeals: number
+  openDeals: number
+  dataQualityStatus: SourceCohortTrajectoryQualityStatus
+  lossShape: SourceCohortTrajectoryLossShape
+}
+
+export interface SourceCohortTrajectoryManagerRow
+  extends SourceCohortTrajectoryBreakdownRow {
+  managerId: string
+  managerName: string
+}
+
+export type SourceCohortConversionJourneyCoreStepKey =
+  | 'created'
+  | 'first_call'
+  | 'confirmed_conversation'
+  | 'meeting_scheduled'
+  | 'meeting_completed'
+  | 'contract'
+  | 'transferred'
+
+export type SourceCohortConversionJourneyEventStepKey =
+  | 'event_1'
+  | 'event_2'
+  | 'event_3_plus'
+
+export type SourceCohortConversionJourneyStepKey =
+  | SourceCohortConversionJourneyCoreStepKey
+  | SourceCohortConversionJourneyEventStepKey
+
+export interface SourceCohortConversionJourneyStep {
+  stepKey: SourceCohortConversionJourneyStepKey
+  label: string
+  deals: number
+  rateFromCohort: number
+  transitionDeals: number
+  rateFromPrevious: number
+  dropoffDeals: number
+  medianDaysFromCreate: number | null
+  medianDaysFromPrevious: number | null
+  evidence: string
+}
+
+export type SourceCohortConversionEventDepthKey = '0' | '1' | '2' | '3_plus'
+
+export interface SourceCohortConversionEventDepthRow {
+  depthKey: SourceCohortConversionEventDepthKey
+  label: string
+  deals: number
+  rateFromCompletedMeeting: number
+  contractDeals: number
+  contractRate: number
+  transferredDeals: number
+  transferredRate: number
+  medianDaysToContract: number | null
+}
+
+export interface SourceCohortConversionJourney {
+  coreSteps: SourceCohortConversionJourneyStep[]
+  eventSteps: SourceCohortConversionJourneyStep[]
+  eventDepthRows: SourceCohortConversionEventDepthRow[]
+}
+
+export interface SourceCohortEventPerformanceRow {
+  key: string
+  label: string
+  eventDate: string | null
+  eventCount: number
+  invitedVisits: number | null
+  attendedVisits: number
+  attendanceRate: number | null
+  contractEligibleVisits: number | null
+  contractAfterVisits: number
+  contractRate: number | null
+  transferredAfterVisits: number
+  transferredRate: number | null
+  medianDaysToContract: number | null
+}
+
+export interface SourceCohortEventPerformance {
+  range: ReportRange
+  totalEvents: number
+  invitedVisits: number | null
+  attendedVisits: number
+  attendanceRate: number | null
+  contractEligibleVisits: number | null
+  contractAfterVisits: number
+  transferredAfterVisits: number
+  eventTypeRows: SourceCohortEventPerformanceRow[]
+  eventRows: SourceCohortEventPerformanceRow[]
+  managerRows: SourceCohortEventPerformanceRow[]
+  warnings: string[]
+}
+
+export interface SourceCohortTrajectoryReport {
+  range: ReportRange
+  totalDeals: number
+  conversionJourney?: SourceCohortConversionJourney
+  stageNodes: SourceCohortTrajectoryStageNode[]
+  stageTransitions: SourceCohortTrajectoryStageTransition[]
+  actionNodes: SourceCohortTrajectoryActionNode[]
+  factSteps: SourceCohortTrajectoryFactStepNode[]
+  conversionGaps: SourceCohortTrajectoryGapRow[]
+  speedSteps: SourceCohortTrajectorySpeedStep[]
+  overallSignals: SourceCohortTrajectorySignals
+  managerDiagnostics: SourceCohortTrajectoryManagerDiagnostic[]
+  managerRows: SourceCohortTrajectoryManagerRow[]
+  sourceRows: SourceCohortTrajectoryBreakdownRow[]
+  customerRows: SourceCohortTrajectoryBreakdownRow[]
+  qualityRows: SourceCohortTrajectoryBreakdownRow[]
+  eventPerformance: SourceCohortEventPerformance
+  dataQuality: SourceCohortTrajectoryDataQuality
+}
+
+export type SourceCohortTrajectoryAvailabilityStatus =
+  | 'available'
+  | 'unavailable'
+
 export interface SourceCohortConversionReportSnapshot {
   range: ReportRange
   totalCreatedDeals: number
@@ -910,6 +1256,9 @@ export interface SourceCohortConversionReportSnapshot {
   averageDaysToWin: number
   cohortMonths: SourceCohortConversionMonthOption[]
   rows: SourceCohortConversionRow[]
+  trajectoryStatus: SourceCohortTrajectoryAvailabilityStatus
+  trajectoryUnavailableReason: string | null
+  trajectory?: SourceCohortTrajectoryReport
 }
 
 export interface SourceCohortConversionReport

@@ -394,6 +394,9 @@ function createEmptySourceCohortConversionReport(): SourceCohortConversionReport
     averageDaysToWin: 0,
     cohortMonths: [],
     rows: [],
+    trajectoryStatus: "unavailable",
+    trajectoryUnavailableReason:
+      "Траектория конверсии не рассчитана для этого ответа.",
     comparisons: []
   };
 }

@@ -71,6 +71,7 @@ const expectedAttractionAnalyticsRoutes = [
   "/api/reports/calls-workload",
   "/api/reports/conversion-events",
   "/api/reports/cohort-conversion",
+  "/api/reports/source-cohort-conversion",
   "/api/reports/toc-flow",
   "/api/reports/revenue-velocity",
   "/api/reports/unit-economics"

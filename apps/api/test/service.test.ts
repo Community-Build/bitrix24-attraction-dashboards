@@ -117,15 +117,19 @@ function withReportingRepositoryDefaults(
     listSyncRuns: async () => [],
     getAllDeals: async () => [],
     getAllStageHistory: async () => [],
+    getStageHistoryByOwnerIds: async () => [],
     getAllActivities: async () => [],
     getAllActivityBindings: async () => [],
     getAllActivityDeadlineChanges: async () => [],
     getAllDealMeetingDateChanges: async () => [],
     getAllConversionEventVisits: async () => [],
     getAllDealStageFacts: async () => [],
+    getDealStageFactsByDealIds: async () => [],
     getAllDealTouchpointFacts: async () => [],
+    getDealTouchpointFactsByDealIds: async () => [],
     getAllEventSnapshots: async () => [],
     getAllEventVisitFacts: async () => [],
+    getEventVisitFactsByDealIds: async () => [],
     getAllEventVisitStageHistory: async () => [],
     getModuleEventTypeSettings: async () => [],
     getConversionEventTypeOptions: async () => [],
@@ -3036,6 +3040,146 @@ describe("createReportingService", () => {
     expect(stageFactReads).toBe(1);
     expect(touchpointFactReads).toBe(1);
     expect(eventVisitFactReads).toBe(1);
+  });
+
+  it("loads source cohort trajectory facts only for scoped deal ids", async () => {
+    let fullStageHistoryReads = 0;
+    let fullStageFactReads = 0;
+    let fullTouchpointFactReads = 0;
+    let fullEventVisitFactReads = 0;
+    let scopedStageHistoryIds: string[] = [];
+    let scopedStageFactIds: string[] = [];
+    let scopedTouchpointFactIds: string[] = [];
+    let scopedEventVisitFactIds: string[] = [];
+    const repository = {
+      getAllDeals: async () => [
+        {
+          id: "1",
+          leadId: null,
+          categoryId: "10",
+          stageId: "C10:NEW",
+          stageSemanticId: "P",
+          opportunity: 10000,
+          assignedById: "78",
+          sourceId: "WEB",
+          qualityValue: null,
+          businessClubValue: null,
+          targetGroupValue: null,
+          dateCreate: "2026-06-05T10:00:00.000Z",
+          dateModify: "2026-06-05T10:00:00.000Z",
+          dateClosed: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          utmContent: null,
+          utmTerm: null
+        },
+        {
+          id: "2",
+          leadId: null,
+          categoryId: "10",
+          stageId: "C10:NEW",
+          stageSemanticId: "P",
+          opportunity: 10000,
+          assignedById: "999",
+          sourceId: "WEB",
+          qualityValue: null,
+          businessClubValue: null,
+          targetGroupValue: null,
+          dateCreate: "2026-06-06T10:00:00.000Z",
+          dateModify: "2026-06-06T10:00:00.000Z",
+          dateClosed: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          utmContent: null,
+          utmTerm: null
+        }
+      ],
+      getStageCatalog: async () => [
+        {
+          entityType: "deal" as const,
+          categoryId: "10",
+          statusId: "C10:NEW",
+          name: "Новая",
+          semanticId: "P",
+          sortOrder: 10
+        },
+        {
+          entityType: "source" as const,
+          categoryId: null,
+          statusId: "WEB",
+          name: "Website",
+          semanticId: null,
+          sortOrder: 10
+        }
+      ],
+      getWonStageIds: async () => [],
+      getAllStageHistory: async () => {
+        fullStageHistoryReads += 1;
+        return [];
+      },
+      getAllDealStageFacts: async () => {
+        fullStageFactReads += 1;
+        return [];
+      },
+      getAllDealTouchpointFacts: async () => {
+        fullTouchpointFactReads += 1;
+        return [];
+      },
+      getAllEventVisitFacts: async () => {
+        fullEventVisitFactReads += 1;
+        return [];
+      },
+      getStageHistoryByOwnerIds: async (ids: string[]) => {
+        scopedStageHistoryIds = ids;
+        return [];
+      },
+      getDealStageFactsByDealIds: async (ids: string[]) => {
+        scopedStageFactIds = ids;
+        return [];
+      },
+      getDealTouchpointFactsByDealIds: async (ids: string[]) => {
+        scopedTouchpointFactIds = ids;
+        return [];
+      },
+      getEventVisitFactsByDealIds: async (ids: string[]) => {
+        scopedEventVisitFactIds = ids;
+        return [];
+      },
+      getManagerDirectory: async () => [],
+      upsertManagerDirectory: async () => 0
+    };
+
+    const service = createReportingService({
+      dealCategoryIds: ["10"],
+      qualityFieldName: "UF_CRM_TEST",
+      repository: withReportingRepositoryDefaults(repository),
+      client: {
+        fetchUsers: async () => []
+      } as never,
+      defaultPeriodDays: 30,
+      now: () => new Date("2026-06-30T12:00:00.000Z")
+    });
+
+    await service.getSourceCohortConversionReport({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      filters: {
+        managerIds: ["78"]
+      }
+    });
+
+    expect(fullStageHistoryReads).toBe(0);
+    expect(fullStageFactReads).toBe(0);
+    expect(fullTouchpointFactReads).toBe(0);
+    expect(fullEventVisitFactReads).toBe(0);
+    expect(scopedStageHistoryIds).toEqual(["1"]);
+    expect(scopedStageFactIds).toEqual(["1"]);
+    expect(scopedTouchpointFactIds).toEqual(["1"]);
+    expect(scopedEventVisitFactIds).toEqual(["1"]);
   });
 
   it("builds the cohort report from the latest twelve calendar months regardless of selected ranges", async () => {

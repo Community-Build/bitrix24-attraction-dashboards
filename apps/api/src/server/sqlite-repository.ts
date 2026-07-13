@@ -729,6 +729,7 @@ export interface SqliteRepository {
   getAllLeads(): Promise<LeadSnapshot[]>;
   getAllDeals(): Promise<DealSnapshot[]>;
   getAllStageHistory(): Promise<StageHistorySnapshot[]>;
+  getStageHistoryByOwnerIds(ownerIds: string[]): Promise<StageHistorySnapshot[]>;
   getAllActivities(): Promise<ActivitySnapshot[]>;
   getAllActivityBindings(): Promise<ActivityBindingSnapshot[]>;
   getAllActivityDeadlineChanges(): Promise<ActivityDeadlineChangeSnapshot[]>;
@@ -736,9 +737,14 @@ export interface SqliteRepository {
   getAllConversionEventVisits(): Promise<ConversionEventVisitSnapshot[]>;
   getAllIdentityLinks(): Promise<IdentityLinkSnapshot[]>;
   getAllDealStageFacts(): Promise<DealStageFactSnapshot[]>;
+  getDealStageFactsByDealIds(dealIds: string[]): Promise<DealStageFactSnapshot[]>;
   getAllDealTouchpointFacts(): Promise<DealTouchpointFactSnapshot[]>;
+  getDealTouchpointFactsByDealIds(
+    dealIds: string[]
+  ): Promise<DealTouchpointFactSnapshot[]>;
   getAllEventSnapshots(): Promise<EventSnapshot[]>;
   getAllEventVisitFacts(): Promise<EventVisitFactSnapshot[]>;
+  getEventVisitFactsByDealIds(dealIds: string[]): Promise<EventVisitFactSnapshot[]>;
   getAllEventVisitStageHistory(): Promise<EventVisitStageHistorySnapshot[]>;
   getModuleEventTypeSettings(moduleKey?: string): Promise<ModuleEventTypeSetting[]>;
   getConversionEventTypeOptions(): Promise<ConversionEventTypeOption[]>;
@@ -4906,6 +4912,36 @@ export function createSqliteRepository(
         .all() as StageHistorySnapshot[];
     },
 
+    async getStageHistoryByOwnerIds(ownerIds) {
+      if (ownerIds.length === 0) {
+        return [];
+      }
+
+      return chunkValues(Array.from(new Set(ownerIds)))
+        .flatMap((chunk) => {
+          const placeholders = chunk.map(() => "?").join(", ");
+          return database
+            .prepare(
+              `SELECT
+                id,
+                owner_id AS ownerId,
+                category_id AS categoryId,
+                stage_id AS stageId,
+                stage_semantic_id AS stageSemanticId,
+                type_id AS typeId,
+                created_time AS createdTime
+              FROM stage_history_snapshots
+              WHERE owner_id IN (${placeholders})
+              ORDER BY created_time ASC, id ASC`
+            )
+            .all(...chunk) as StageHistorySnapshot[];
+        })
+        .sort((left, right) => {
+          const byTime = left.createdTime.localeCompare(right.createdTime);
+          return byTime !== 0 ? byTime : left.id.localeCompare(right.id);
+        });
+    },
+
     async getAllActivities() {
       const rows = database
         .prepare(
@@ -5074,6 +5110,50 @@ export function createSqliteRepository(
         .all() as DealStageFactSnapshot[];
     },
 
+    async getDealStageFactsByDealIds(dealIds) {
+      if (dealIds.length === 0) {
+        return [];
+      }
+
+      return chunkValues(Array.from(new Set(dealIds)))
+        .flatMap((chunk) => {
+          const placeholders = chunk.map(() => "?").join(", ");
+          return database
+            .prepare(
+              `SELECT
+                fact_id AS factId,
+                source_system AS sourceSystem,
+                source_entity_id AS sourceEntityId,
+                deal_id AS dealId,
+                contact_id AS contactId,
+                lead_id AS leadId,
+                category_id AS categoryId,
+                stage_id AS stageId,
+                stage_name AS stageName,
+                stage_semantic_id AS stageSemanticId,
+                entered_at AS enteredAt,
+                left_at AS leftAt,
+                manager_id AS managerId,
+                source_id AS sourceId,
+                sort_order AS sortOrder,
+                payload_json AS payloadJson
+              FROM deal_stage_facts
+              WHERE deal_id IN (${placeholders})
+              ORDER BY deal_id ASC, entered_at ASC, fact_id ASC`
+            )
+            .all(...chunk) as DealStageFactSnapshot[];
+        })
+        .sort((left, right) => {
+          const byDeal = left.dealId.localeCompare(right.dealId);
+          if (byDeal !== 0) {
+            return byDeal;
+          }
+
+          const byEntered = left.enteredAt.localeCompare(right.enteredAt);
+          return byEntered !== 0 ? byEntered : left.factId.localeCompare(right.factId);
+        });
+    },
+
     async getAllDealTouchpointFacts() {
       return database
         .prepare(
@@ -5098,6 +5178,45 @@ export function createSqliteRepository(
           ORDER BY occurred_at ASC, fact_id ASC`
         )
         .all() as DealTouchpointFactSnapshot[];
+    },
+
+    async getDealTouchpointFactsByDealIds(dealIds) {
+      if (dealIds.length === 0) {
+        return [];
+      }
+
+      return chunkValues(Array.from(new Set(dealIds)))
+        .flatMap((chunk) => {
+          const placeholders = chunk.map(() => "?").join(", ");
+          return database
+            .prepare(
+              `SELECT
+                fact_id AS factId,
+                kind,
+                source_system AS sourceSystem,
+                source_entity_type AS sourceEntityType,
+                source_entity_id AS sourceEntityId,
+                occurred_at AS occurredAt,
+                deal_id AS dealId,
+                contact_id AS contactId,
+                lead_id AS leadId,
+                manager_id AS managerId,
+                source_id AS sourceId,
+                stage_id_at_event AS stageIdAtEvent,
+                stage_name_at_event AS stageNameAtEvent,
+                link_confidence AS linkConfidence,
+                link_reason AS linkReason,
+                payload_json AS payloadJson
+              FROM deal_touchpoint_facts
+              WHERE deal_id IN (${placeholders})
+              ORDER BY occurred_at ASC, fact_id ASC`
+            )
+            .all(...chunk) as DealTouchpointFactSnapshot[];
+        })
+        .sort((left, right) => {
+          const byTime = left.occurredAt.localeCompare(right.occurredAt);
+          return byTime !== 0 ? byTime : left.factId.localeCompare(right.factId);
+        });
     },
 
     async getAllEventSnapshots() {
@@ -5153,6 +5272,48 @@ export function createSqliteRepository(
         )
         .all() as EventVisitFactSnapshot[];
     },
+
+    async getEventVisitFactsByDealIds(dealIds) {
+      if (dealIds.length === 0) {
+        return [];
+      }
+
+      return chunkValues(Array.from(new Set(dealIds)))
+        .flatMap((chunk) => {
+          const placeholders = chunk.map(() => "?").join(", ");
+          return database
+            .prepare(
+              `SELECT
+                visit_id AS visitId,
+                event_id AS eventId,
+                deal_id AS dealId,
+                contact_id AS contactId,
+                lead_id AS leadId,
+                manager_id AS managerId,
+                source_id AS sourceId,
+                current_stage_id AS currentStageId,
+                current_stage_name AS currentStageName,
+                invited_at AS invitedAt,
+                confirmed_at AS confirmedAt,
+                attended_at AS attendedAt,
+                refused_at AS refusedAt,
+                final_status AS finalStatus,
+                event_date AS eventDate,
+                stage_id_at_event AS stageIdAtEvent,
+                link_confidence AS linkConfidence,
+                link_reason AS linkReason,
+                payload_json AS payloadJson
+              FROM event_visit_facts
+              WHERE deal_id IN (${placeholders})
+              ORDER BY event_date ASC, visit_id ASC`
+            )
+            .all(...chunk) as EventVisitFactSnapshot[];
+	        })
+	        .sort((left, right) => {
+	          const byDate = (left.eventDate ?? "").localeCompare(right.eventDate ?? "");
+	          return byDate !== 0 ? byDate : left.visitId.localeCompare(right.visitId);
+	        });
+	    },
 
     async getAllEventVisitStageHistory() {
       return database

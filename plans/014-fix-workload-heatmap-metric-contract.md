@@ -453,20 +453,20 @@ small and data-driven; do not hit live Bitrix.
 
 All must hold:
 
-- [ ] `callsHourlyHeatmap.total` no longer counts all calls when the visible
+- [x] `callsHourlyHeatmap.total` no longer counts all calls when the visible
       card/row is about outgoing or linked outgoing calls.
-- [ ] Direct-only managers use linked call timestamps for the visible call
+- [x] Direct-only managers use linked call timestamps for the visible call
       heatmap basis.
-- [ ] Task heatmaps distinguish created tasks from closed tasks, or the UI
+- [x] Task heatmaps distinguish created tasks from closed tasks, or the UI
       renders only a closed-task heatmap with a label that cannot be confused
       with created tasks. Preferred: render both.
-- [ ] Meeting heatmap `total` equals `meetingCount`; off-grid meetings are
+- [x] Meeting heatmap `total` equals `meetingCount`; off-grid meetings are
       reported via `outsideGridTotal`.
-- [ ] Heatmap badges make clear when visible cells cover only 09-21.
-- [ ] Focused API and web tests pass.
-- [ ] API and web typechecks pass.
-- [ ] `pnpm lint` exits 0.
-- [ ] No files outside the in-scope list are modified except `plans/README.md`
+- [x] Heatmap badges make clear when visible cells cover only 09-21.
+- [x] Focused API and web tests pass.
+- [x] API and web typechecks pass.
+- [x] `pnpm lint` exits 0.
+- [x] No files outside the in-scope list are modified except `plans/README.md`
       status update if the executor updates it.
 
 ## STOP conditions
