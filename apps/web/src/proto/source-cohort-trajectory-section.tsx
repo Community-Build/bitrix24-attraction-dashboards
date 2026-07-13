@@ -572,7 +572,7 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
                   <p>{formatInteger(row.attendedVisits)}</p>
                   {row.matureVisits < row.attendedVisits ? (
                     <p className="mt-0.5 text-xs leading-5 text-slate-500">
-                      В расчете {formatInteger(row.matureVisits)} · ожидают {formatInteger(row.attendedVisits - row.matureVisits)}
+                      Прошло {windowDays} дней: {formatInteger(row.matureVisits)} из {formatInteger(row.attendedVisits)}
                     </p>
                   ) : null}
                 </td>
@@ -721,7 +721,11 @@ export function SourceCohortStageConversionSection({
               value={formatInteger(performance.attendedVisits)}
               note={performance.attendanceRate === null ? 'явка недоступна' : `${formatRate(performance.attendanceRate)} явка`}
             />
-            <SummaryMetric label="В расчете" value={`${formatInteger(performance.matureVisits)} из ${formatInteger(performance.attendedVisits)}`} note={`посещений с полным окном ${performance.outcomeWindowDays} дней`} />
+            <SummaryMetric
+              label={`Прошло ${performance.outcomeWindowDays} дней`}
+              value={`${formatInteger(performance.matureVisits)} из ${formatInteger(performance.attendedVisits)}`}
+              note="только они входят в оценку результата"
+            />
             <SummaryMetric label="Контракт после" value={formatInteger(performance.contractAfterVisits)} note="наблюдаемый результат" />
           </div>
           <EventTable trajectory={trajectory} />

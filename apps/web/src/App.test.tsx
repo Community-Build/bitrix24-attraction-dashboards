@@ -2240,7 +2240,11 @@ describe('App', () => {
     expect(trajectory.getByText('10 из 12')).toBeInTheDocument()
     expect(trajectory.getByText('3 из 10 · 30%')).toBeInTheDocument()
     expect(trajectory.getByText('1 из 10 · 10%')).toBeInTheDocument()
-    expect(trajectory.getByText('В расчете 10 · ожидают 2')).toBeInTheDocument()
+    expect(trajectory.getByText('Прошло 60 дней')).toBeInTheDocument()
+    expect(trajectory.getByText('только они входят в оценку результата')).toBeInTheDocument()
+    expect(
+      trajectory.getByText('Прошло 60 дней: 10 из 12'),
+    ).toBeInTheDocument()
     expect(trajectory.getAllByText(/60 дней/i).length).toBeGreaterThan(0)
     expect(apiClient.getAttractionOntology).not.toHaveBeenCalled()
   })
