@@ -4,6 +4,7 @@ import type {
   SourceCohortEventPerformance,
   SourceCohortEventPerformanceRow,
   SourceCohortTrajectoryBreakdownRow,
+  SourceCohortTrajectoryFactStepKey,
   SourceCohortTrajectoryManagerRow,
   SourceCohortTrajectoryQualityStatus,
   SourceCohortTrajectoryReport,
@@ -67,6 +68,16 @@ const EVENT_BREAKDOWN_META: Record<EventBreakdownKey, { label: string; subject: 
   types: { label: 'Типы мероприятий', subject: 'Тип' },
   events: { label: 'Отдельные мероприятия', subject: 'Мероприятие' },
   managers: { label: 'Ответственные', subject: 'Ответственный' },
+}
+
+const GAP_DENOMINATOR_LABELS: Record<SourceCohortTrajectoryFactStepKey, string> = {
+  created: 'сделок когорты',
+  first_successful_call: 'сделок с успешным звонком',
+  meeting_stage: 'сделок на этапе встречи',
+  completed_meeting: 'сделок с состоявшейся встречей',
+  attended_event: 'сделок с посещением мероприятия',
+  contract_stage: 'сделок, дошедших до контракта',
+  won: 'сделок, переданных в клуб',
 }
 
 function formatNumber(value: number) {
@@ -288,18 +299,27 @@ function JourneyGaps({ trajectory }: { trajectory: SourceCohortTrajectoryReport 
       {rows.length === 0 ? (
         <p className="p-5 text-sm text-slate-500">Заметных расхождений в выбранной когорте нет.</p>
       ) : (
-        rows.map((row) => (
-          <div key={row.gapKey} className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,0.7fr)_100px_minmax(320px,1.3fr)] lg:items-center">
-            <div>
-              <p className="font-bold text-slate-900">{row.label}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">{row.evidence}</p>
+        rows.map((row) => {
+          const denominatorDeals =
+            trajectory.factSteps.find((step) => step.stepKey === row.denominatorStepKey)?.deals ?? 0
+          return (
+            <div key={row.gapKey} className="grid gap-3 p-4 lg:grid-cols-[minmax(220px,0.7fr)_minmax(190px,0.5fr)_minmax(320px,1.3fr)] lg:items-center">
+              <div>
+                <p className="font-bold text-slate-900">{row.label}</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">{row.evidence}</p>
+              </div>
+              <div className="tabular-nums">
+                <p className="text-lg font-extrabold text-amber-800">
+                  {formatInteger(row.deals)} из {formatInteger(denominatorDeals)}
+                </p>
+                <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                  {formatRate(row.rate)} от {GAP_DENOMINATOR_LABELS[row.denominatorStepKey]}
+                </p>
+              </div>
+              <p className="text-sm leading-6 text-slate-700">{row.managementQuestion}</p>
             </div>
-            <p className="text-lg font-extrabold tabular-nums text-amber-800">
-              {formatInteger(row.deals)} · {formatRate(row.rate)}
-            </p>
-            <p className="text-sm leading-6 text-slate-700">{row.managementQuestion}</p>
-          </div>
-        ))
+          )
+        })
       )}
     </div>
   )

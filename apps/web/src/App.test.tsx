@@ -2213,6 +2213,8 @@ describe('App', () => {
 
     fireEvent.click(trajectory.getByRole('button', { name: 'Расхождения' }))
     expect(trajectory.getByText('Нет успешного звонка')).toBeInTheDocument()
+    expect(trajectory.getByText('32 из 77')).toBeInTheDocument()
+    expect(trajectory.getByText('41,6% от сделок когорты')).toBeInTheDocument()
     expect(trajectory.getByText(/почему не довели до успешного дозвона/i)).toBeInTheDocument()
 
     fireEvent.click(trajectory.getByRole('button', { name: 'Поставщики / источники' }))
