@@ -92,6 +92,16 @@ function formatDays(value: number | null) {
   return value === null || !Number.isFinite(value) ? '—' : `${formatNumber(value)} дн.`
 }
 
+function formatEventOutcome(
+  outcomeVisits: number,
+  matureVisits: number,
+  rate: number | null,
+) {
+  return matureVisits > 0
+    ? `${formatInteger(outcomeVisits)} из ${formatInteger(matureVisits)} · ${formatRate(rate)}`
+    : 'Еще рано'
+}
+
 function formatDate(value: string | null) {
   if (!value) return '—'
   const date = new Date(value)
@@ -507,14 +517,13 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
         Когорта строится по дате мероприятия. В конверсию входят только посещения, после которых прошло {windowDays} дней. Одно посещение представлено в каждом из трех разрезов, поэтому суммы между разрезами не складываются.
       </p>
       <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
-        <table className="min-w-[1040px] text-sm">
+        <table className="min-w-[980px] text-sm">
           <thead className="bg-slate-50">
             <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
               <th className="px-4 py-3">{EVENT_BREAKDOWN_META[breakdown].subject}</th>
               {breakdown === 'events' ? <th className="px-3 py-3">Дата</th> : null}
               <th className="px-3 py-3">Мероприятий</th>
               <th className="px-3 py-3">Посещений</th>
-              <th className="px-3 py-3">Зрелая база</th>
               <th className="px-3 py-3">Контракт после</th>
               <th className="px-3 py-3">Передано после</th>
               <th className="px-3 py-3">До контракта</th>
@@ -523,16 +532,26 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={9} className="px-4 py-8 text-center text-slate-500">Нет данных для выбранного разреза.</td></tr>
+              <tr><td colSpan={breakdown === 'events' ? 8 : 7} className="px-4 py-8 text-center text-slate-500">Нет данных для выбранного разреза.</td></tr>
             ) : rows.map((row: SourceCohortEventPerformanceRow) => (
               <tr key={row.key} className="border-b border-slate-100 last:border-b-0">
                 <td className="max-w-[320px] px-4 py-3 font-bold leading-5 text-slate-900">{row.label}</td>
                 {breakdown === 'events' ? <td className="px-3 py-3 tabular-nums">{formatDate(row.eventDate)}</td> : null}
                 <td className="px-3 py-3 tabular-nums">{formatInteger(row.eventCount)}</td>
-                <td className="px-3 py-3 tabular-nums">{formatInteger(row.attendedVisits)}</td>
-                <td className="px-3 py-3 tabular-nums">{formatInteger(row.matureVisits)}</td>
-                <td className="px-3 py-3 font-bold tabular-nums text-slate-900">{formatInteger(row.contractAfterVisits)} · {formatRate(row.contractRate)}</td>
-                <td className="px-3 py-3 font-bold tabular-nums text-slate-900">{formatInteger(row.transferredAfterVisits)} · {formatRate(row.transferredRate)}</td>
+                <td className="px-3 py-3 tabular-nums">
+                  <p>{formatInteger(row.attendedVisits)}</p>
+                  {row.matureVisits < row.attendedVisits ? (
+                    <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                      В расчете {formatInteger(row.matureVisits)} · ожидают {formatInteger(row.attendedVisits - row.matureVisits)}
+                    </p>
+                  ) : null}
+                </td>
+                <td className="px-3 py-3 font-bold tabular-nums text-slate-900">
+                  {formatEventOutcome(row.contractAfterVisits, row.matureVisits, row.contractRate)}
+                </td>
+                <td className="px-3 py-3 font-bold tabular-nums text-slate-900">
+                  {formatEventOutcome(row.transferredAfterVisits, row.matureVisits, row.transferredRate)}
+                </td>
                 <td className="px-3 py-3 tabular-nums">{formatDays(row.medianDaysToContract)}</td>
                 <td className="px-3 py-3"><ReliabilityBadge status={row.dataQualityStatus} /></td>
               </tr>
@@ -657,7 +676,7 @@ export function SourceCohortStageConversionSection({
           <div className="mt-5 grid gap-4 border-y border-slate-200 py-4 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryMetric label="Мероприятий" value={formatInteger(performance.totalEvents)} note="в выбранном диапазоне" />
             <SummaryMetric label="Посещений" value={formatInteger(performance.attendedVisits)} note="доверенные факты" />
-            <SummaryMetric label="Зрелая база" value={formatInteger(performance.matureVisits)} note={`прошло ${performance.outcomeWindowDays} дней`} />
+            <SummaryMetric label="В расчете" value={`${formatInteger(performance.matureVisits)} из ${formatInteger(performance.attendedVisits)}`} note={`посещений с полным окном ${performance.outcomeWindowDays} дней`} />
             <SummaryMetric label="Контракт после" value={formatInteger(performance.contractAfterVisits)} note="наблюдаемый результат" />
           </div>
           <EventTable trajectory={trajectory} />
