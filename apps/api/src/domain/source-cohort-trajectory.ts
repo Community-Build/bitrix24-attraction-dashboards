@@ -938,6 +938,7 @@ interface EventPerformanceObservation {
   eventDate: string;
   managerKey: string;
   managerLabel: string;
+  attended: boolean;
   mature: boolean;
   contractAfter: boolean;
   transferredAfter: boolean;
@@ -949,6 +950,7 @@ interface EventPerformanceAccumulator {
   label: string;
   eventDate: string | null;
   eventKeys: Set<string>;
+  invitedVisits: number;
   attendedVisits: number;
   matureVisits: number;
   contractAfterVisits: number;
@@ -966,6 +968,7 @@ function createEventPerformanceAccumulator(
     label,
     eventDate,
     eventKeys: new Set<string>(),
+    invitedVisits: 0,
     attendedVisits: 0,
     matureVisits: 0,
     contractAfterVisits: 0,
@@ -979,6 +982,11 @@ function addEventPerformanceObservation(
   observation: EventPerformanceObservation
 ) {
   row.eventKeys.add(observation.eventKey);
+  row.invitedVisits += 1;
+  if (!observation.attended) {
+    return;
+  }
+
   row.attendedVisits += 1;
   if (!observation.mature) {
     return;
@@ -1004,7 +1012,9 @@ function toEventPerformanceRow(
     label: row.label,
     eventDate: row.eventDate,
     eventCount: row.eventKeys.size,
+    invitedVisits: row.invitedVisits,
     attendedVisits: row.attendedVisits,
+    attendanceRate: toRate(row.attendedVisits, row.invitedVisits),
     matureVisits: row.matureVisits,
     contractAfterVisits: row.contractAfterVisits,
     contractRate:
@@ -1056,12 +1066,13 @@ function buildEventPerformance(input: {
   const observations = new Map<string, EventPerformanceObservation>();
 
   for (const fact of input.eventVisitFacts) {
-    if (fact.finalStatus !== "attended" || !isTrustedFact(fact) || !fact.dealId) {
+    if (!isTrustedFact(fact) || !fact.dealId) {
       continue;
     }
 
     const dealFacts = factsByDeal.get(fact.dealId);
-    const eventDate = fact.eventDate ?? fact.attendedAt;
+    const event = fact.eventId ? eventById.get(fact.eventId) ?? null : null;
+    const eventDate = fact.eventDate ?? event?.eventDate ?? fact.attendedAt;
     const eventAtMs = Date.parse(eventDate ?? "");
     if (
       !dealFacts ||
@@ -1074,18 +1085,18 @@ function buildEventPerformance(input: {
       continue;
     }
 
-    const event = fact.eventId ? eventById.get(fact.eventId) ?? null : null;
     const payload = parsePayload(fact.payloadJson);
-    const eventKey = fact.eventId?.trim() || `visit:${fact.visitId}`;
     const eventLabel =
       event?.title?.trim() ||
       payloadString(payload, "eventName")?.trim() ||
       "Мероприятие без названия";
+    const eventKey = fact.eventId?.trim() || `${eventLabel}::${eventDate}`;
     const eventTypeKey = event?.eventTypeId?.trim() || "UNSPECIFIED_EVENT_TYPE";
     const eventTypeLabel = event?.eventTypeLabel?.trim() || "Без типа мероприятия";
     const managerKey = fact.managerId?.trim() || UNASSIGNED_MANAGER_ID;
     const managerLabel = resolveManagerName(managerKey, input.managerDirectory);
-    const contractAtMs = input.contractStageId
+    const attended = fact.finalStatus === "attended";
+    const contractAtMs = attended && input.contractStageId
       ? firstTimestampInWindow(
           dealFacts.stageEnteredAts.get(input.contractStageId) ?? [],
           eventAtMs,
@@ -1093,7 +1104,7 @@ function buildEventPerformance(input: {
         )
       : null;
     const transferredAtMs = Date.parse(dealFacts.wonAt ?? "");
-    const mature = eventAtMs + outcomeWindowMs <= nowMs;
+    const mature = attended && eventAtMs + outcomeWindowMs <= nowMs;
     const contractDurationMs =
       mature &&
       contractAtMs !== null
@@ -1106,20 +1117,23 @@ function buildEventPerformance(input: {
       transferredAtMs - eventAtMs <= outcomeWindowMs;
     const observationKey = `${eventKey}:${fact.dealId}`;
 
-    if (!observations.has(observationKey)) {
-      observations.set(observationKey, {
-        eventKey,
-        eventLabel,
-        eventTypeKey,
-        eventTypeLabel,
-        eventDate,
-        managerKey,
-        managerLabel,
-        mature,
-        contractAfter: contractDurationMs !== null,
-        transferredAfter,
-        contractDurationMs
-      });
+    const observation: EventPerformanceObservation = {
+      eventKey,
+      eventLabel,
+      eventTypeKey,
+      eventTypeLabel,
+      eventDate,
+      managerKey,
+      managerLabel,
+      attended,
+      mature,
+      contractAfter: contractDurationMs !== null,
+      transferredAfter,
+      contractDurationMs
+    };
+    const currentObservation = observations.get(observationKey);
+    if (!currentObservation || (!currentObservation.attended && observation.attended)) {
+      observations.set(observationKey, observation);
     }
   }
 
@@ -1191,7 +1205,9 @@ function buildEventPerformance(input: {
     range: input.range,
     outcomeWindowDays: EVENT_OUTCOME_WINDOW_DAYS,
     totalEvents: overallRow.eventCount,
+    invitedVisits: overallRow.invitedVisits,
     attendedVisits: overallRow.attendedVisits,
+    attendanceRate: overallRow.attendanceRate,
     matureVisits: overallRow.matureVisits,
     contractAfterVisits: overallRow.contractAfterVisits,
     transferredAfterVisits: overallRow.transferredAfterVisits,

@@ -96,10 +96,23 @@ function formatEventOutcome(
   outcomeVisits: number,
   matureVisits: number,
   rate: number | null,
+  attendedVisits: number,
 ) {
+  if (attendedVisits === 0) return 'Нет посещений'
+
   return matureVisits > 0
     ? `${formatInteger(outcomeVisits)} из ${formatInteger(matureVisits)} · ${formatRate(rate)}`
     : 'Еще рано'
+}
+
+function formatEventAttendance(
+  attendedVisits: number,
+  invitedVisits: number,
+  rate: number | null,
+) {
+  return invitedVisits > 0
+    ? `${formatInteger(attendedVisits)} из ${formatInteger(invitedVisits)} · ${formatRate(rate)}`
+    : '—'
 }
 
 function formatDate(value: string | null) {
@@ -117,7 +130,9 @@ function getEventPerformance(
     range: trajectory.range,
     outcomeWindowDays: 60,
     totalEvents: 0,
+    invitedVisits: 0,
     attendedVisits: 0,
+    attendanceRate: null,
     matureVisits: 0,
     contractAfterVisits: 0,
     transferredAfterVisits: 0,
@@ -514,16 +529,18 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
         />
       </div>
       <p className="mt-3 text-xs leading-5 text-slate-500">
-        Когорта строится по дате мероприятия. В конверсию входят только посещения, после которых прошло {windowDays} дней. Одно посещение представлено в каждом из трех разрезов, поэтому суммы между разрезами не складываются.
+        Когорта строится по дате мероприятия. Приглашенные считаются по уникальным связкам мероприятия и сделки; явка — доля посетивших среди приглашенных. В конверсию после события входят только посещения, после которых прошло {windowDays} дней. Одна связка представлена в каждом из трех разрезов, поэтому суммы между разрезами не складываются.
       </p>
       <div className="mt-3 overflow-x-auto rounded-lg border border-slate-200">
-        <table className="min-w-[980px] text-sm">
+        <table className="min-w-[1160px] text-sm">
           <thead className="bg-slate-50">
             <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
               <th className="px-4 py-3">{EVENT_BREAKDOWN_META[breakdown].subject}</th>
               {breakdown === 'events' ? <th className="px-3 py-3">Дата</th> : null}
               <th className="px-3 py-3">Мероприятий</th>
-              <th className="px-3 py-3">Посещений</th>
+              <th className="px-3 py-3">Приглашены</th>
+              <th className="px-3 py-3">Посетили</th>
+              <th className="px-3 py-3">Явка</th>
               <th className="px-3 py-3">Контракт после</th>
               <th className="px-3 py-3">Передано после</th>
               <th className="px-3 py-3">До контракта</th>
@@ -532,12 +549,13 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={breakdown === 'events' ? 8 : 7} className="px-4 py-8 text-center text-slate-500">Нет данных для выбранного разреза.</td></tr>
+              <tr><td colSpan={breakdown === 'events' ? 10 : 9} className="px-4 py-8 text-center text-slate-500">Нет данных для выбранного разреза.</td></tr>
             ) : rows.map((row: SourceCohortEventPerformanceRow) => (
               <tr key={row.key} className="border-b border-slate-100 last:border-b-0">
                 <td className="max-w-[320px] px-4 py-3 font-bold leading-5 text-slate-900">{row.label}</td>
                 {breakdown === 'events' ? <td className="px-3 py-3 tabular-nums">{formatDate(row.eventDate)}</td> : null}
                 <td className="px-3 py-3 tabular-nums">{formatInteger(row.eventCount)}</td>
+                <td className="px-3 py-3 tabular-nums">{formatInteger(row.invitedVisits)}</td>
                 <td className="px-3 py-3 tabular-nums">
                   <p>{formatInteger(row.attendedVisits)}</p>
                   {row.matureVisits < row.attendedVisits ? (
@@ -547,10 +565,13 @@ function EventTable({ trajectory }: { trajectory: SourceCohortTrajectoryReport }
                   ) : null}
                 </td>
                 <td className="px-3 py-3 font-bold tabular-nums text-slate-900">
-                  {formatEventOutcome(row.contractAfterVisits, row.matureVisits, row.contractRate)}
+                  {formatEventAttendance(row.attendedVisits, row.invitedVisits, row.attendanceRate)}
                 </td>
                 <td className="px-3 py-3 font-bold tabular-nums text-slate-900">
-                  {formatEventOutcome(row.transferredAfterVisits, row.matureVisits, row.transferredRate)}
+                  {formatEventOutcome(row.contractAfterVisits, row.matureVisits, row.contractRate, row.attendedVisits)}
+                </td>
+                <td className="px-3 py-3 font-bold tabular-nums text-slate-900">
+                  {formatEventOutcome(row.transferredAfterVisits, row.matureVisits, row.transferredRate, row.attendedVisits)}
                 </td>
                 <td className="px-3 py-3 tabular-nums">{formatDays(row.medianDaysToContract)}</td>
                 <td className="px-3 py-3"><ReliabilityBadge status={row.dataQualityStatus} /></td>
@@ -576,7 +597,7 @@ function Methodology({ trajectory }: { trajectory: SourceCohortTrajectoryReport 
           <p className="mt-2"><strong className="text-slate-800">CRM-этапы:</strong> считаются отдельно и нужны для поиска расхождений с фактами.</p>
         </div>
         <div>
-          <p><strong className="text-slate-800">Когорта мероприятий:</strong> посещения событий в выбранном диапазоне. Исход считается в окне {getEventPerformance(trajectory).outcomeWindowDays} дней после посещения.</p>
+          <p><strong className="text-slate-800">Когорта мероприятий:</strong> уникальные связки мероприятия и сделки в выбранном диапазоне. Явка считается от приглашенных, а контракт и передача — в окне {getEventPerformance(trajectory).outcomeWindowDays} дней после фактического посещения.</p>
           <p className="mt-2"><strong className="text-slate-800">Атрибуция:</strong> менеджер сделки и ответственный посещения взяты из текущего снимка; это не исторические владельцы действий.</p>
           <p className="mt-2"><strong className="text-slate-800">Причинность:</strong> отчет показывает наблюдаемую конверсию после события, но не доказывает, что именно событие вызвало результат.</p>
         </div>
@@ -673,9 +694,10 @@ export function SourceCohortStageConversionSection({
         </>
       ) : (
         <>
-          <div className="mt-5 grid gap-4 border-y border-slate-200 py-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-5 grid gap-4 border-y border-slate-200 py-4 sm:grid-cols-2 lg:grid-cols-5">
             <SummaryMetric label="Мероприятий" value={formatInteger(performance.totalEvents)} note="в выбранном диапазоне" />
-            <SummaryMetric label="Посещений" value={formatInteger(performance.attendedVisits)} note="доверенные факты" />
+            <SummaryMetric label="Приглашены" value={formatInteger(performance.invitedVisits)} note="связаны с мероприятиями" />
+            <SummaryMetric label="Посетили" value={formatInteger(performance.attendedVisits)} note={`${formatRate(performance.attendanceRate)} явка`} />
             <SummaryMetric label="В расчете" value={`${formatInteger(performance.matureVisits)} из ${formatInteger(performance.attendedVisits)}`} note={`посещений с полным окном ${performance.outcomeWindowDays} дней`} />
             <SummaryMetric label="Контракт после" value={formatInteger(performance.contractAfterVisits)} note="наблюдаемый результат" />
           </div>

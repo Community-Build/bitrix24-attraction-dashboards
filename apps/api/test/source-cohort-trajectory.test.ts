@@ -1063,7 +1063,12 @@ describe("buildSourceCohortTrajectoryReport", () => {
           visitId: "recent-event-visit",
           eventId: "recent-event",
           dealId: "recent-event-open",
-          eventDate: "2026-06-20T09:00:00.000Z"
+          eventDate: "2026-06-20T09:00:00.000Z",
+          currentStageId: "DT:PREPARATION",
+          currentStageName: "Пойду",
+          confirmedAt: "2026-06-10T09:00:00.000Z",
+          attendedAt: null,
+          finalStatus: "confirmed"
         })
       ]
     });
@@ -1076,7 +1081,9 @@ describe("buildSourceCohortTrajectoryReport", () => {
       expect.objectContaining({
         outcomeWindowDays: 60,
         totalEvents: 2,
-        attendedVisits: 2,
+        invitedVisits: 2,
+        attendedVisits: 1,
+        attendanceRate: 50,
         matureVisits: 1,
         contractAfterVisits: 1,
         transferredAfterVisits: 1
@@ -1086,6 +1093,9 @@ describe("buildSourceCohortTrajectoryReport", () => {
       expect.arrayContaining([
         expect.objectContaining({
           key: "old-event",
+          invitedVisits: 1,
+          attendedVisits: 1,
+          attendanceRate: 100,
           matureVisits: 1,
           contractRate: 100,
           transferredRate: 100,
@@ -1093,6 +1103,9 @@ describe("buildSourceCohortTrajectoryReport", () => {
         }),
         expect.objectContaining({
           key: "recent-event",
+          invitedVisits: 1,
+          attendedVisits: 0,
+          attendanceRate: 0,
           matureVisits: 0,
           contractRate: null,
           transferredRate: null

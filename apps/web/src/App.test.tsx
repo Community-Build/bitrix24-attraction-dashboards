@@ -735,13 +735,16 @@ vi.mock('@/lib/api-client', () => ({
         eventPerformance: {
           range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
           outcomeWindowDays: 60,
-          totalEvents: 2,
+          totalEvents: 3,
+          invitedVisits: 16,
           attendedVisits: 12,
+          attendanceRate: 75,
           matureVisits: 10,
           contractAfterVisits: 3,
           transferredAfterVisits: 1,
           eventTypeRows: [
-            { key: 'intro', label: 'Знакомство с клубом', eventDate: null, eventCount: 2, attendedVisits: 12, matureVisits: 10, contractAfterVisits: 3, contractRate: 30, transferredAfterVisits: 1, transferredRate: 10, medianDaysToContract: 6, dataQualityStatus: 'limited' },
+            { key: 'intro', label: 'Знакомство с клубом', eventDate: null, eventCount: 2, invitedVisits: 15, attendedVisits: 12, attendanceRate: 80, matureVisits: 10, contractAfterVisits: 3, contractRate: 30, transferredAfterVisits: 1, transferredRate: 10, medianDaysToContract: 6, dataQualityStatus: 'limited' },
+            { key: 'no-show', label: 'Экспертная встреча', eventDate: null, eventCount: 1, invitedVisits: 1, attendedVisits: 0, attendanceRate: 0, matureVisits: 0, contractAfterVisits: 0, contractRate: null, transferredAfterVisits: 0, transferredRate: null, medianDaysToContract: null, dataQualityStatus: 'low_sample' },
           ],
           eventRows: [],
           managerRows: [],
@@ -2226,6 +2229,11 @@ describe('App', () => {
     expect(trajectory.getByRole('heading', { name: /какие мероприятия связаны/i })).toBeInTheDocument()
     expect(trajectory.getByText('Знакомство с клубом')).toBeInTheDocument()
     expect(trajectory.queryByText('Зрелая база')).not.toBeInTheDocument()
+    expect(trajectory.getAllByText('Приглашены').length).toBeGreaterThan(0)
+    expect(trajectory.getAllByText('Посетили').length).toBeGreaterThan(0)
+    expect(trajectory.getByText('Явка')).toBeInTheDocument()
+    expect(trajectory.getByText('12 из 15 · 80%')).toBeInTheDocument()
+    expect(trajectory.getAllByText('Нет посещений').length).toBe(2)
     expect(trajectory.getByText('10 из 12')).toBeInTheDocument()
     expect(trajectory.getByText('3 из 10 · 30%')).toBeInTheDocument()
     expect(trajectory.getByText('1 из 10 · 10%')).toBeInTheDocument()

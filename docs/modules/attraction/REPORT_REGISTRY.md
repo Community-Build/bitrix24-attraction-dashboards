@@ -106,8 +106,11 @@ Stable dashboard anchors used by ontology report bindings:
 - Event performance is exposed through
   `SourceCohortConversionReport.trajectory.eventPerformance` and uses an
   event-date cohort, not the deal-creation cohort:
-  - include trusted attended visits whose event date is inside the selected
-    range;
+  - include trusted event participation records whose event date is inside the
+    selected range and deduplicate them by event and deal;
+  - `invitedVisits` counts all included event/deal pairs, `attendedVisits`
+    counts the pairs with a trusted attended status, and
+    `attendanceRate = attendedVisits / invitedVisits`;
   - use a fixed 60-day outcome window after attendance;
   - only visits whose full 60-day window has elapsed enter `matureVisits` and
     rate denominators;
@@ -118,7 +121,8 @@ Stable dashboard anchors used by ontology report bindings:
     totals are non-additive;
   - observed post-event conversion is descriptive and must not be presented as
     causal event impact;
-  - individual rows with `N < 10` are descriptive and must not be ranked.
+  - post-event reliability uses mature attended visits; individual rows with
+    `N < 10` are descriptive and must not be ranked.
 - Stage and action facts are intentionally separate. `Встреча-знакомство` in CRM
   does not prove that a meeting happened; the report surfaces
   `meetingStageWithoutFactDeals` as a process/data-quality gap.
