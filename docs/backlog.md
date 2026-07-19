@@ -25,6 +25,16 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
+### Telegram activity summaries by attraction team
+- Area: activities, api
+- Problem: the scheduled Telegram report sends one combined summary even though attraction managers are already assigned to teams.
+- Expected behavior: generate one copy-ready summary per configured attraction team and send both summaries to every configured report chat.
+- Acceptance criteria:
+  - Team membership and ordering come from manager whitelist settings rather than hardcoded names.
+  - Managers without a team are omitted from team summaries.
+  - Each team has its own totals and employee metric sections.
+  - Existing schedule, recipients, retry behavior, and Telegram size limit remain unchanged.
+
 ### Sales planning tab: plan percent and "as is vs required"
 - Area: sales
 - Problem: comments ask for planning, percentage of plan, and forecast logic instead of just factual KPI tables.

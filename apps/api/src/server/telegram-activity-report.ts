@@ -5,7 +5,6 @@ import type {
 
 const DEFAULT_MAX_MESSAGE_LENGTH = 4096;
 const REPORT_TIME_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
-const DEFAULT_EXCLUDED_MANAGER_NAME_PATTERNS = ["какулия"];
 
 interface ZonedDateParts {
   year: number;
@@ -28,6 +27,11 @@ export interface TelegramActivityReportMessageInput {
   now: Date;
   lastSyncFinishedAt: string | null;
   excludedManagerNamePatterns?: string[];
+  managerTeams?: Array<{
+    id: string;
+    name: string;
+    managerIds: string[];
+  }>;
   managerCatalog?: Array<{
     id: string;
     name: string;
@@ -273,8 +277,7 @@ function buildManagerSummaries(
   const managerIds = Array.from(
     new Set([...managerNames.keys(), ...activityRows.keys(), ...callRows.keys()])
   );
-  const excludedPatterns =
-    input.excludedManagerNamePatterns ?? DEFAULT_EXCLUDED_MANAGER_NAME_PATTERNS;
+  const excludedPatterns = input.excludedManagerNamePatterns ?? [];
 
   return managerIds
     .map((managerId) => {
@@ -394,26 +397,65 @@ export function buildTelegramActivityReportMessages(
 ) {
   const maxMessageLength = input.maxMessageLength ?? DEFAULT_MAX_MESSAGE_LENGTH;
   const managerRows = buildManagerSummaries(input);
-  const totals = sumManagerSummaries(managerRows);
-  const title = `Активность: ${input.moduleName} за ${formatDateOnly(
-    input.now,
-    input.timezone
-  )}`;
   const lastSync = input.lastSyncFinishedAt
     ? formatDateTime(new Date(input.lastSyncFinishedAt), input.timezone)
     : "нет данных";
+  const teams = (input.managerTeams ?? []).filter(
+    (team) => team.name.trim() && team.managerIds.length > 0
+  );
 
-  if (managerRows.length === 0) {
+  if (teams.length > 0) {
+    const managerRowsById = new Map(
+      managerRows.map((manager) => [manager.managerId, manager])
+    );
+
+    return teams.flatMap((team) => {
+      const teamRows = team.managerIds
+        .map((managerId) => managerRowsById.get(managerId))
+        .filter((manager): manager is ManagerActivitySummary => Boolean(manager));
+
+      return buildActivityReportMessages({
+        title: `Активность: ${team.name.trim()} за ${formatDateOnly(
+          input.now,
+          input.timezone
+        )}`,
+        lastSync,
+        managerRows: teamRows,
+        maxMessageLength
+      });
+    });
+  }
+
+  return buildActivityReportMessages({
+    title: `Активность: ${input.moduleName} за ${formatDateOnly(
+      input.now,
+      input.timezone
+    )}`,
+    lastSync,
+    managerRows,
+    maxMessageLength
+  });
+}
+
+function buildActivityReportMessages(input: {
+  title: string;
+  lastSync: string;
+  managerRows: ManagerActivitySummary[];
+  maxMessageLength: number;
+}) {
+  const totals = sumManagerSummaries(input.managerRows);
+
+  if (input.managerRows.length === 0) {
     return splitMessageLines(
-      [title, `Последний sync: ${lastSync}`, "", "Нет сотрудников в отчёте"],
-      maxMessageLength,
-      `${title} (продолжение)`
+      [input.title, `Последний sync: ${input.lastSync}`, "", "Нет сотрудников в отчёте"],
+      input.maxMessageLength,
+      `${input.title} (продолжение)`
     );
   }
 
   const lines = [
-    title,
-    `Последний sync: ${lastSync}`,
+    input.title,
+    `Последний sync: ${input.lastSync}`,
     "",
     "Итого:",
     `Задачи: ${totals.createdCount}`,
@@ -421,14 +463,18 @@ export function buildTelegramActivityReportMessages(
     `Исходящие звонки: ${totals.outgoingCalls}`,
     `Встречи: ${totals.meetingCount}`,
     "",
-    ...formatNumberSection("Задачи:", managerRows, (row) => row.createdCount),
+    ...formatNumberSection("Задачи:", input.managerRows, (row) => row.createdCount),
     "",
-    ...formatNumberSection("Закрыто задач:", managerRows, (row) => row.closedCount),
+    ...formatNumberSection("Закрыто задач:", input.managerRows, (row) => row.closedCount),
     "",
-    ...formatNumberSection("Исходящие звонки:", managerRows, (row) => row.outgoingCalls),
+    ...formatNumberSection("Исходящие звонки:", input.managerRows, (row) => row.outgoingCalls),
     "",
-    ...formatNumberSection("Встречи:", managerRows, (row) => row.meetingCount)
+    ...formatNumberSection("Встречи:", input.managerRows, (row) => row.meetingCount)
   ];
 
-  return splitMessageLines(lines, maxMessageLength, `${title} (продолжение)`);
+  return splitMessageLines(
+    lines,
+    input.maxMessageLength,
+    `${input.title} (продолжение)`
+  );
 }

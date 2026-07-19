@@ -1860,12 +1860,14 @@ export function createApp(
       const getCallsWorkloadReport =
         moduleService.getCallsWorkloadReport ?? service.getCallsWorkloadReport;
       const getMeta = moduleService.getMeta ?? service.getMeta;
+      const getManagerWhitelistSettings = service.getManagerWhitelistSettings;
       const report = Promise.all([
         getActivitiesWorkloadReport({ range }),
         getCallsWorkloadReport({ range }),
-        getMeta()
+        getMeta(),
+        getManagerWhitelistSettings?.()
       ])
-        .then(([activities, calls, meta]) =>
+        .then(([activities, calls, meta, managerWhitelist]) =>
           sendMessages({
             messages: buildTelegramActivityReportMessages({
               moduleName: "Привлечение",
@@ -1873,6 +1875,9 @@ export function createApp(
               now,
               lastSyncFinishedAt: meta.lastSync?.finishedAt ?? null,
               managerCatalog: meta.managerCatalog,
+              ...(managerWhitelist?.teams
+                ? { managerTeams: managerWhitelist.teams }
+                : {}),
               activities,
               calls
             }),
