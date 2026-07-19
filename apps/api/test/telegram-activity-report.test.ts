@@ -233,7 +233,7 @@ describe("telegram activity report", () => {
     });
   });
 
-  it("formats grouped metric sections, excludes Kakulia and counts only outgoing calls", () => {
+  it("builds one copy-ready message per configured team and omits unassigned managers", () => {
     const messages = buildTelegramActivityReportMessages({
       moduleName: "Привлечение",
       timezone: "Europe/Istanbul",
@@ -242,7 +242,20 @@ describe("telegram activity report", () => {
       managerCatalog: [
         { id: "1", name: "Анна" },
         { id: "2", name: "Борис" },
-        { id: "3", name: "Какулия Илья" }
+        { id: "3", name: "Какулия Илья" },
+        { id: "4", name: "Дарья Бычкова" }
+      ],
+      managerTeams: [
+        {
+          id: "Привлечение 1.0",
+          name: "Привлечение 1.0",
+          managerIds: ["1", "2"]
+        },
+        {
+          id: "Привлечение 2.0",
+          name: "Привлечение 2.0",
+          managerIds: ["3"]
+        }
       ],
       activities: createActivitiesReport([
         createActivityRow({
@@ -258,6 +271,13 @@ describe("telegram activity report", () => {
           createdCount: 10,
           closedCount: 9,
           meetingCount: 4
+        }),
+        createActivityRow({
+          managerId: "4",
+          managerName: "Дарья Бычкова",
+          createdCount: 7,
+          closedCount: 6,
+          meetingCount: 2
         })
       ]),
       calls: createCallsReport([
@@ -280,12 +300,17 @@ describe("telegram activity report", () => {
           missedIncomingCalls: 0,
           connectedCalls: 6,
           failedCalls: 2
+        }),
+        createCallRow({
+          managerId: "4",
+          managerName: "Дарья Бычкова",
+          outgoingCalls: 4
         })
       ])
     });
 
-    expect(messages).toHaveLength(1);
-    expect(messages[0]).toContain("Активность: Привлечение за 04.06.2026");
+    expect(messages).toHaveLength(2);
+    expect(messages[0]).toContain("Активность: Привлечение 1.0 за 04.06.2026");
     expect(messages[0]).toContain("Последний sync: 04.06.2026, 19:40");
     expect(messages[0]).toContain(
       [
@@ -313,8 +338,20 @@ describe("telegram activity report", () => {
       ["Встречи:", "Анна - 1", "Борис - 0"].join("\n")
     );
     expect(messages[0]).not.toContain("Какулия");
-    expect(messages[0]).not.toContain("входящие");
-    expect(messages[0]).not.toContain("пропущенные");
+    expect(messages[1]).toContain("Активность: Привлечение 2.0 за 04.06.2026");
+    expect(messages[1]).toContain(
+      [
+        "Итого:",
+        "Задачи: 10",
+        "Закрыто задач: 9",
+        "Исходящие звонки: 6",
+        "Встречи: 4"
+      ].join("\n")
+    );
+    expect(messages[1]).toContain("Какулия Илья - 10");
+    expect(messages.join("\n")).not.toContain("Дарья Бычкова");
+    expect(messages.join("\n")).not.toContain("входящие");
+    expect(messages.join("\n")).not.toContain("пропущенные");
   });
 
   it("splits long reports without dropping employee rows", () => {

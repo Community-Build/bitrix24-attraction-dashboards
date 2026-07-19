@@ -5121,7 +5121,10 @@ describe("createApp", () => {
         },
         getMeta: async () => ({
           stageCatalog: [],
-          managerCatalog: [],
+          managerCatalog: [
+            { id: "1", name: "Анна" },
+            { id: "2", name: "Борис" }
+          ],
           sourceCatalog: [],
           wonStageIds: [],
           defaultPeriodDays: 30,
@@ -5141,6 +5144,50 @@ describe("createApp", () => {
             issues: [],
             warnings: []
           }
+        }),
+        getManagerWhitelistSettings: async () => ({
+          options: [
+            { id: "1", name: "Анна" },
+            { id: "2", name: "Борис" }
+          ],
+          settings: [
+            {
+              moduleKey: "attraction",
+              managerId: "1",
+              managerName: "Анна",
+              enabled: true,
+              sortOrder: 0,
+              updatedAt: "2026-06-04T16:00:00.000Z",
+              teamId: "team-1",
+              teamName: "Привлечение 1.0"
+            },
+            {
+              moduleKey: "attraction",
+              managerId: "2",
+              managerName: "Борис",
+              enabled: true,
+              sortOrder: 10,
+              updatedAt: "2026-06-04T16:00:00.000Z",
+              teamId: "team-2",
+              teamName: "Привлечение 2.0"
+            }
+          ],
+          teams: [
+            {
+              id: "team-1",
+              name: "Привлечение 1.0",
+              managerIds: ["1"],
+              sortOrder: 0,
+              updatedAt: "2026-06-04T16:00:00.000Z"
+            },
+            {
+              id: "team-2",
+              name: "Привлечение 2.0",
+              managerIds: ["2"],
+              sortOrder: 10,
+              updatedAt: "2026-06-04T16:00:00.000Z"
+            }
+          ]
         })
       },
       {
@@ -5161,14 +5208,22 @@ describe("createApp", () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(activityInputs).toEqual([{ range: expectedRange }]);
       expect(callInputs).toEqual([{ range: expectedRange }]);
-      expect(sendMessage).toHaveBeenCalledTimes(2);
+      expect(sendMessage).toHaveBeenCalledTimes(4);
       expect(sendMessage).toHaveBeenNthCalledWith(1, {
         chatId: "101",
-        text: expect.stringContaining("Активность: Привлечение за 04.06.2026")
+        text: expect.stringContaining("Активность: Привлечение 1.0 за 04.06.2026")
       });
       expect(sendMessage).toHaveBeenNthCalledWith(2, {
+        chatId: "101",
+        text: expect.stringContaining("Активность: Привлечение 2.0 за 04.06.2026")
+      });
+      expect(sendMessage).toHaveBeenNthCalledWith(3, {
         chatId: "202",
-        text: expect.stringContaining("Активность: Привлечение за 04.06.2026")
+        text: expect.stringContaining("Активность: Привлечение 1.0 за 04.06.2026")
+      });
+      expect(sendMessage).toHaveBeenNthCalledWith(4, {
+        chatId: "202",
+        text: expect.stringContaining("Активность: Привлечение 2.0 за 04.06.2026")
       });
     } finally {
       app.locals.stopTelegramActivityReport?.();
