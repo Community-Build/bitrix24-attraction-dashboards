@@ -4,6 +4,24 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P0
 
+### Infrastructure: parallel Community Build deployment
+- Area: infra
+- Problem: the legacy production workflow builds from source on the old VPS and owns host-level responsibilities that are unsafe on a shared product server.
+- Expected behavior: build an immutable image in GitHub Actions and run a parallel stack on the Community Build VPS without changing or stopping the legacy production.
+- Acceptance criteria:
+  - Existing `dashboardpriv.claricont.com` production remains healthy and unchanged.
+  - CI publishes an image tied to a source revision and immutable digest.
+  - The new stack binds only to `127.0.0.1:8102` and runs as a non-root user.
+  - Product deployment cannot edit host Caddy or install system packages.
+  - Secrets and SQLite data remain outside Git.
+  - Health, unauthenticated `401`, direct-port isolation, and rollback are verified before any legacy shutdown.
+- Data dependencies:
+  - Consistent snapshots of the three production SQLite databases.
+  - Current production environment secrets transferred directly between trusted hosts.
+- Verification plan:
+  - Run workspace checks and the Docker image build.
+  - Verify registry push/pull, runtime digest, health, auth boundary, container user, and legacy endpoint health.
+
 ### Performance: make prototype reports lazy-loaded
 - Area: infra, web
 - Problem: the prototype currently waits for almost every report plus cohort/source/TOC breakdowns before marking runtime data ready.
