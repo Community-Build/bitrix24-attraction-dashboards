@@ -13,6 +13,8 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
   - CI publishes an image tied to a source revision and immutable digest.
   - The new stack binds only to `127.0.0.1:8102` and runs as a non-root user.
   - Product deployment cannot edit host Caddy or install system packages.
+  - The parallel runtime cannot start duplicate auto-sync, Telegram, or
+    call-enrichment writeback jobs.
   - Secrets and SQLite data remain outside Git.
   - Health, unauthenticated `401`, direct-port isolation, and rollback are verified before any legacy shutdown.
 - Data dependencies:

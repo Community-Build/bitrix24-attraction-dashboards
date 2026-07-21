@@ -37,6 +37,9 @@ manifests must reference the image as `<image>@sha256:<digest>`.
 - Secrets: `/etc/platform/secrets/attraction-dashboard.env` on the host.
 - Public ingress: host-level Caddy only.
 - Container user: non-root UID `10001`.
+- Parallel-run mode: automatic Bitrix synchronization, call-enrichment
+  processing/writeback, and Telegram jobs are explicitly disabled by the
+  infrastructure manifest while the legacy runtime remains active.
 
 Shared manifests, deploy authorization, health gates, and rollback live in
 `Community-Build/platform-infra`.
@@ -54,3 +57,6 @@ Before any legacy shutdown, record all of the following:
 7. the three SQLite databases were copied from a consistent snapshot;
 8. Bitrix data and one owner-approved business scenario match the legacy app;
 9. rollback to the previous digest has been exercised.
+
+Side-effecting workers are enabled only by a separate reviewed infrastructure
+change after ownership has moved away from the legacy runtime.
