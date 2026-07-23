@@ -31,6 +31,7 @@ describe("readEnv", () => {
       "CALL_ENRICHMENT_MODE",
       "CALL_ENRICHMENT_PILOT_MANAGER_IDS",
       "CALL_ENRICHMENT_EXPIRY_INTERVAL_MINUTES",
+      "TELEGRAM_ACTIVITY_REPORT_TEAM_CHAT_IDS",
       "TELEGRAM_ENRICHMENT_ENABLED",
       "TELEGRAM_ENRICHMENT_BOT_TOKEN",
       "TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS",
@@ -347,7 +348,8 @@ describe("readEnv", () => {
     expect(readEnv({})).toMatchObject({
       telegramActivityReportEnabled: false,
       telegramActivityReportTime: "20:00",
-      telegramActivityReportChatIds: []
+      telegramActivityReportChatIds: [],
+      telegramActivityReportTeamChatIds: {}
     });
 
     expect(() =>
@@ -368,12 +370,17 @@ describe("readEnv", () => {
         TELEGRAM_ACTIVITY_REPORT_ENABLED: "true",
         TELEGRAM_ACTIVITY_REPORT_BOT_TOKEN: "telegram-token",
         TELEGRAM_ACTIVITY_REPORT_CHAT_IDS: "111, 222",
+        TELEGRAM_ACTIVITY_REPORT_TEAM_CHAT_IDS:
+          "team-2:333, team-2:333, team-2:444",
         TELEGRAM_ACTIVITY_REPORT_TIME: "20:30"
       })
     ).toMatchObject({
       telegramActivityReportEnabled: true,
       TELEGRAM_ACTIVITY_REPORT_BOT_TOKEN: "telegram-token",
       telegramActivityReportChatIds: ["111", "222"],
+      telegramActivityReportTeamChatIds: {
+        "team-2": ["333", "444"]
+      },
       telegramActivityReportTime: "20:30"
     });
 
@@ -384,6 +391,12 @@ describe("readEnv", () => {
         TELEGRAM_ACTIVITY_REPORT_CHAT_ID: "-10042"
       }).telegramActivityReportChatIds
     ).toEqual(["-10042"]);
+
+    expect(() =>
+      readEnv({
+        TELEGRAM_ACTIVITY_REPORT_TEAM_CHAT_IDS: "team-2"
+      })
+    ).toThrow(/TELEGRAM_ACTIVITY_REPORT_TEAM_CHAT_IDS/i);
   });
 
   it("rejects invalid telegram activity report time", () => {

@@ -431,6 +431,7 @@ const app = createApp(service, {
     time: env.telegramActivityReportTime,
     timezone: env.APP_TIMEZONE,
     chatIds: env.telegramActivityReportChatIds,
+    teamChatIds: env.telegramActivityReportTeamChatIds,
     ...(telegramActivityReportSender
       ? { sender: telegramActivityReportSender }
       : {})
