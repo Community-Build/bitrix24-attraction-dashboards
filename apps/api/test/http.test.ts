@@ -594,6 +594,7 @@ function createTestApp(
       enabled?: boolean;
       chatId?: string;
       chatIds?: string[];
+      teamChatIds?: Record<string, string[]>;
       time?: string;
       timezone?: string;
       retryDelayMs?: number;
@@ -1090,6 +1091,7 @@ function createTestApp(
           enabled?: boolean;
           chatId?: string;
           chatIds?: string[];
+          teamChatIds?: Record<string, string[]>;
           time?: string;
           timezone?: string;
           retryDelayMs?: number;
@@ -5194,6 +5196,9 @@ describe("createApp", () => {
         telegramActivityReport: {
           enabled: true,
           chatIds: ["101", "202"],
+          teamChatIds: {
+            "team-2": ["303", "101"]
+          },
           time: "20:00",
           timezone: "Europe/Istanbul",
           sender: { sendMessage }
@@ -5208,7 +5213,7 @@ describe("createApp", () => {
       await vi.advanceTimersByTimeAsync(1);
       expect(activityInputs).toEqual([{ range: expectedRange }]);
       expect(callInputs).toEqual([{ range: expectedRange }]);
-      expect(sendMessage).toHaveBeenCalledTimes(4);
+      expect(sendMessage).toHaveBeenCalledTimes(5);
       expect(sendMessage).toHaveBeenNthCalledWith(1, {
         chatId: "101",
         text: expect.stringContaining("Активность: Привлечение 1.0 за 04.06.2026")
@@ -5225,6 +5230,17 @@ describe("createApp", () => {
         chatId: "202",
         text: expect.stringContaining("Активность: Привлечение 2.0 за 04.06.2026")
       });
+      expect(sendMessage).toHaveBeenNthCalledWith(5, {
+        chatId: "303",
+        text: expect.stringContaining("Активность: Привлечение 2.0 за 04.06.2026")
+      });
+      expect(
+        sendMessage.mock.calls.some(
+          ([input]) =>
+            input.chatId === "303" &&
+            input.text.includes("Активность: Привлечение 1.0")
+        )
+      ).toBe(false);
     } finally {
       app.locals.stopTelegramActivityReport?.();
       vi.useRealTimers();

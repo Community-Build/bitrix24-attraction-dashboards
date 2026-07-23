@@ -41,6 +41,11 @@ export interface TelegramActivityReportMessageInput {
   maxMessageLength?: number;
 }
 
+export interface TelegramActivityReportDelivery {
+  teamId: string | null;
+  text: string;
+}
+
 interface ManagerActivitySummary {
   managerId: string;
   managerName: string;
@@ -392,9 +397,9 @@ function splitMessageLines(
   return messages;
 }
 
-export function buildTelegramActivityReportMessages(
+export function buildTelegramActivityReportDeliveries(
   input: TelegramActivityReportMessageInput
-) {
+): TelegramActivityReportDelivery[] {
   const maxMessageLength = input.maxMessageLength ?? DEFAULT_MAX_MESSAGE_LENGTH;
   const managerRows = buildManagerSummaries(input);
   const lastSync = input.lastSyncFinishedAt
@@ -422,7 +427,7 @@ export function buildTelegramActivityReportMessages(
         lastSync,
         managerRows: teamRows,
         maxMessageLength
-      });
+      }).map((text) => ({ teamId: team.id, text }));
     });
   }
 
@@ -434,7 +439,15 @@ export function buildTelegramActivityReportMessages(
     lastSync,
     managerRows,
     maxMessageLength
-  });
+  }).map((text) => ({ teamId: null, text }));
+}
+
+export function buildTelegramActivityReportMessages(
+  input: TelegramActivityReportMessageInput
+) {
+  return buildTelegramActivityReportDeliveries(input).map(
+    (delivery) => delivery.text
+  );
 }
 
 function buildActivityReportMessages(input: {

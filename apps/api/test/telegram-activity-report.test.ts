@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDailyActivityReportRange,
-  buildTelegramActivityReportMessages
+  buildTelegramActivityReportDeliveries
 } from "../src/server/telegram-activity-report";
 
 const emptyCallPopulation = {
@@ -234,7 +234,7 @@ describe("telegram activity report", () => {
   });
 
   it("builds one copy-ready message per configured team and omits unassigned managers", () => {
-    const messages = buildTelegramActivityReportMessages({
+    const deliveries = buildTelegramActivityReportDeliveries({
       moduleName: "Привлечение",
       timezone: "Europe/Istanbul",
       now: new Date("2026-06-04T17:00:00.000Z"),
@@ -308,7 +308,12 @@ describe("telegram activity report", () => {
         })
       ])
     });
+    const messages = deliveries.map((delivery) => delivery.text);
 
+    expect(deliveries.map((delivery) => delivery.teamId)).toEqual([
+      "Привлечение 1.0",
+      "Привлечение 2.0"
+    ]);
     expect(messages).toHaveLength(2);
     expect(messages[0]).toContain("Активность: Привлечение 1.0 за 04.06.2026");
     expect(messages[0]).toContain("Последний sync: 04.06.2026, 19:40");
@@ -362,17 +367,28 @@ describe("telegram activity report", () => {
         createdCount: index + 1
       })
     );
-    const messages = buildTelegramActivityReportMessages({
+    const deliveries = buildTelegramActivityReportDeliveries({
       moduleName: "Привлечение",
       timezone: "Europe/Istanbul",
       now: new Date("2026-06-04T17:00:00.000Z"),
       lastSyncFinishedAt: null,
+      managerTeams: [
+        {
+          id: "team-long",
+          name: "Привлечение 2.0",
+          managerIds: managerRows.map((row) => row.managerId)
+        }
+      ],
       activities: createActivitiesReport(managerRows),
       calls: createCallsReport([]),
       maxMessageLength: 320
     });
+    const messages = deliveries.map((delivery) => delivery.text);
 
     expect(messages.length).toBeGreaterThan(1);
+    expect(deliveries.every((delivery) => delivery.teamId === "team-long")).toBe(
+      true
+    );
     expect(messages.every((message) => message.length <= 320)).toBe(true);
     expect(messages.join("\n")).toContain("Менеджер 1 - 1");
     expect(messages.join("\n")).toContain("Менеджер 8 - 8");

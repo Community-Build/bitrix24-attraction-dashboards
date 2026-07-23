@@ -112,9 +112,10 @@ import type { TelegramMessageSender } from "./telegram-client.js";
 import type { TelegramEnrichmentApprovalService } from "./telegram-enrichment-approval.js";
 import {
   buildDailyActivityReportRange,
-  buildTelegramActivityReportMessages,
+  buildTelegramActivityReportDeliveries,
   getNextDailyActivityReportDelayMs
 } from "./telegram-activity-report.js";
+import type { TelegramActivityReportDelivery } from "./telegram-activity-report.js";
 import type { AttractionMcpGateway } from "../agent/mcp-server.js";
 import { registerAttractionMcpHttpRoute } from "../agent/mcp-http.js";
 
@@ -311,6 +312,7 @@ interface AppConfig {
     enabled?: boolean;
     chatId?: string;
     chatIds?: string[];
+    teamChatIds?: Record<string, string[]>;
     time?: string;
     timezone?: string;
     retryDelayMs?: number;
@@ -1768,6 +1770,18 @@ export function createApp(
     }
     const telegramSender = sender;
     const telegramChatIds = chatIds;
+    const telegramTeamChatIds = Object.fromEntries(
+      Object.entries(config.telegramActivityReport.teamChatIds ?? {}).map(
+        ([teamId, configuredChatIds]) => [
+          teamId,
+          Array.from(
+            new Set(
+              configuredChatIds.map((chatId) => chatId.trim()).filter(Boolean)
+            )
+          )
+        ]
+      )
+    );
 
     const moduleId = "attraction";
     const reportTime = config.telegramActivityReport.time ?? "20:00";
@@ -1783,23 +1797,44 @@ export function createApp(
     let activeReport: Promise<void> | null = null;
 
     async function sendMessages(input: {
-      messages: string[];
+      deliveries: TelegramActivityReportDelivery[];
       attempt: number;
       startedMs: number;
       range: { from: string; to: string };
     }): Promise<void> {
       try {
+        const deliveredChatIds = new Set<string>();
+        let sendCount = 0;
         for (const chatId of telegramChatIds) {
-          for (const text of input.messages) {
-            await telegramSender.sendMessage({ chatId, text });
+          for (const delivery of input.deliveries) {
+            await telegramSender.sendMessage({ chatId, text: delivery.text });
+            deliveredChatIds.add(chatId);
+            sendCount += 1;
+          }
+        }
+
+        for (const delivery of input.deliveries) {
+          if (!delivery.teamId) {
+            continue;
+          }
+
+          for (const chatId of telegramTeamChatIds[delivery.teamId] ?? []) {
+            if (telegramChatIds.includes(chatId)) {
+              continue;
+            }
+
+            await telegramSender.sendMessage({ chatId, text: delivery.text });
+            deliveredChatIds.add(chatId);
+            sendCount += 1;
           }
         }
 
         logJson("info", "telegram.activity_report.sent", {
           moduleId,
           attempt: input.attempt,
-          recipientCount: telegramChatIds.length,
-          messageCount: input.messages.length,
+          recipientCount: deliveredChatIds.size,
+          messageCount: input.deliveries.length,
+          sendCount,
           rangeFrom: input.range.from,
           rangeTo: input.range.to,
           durationMs: Math.round(performance.now() - input.startedMs),
@@ -1869,7 +1904,7 @@ export function createApp(
       ])
         .then(([activities, calls, meta, managerWhitelist]) =>
           sendMessages({
-            messages: buildTelegramActivityReportMessages({
+            deliveries: buildTelegramActivityReportDeliveries({
               moduleName: "Привлечение",
               timezone,
               now,

@@ -68,30 +68,34 @@ function parseCsv(value: string | undefined) {
     .filter(Boolean);
 }
 
-function parseManagerChatIdPairs(value: string | undefined) {
+function parseChatIdPairs(input: {
+  value: string | undefined;
+  variableName: string;
+  keyName: string;
+}) {
   const result: Record<string, string[]> = {};
 
-  for (const item of parseCsv(value)) {
+  for (const item of parseCsv(input.value)) {
     const separatorIndex = item.indexOf(":");
     if (separatorIndex === -1) {
       throw new Error(
-        "TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS must use bitrixUserId:telegramChatId pairs."
+        `${input.variableName} must use ${input.keyName}:telegramChatId pairs.`
       );
     }
 
-    const managerId = item.slice(0, separatorIndex).trim();
+    const key = item.slice(0, separatorIndex).trim();
     const chatId = item.slice(separatorIndex + 1).trim();
-    if (!managerId || !chatId) {
+    if (!key || !chatId) {
       throw new Error(
-        "TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS must use bitrixUserId:telegramChatId pairs."
+        `${input.variableName} must use ${input.keyName}:telegramChatId pairs.`
       );
     }
 
-    const chatIds = result[managerId] ?? [];
+    const chatIds = result[key] ?? [];
     if (!chatIds.includes(chatId)) {
       chatIds.push(chatId);
     }
-    result[managerId] = chatIds;
+    result[key] = chatIds;
   }
 
   return result;
@@ -263,6 +267,7 @@ const envSchema = z
     TELEGRAM_ACTIVITY_REPORT_BOT_TOKEN: optionalTrimmedString(),
     TELEGRAM_ACTIVITY_REPORT_CHAT_ID: optionalTrimmedString(),
     TELEGRAM_ACTIVITY_REPORT_CHAT_IDS: optionalTrimmedString(),
+    TELEGRAM_ACTIVITY_REPORT_TEAM_CHAT_IDS: optionalTrimmedString(),
     TELEGRAM_ACTIVITY_REPORT_TIME: z
       .string()
       .trim()
@@ -449,6 +454,7 @@ export type AppEnv = z.infer<typeof envSchema> & {
   callAnalysisDialogueGateEnabled: boolean;
   telegramActivityReportEnabled: boolean;
   telegramActivityReportChatIds: string[];
+  telegramActivityReportTeamChatIds: Record<string, string[]>;
   telegramActivityReportTime: string;
   telegramEnrichmentEnabled: boolean;
   telegramEnrichmentManagerChatIds: Record<string, string[]>;
@@ -504,9 +510,16 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       ...parseCsv(parsed.TELEGRAM_ACTIVITY_REPORT_CHAT_ID)
     ])
   );
-  const telegramEnrichmentManagerChatIds = parseManagerChatIdPairs(
-    parsed.TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS
-  );
+  const telegramActivityReportTeamChatIds = parseChatIdPairs({
+    value: parsed.TELEGRAM_ACTIVITY_REPORT_TEAM_CHAT_IDS,
+    variableName: "TELEGRAM_ACTIVITY_REPORT_TEAM_CHAT_IDS",
+    keyName: "teamId"
+  });
+  const telegramEnrichmentManagerChatIds = parseChatIdPairs({
+    value: parsed.TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS,
+    variableName: "TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS",
+    keyName: "bitrixUserId"
+  });
 
   return {
     ...parsed,
@@ -547,6 +560,7 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     telegramActivityReportEnabled:
       parsed.TELEGRAM_ACTIVITY_REPORT_ENABLED === "true",
     telegramActivityReportChatIds,
+    telegramActivityReportTeamChatIds,
     telegramActivityReportTime: parsed.TELEGRAM_ACTIVITY_REPORT_TIME,
     telegramEnrichmentEnabled:
       parsed.TELEGRAM_ENRICHMENT_ENABLED === "true" ||
