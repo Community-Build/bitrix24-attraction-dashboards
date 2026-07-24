@@ -23,6 +23,7 @@ const STATUS_CLASSES: Record<SourceCohortConversionJourneyDealStatus, string> = 
   within_sla: 'bg-blue-50 text-blue-700',
   stuck: 'bg-amber-50 text-amber-800',
   lost: 'bg-rose-50 text-rose-700',
+  returned: 'bg-slate-200 text-slate-700',
   data_gap: 'bg-slate-100 text-slate-600',
 }
 

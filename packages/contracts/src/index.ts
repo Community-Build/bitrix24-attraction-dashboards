@@ -1700,6 +1700,7 @@ export type SourceCohortConversionJourneyDealStatus =
   | "within_sla"
   | "stuck"
   | "lost"
+  | "returned"
   | "data_gap";
 
 export interface SourceCohortConversionJourneyDealRow {

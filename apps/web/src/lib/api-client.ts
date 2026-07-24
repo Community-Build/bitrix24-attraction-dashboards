@@ -2427,6 +2427,7 @@ function normalizeSourceCohortConversionJourneyDealStatus(
     status === 'within_sla' ||
     status === 'stuck' ||
     status === 'lost' ||
+    status === 'returned' ||
     status === 'data_gap'
     ? status
     : 'data_gap'

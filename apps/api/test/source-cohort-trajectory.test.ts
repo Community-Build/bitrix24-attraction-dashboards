@@ -2684,4 +2684,126 @@ describe("buildSourceCohortTrajectoryReport", () => {
       })
     );
   });
+
+  it("maps canonical rejection and return stages to distinct drill-down outcomes", () => {
+    const stageCatalogWithAlternativeRoutes: StageCatalogEntry[] = [
+      ...stageCatalog,
+      {
+        entityType: "deal",
+        categoryId: "10",
+        statusId: "C10:UC_XEEP0A",
+        name: "Отклонено потребителем",
+        semanticId: "F",
+        sortOrder: 95
+      },
+      {
+        entityType: "deal",
+        categoryId: "10",
+        statusId: "C10:UC_EA3R76",
+        name: "Возврат в Лидген(неквал)",
+        semanticId: "F",
+        sortOrder: 110
+      }
+    ];
+    const deals = [
+      deal({
+        id: "rejected-then-won",
+        stageId: "C10:WON",
+        stageSemanticId: "S"
+      }),
+      deal({
+        id: "currently-returned",
+        stageId: "C10:UC_EA3R76",
+        stageSemanticId: "F"
+      }),
+      deal({
+        id: "returned-then-resumed",
+        stageId: "C10:PREPARATION",
+        stageSemanticId: "P"
+      })
+    ];
+    const stageHistory = [
+      history({
+        id: "rejected-then-won-rejected",
+        dealId: "rejected-then-won",
+        stageId: "C10:UC_XEEP0A",
+        stageSemanticId: "F",
+        createdTime: "2026-06-03T09:00:00.000Z"
+      }),
+      history({
+        id: "rejected-then-won-won",
+        dealId: "rejected-then-won",
+        stageId: "C10:WON",
+        stageSemanticId: "S",
+        createdTime: "2026-06-04T09:00:00.000Z"
+      }),
+      history({
+        id: "currently-returned-return",
+        dealId: "currently-returned",
+        stageId: "C10:UC_EA3R76",
+        stageSemanticId: "F",
+        createdTime: "2026-06-03T09:00:00.000Z"
+      }),
+      history({
+        id: "returned-then-resumed-return",
+        dealId: "returned-then-resumed",
+        stageId: "C10:UC_EA3R76",
+        stageSemanticId: "F",
+        createdTime: "2026-06-03T09:00:00.000Z"
+      }),
+      history({
+        id: "returned-then-resumed-preparation",
+        dealId: "returned-then-resumed",
+        stageId: "C10:PREPARATION",
+        createdTime: "2026-06-05T09:00:00.000Z"
+      })
+    ];
+    const buildDrilldown = (stepKey: string) =>
+      buildSourceCohortTrajectoryReport({
+        range: {
+          from: "2026-06-01T00:00:00.000Z",
+          to: "2026-06-30T23:59:59.999Z"
+        },
+        wonStageIds: ["C10:WON"],
+        deals,
+        stageCatalog: stageCatalogWithAlternativeRoutes,
+        stageHistory,
+        journeyDrilldown: {
+          drilldownKind: "crm_stage",
+          stepKey
+        },
+        now: new Date("2026-06-10T00:00:00.000Z")
+      }).journeyDrilldown;
+
+    const rejected = buildDrilldown("C10:UC_XEEP0A");
+    expect(rejected?.views.reached.deals).toEqual([
+      expect.objectContaining({
+        dealId: "rejected-then-won",
+        outcome: "won",
+        status: "advanced"
+      })
+    ]);
+
+    const returned = buildDrilldown("C10:UC_EA3R76");
+    expect(returned?.views.reached.deals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dealId: "currently-returned",
+          outcome: "lost",
+          status: "returned"
+        }),
+        expect.objectContaining({
+          dealId: "returned-then-resumed",
+          outcome: "open",
+          status: "advanced",
+          statusLabel: "Снова в работе"
+        })
+      ])
+    );
+    expect(
+      returned?.views.reached.deals.filter(
+        (row) => row.status === "lost" && row.outcome !== "lost"
+      )
+    ).toEqual([]);
+  });
 });

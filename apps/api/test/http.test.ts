@@ -27,6 +27,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
 import { NO_ATTRACTION_MANAGER_MATCH_ID } from "../src/domain/attraction-managers";
+import { SourceCohortConversionStageNotFoundError } from "../src/domain/source-cohort-conversion-stage-drilldown";
 import { createApp } from "../src/server/app";
 import type { ModuleCapabilityAdapter } from "../src/server/module-capabilities";
 
@@ -3794,6 +3795,13 @@ describe("createApp", () => {
         createEmptySourceCohortConversionReport(),
       getSourceCohortConversionJourneyDrilldown: async (input: unknown) => {
         receivedSourceCohortDrilldownInput = input;
+        if (
+          (input as { drilldownKind?: string; stepKey?: string }).drilldownKind ===
+            "crm_stage" &&
+          (input as { stepKey?: string }).stepKey === "C10:UNKNOWN"
+        ) {
+          throw new SourceCohortConversionStageNotFoundError("C10:UNKNOWN");
+        }
         return {
           range: {
             from: "2026-04-01T00:00:00.000Z",
@@ -4102,6 +4110,22 @@ describe("createApp", () => {
       drilldownKind: "crm_stage",
       stepKey: "C10:NEW"
     });
+
+    await request(app)
+      .get("/api/reports/source-cohort-conversion/journey-deals")
+      .query({
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z",
+        drilldownKind: "crm_stage",
+        stepKey: "C10:UNKNOWN"
+      })
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          error: "SOURCE_COHORT_CRM_STAGE_NOT_FOUND",
+          code: "SOURCE_COHORT_CRM_STAGE_NOT_FOUND"
+        });
+      });
 
     const activitiesResponse = await request(app)
       .get("/api/reports/activities-workload")

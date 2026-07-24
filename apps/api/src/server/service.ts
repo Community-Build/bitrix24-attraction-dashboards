@@ -80,6 +80,7 @@ import {
   buildSourceQualityConversionReport,
   buildTargetGroupConversionReport
 } from "../domain/operational-reports.js";
+import { SourceCohortConversionStageNotFoundError } from "../domain/source-cohort-conversion-stage-drilldown.js";
 import {
   OPERATIONAL_LOST_STAGE_IDS,
   buildOperationalDashboardReport
@@ -1664,7 +1665,11 @@ export function createReportingService(
         };
 
   const loadSourceCohortReportInputs = async (
-    filters: ReportFilters | undefined
+    filters: ReportFilters | undefined,
+    options?: {
+      managerDirectoryMode?: "ensure" | "local";
+      requiredCrmStageId?: string;
+    }
   ) => {
     const scopedFilters = await normalizeAttractionReportFilters(filters);
     const [deals, stageCatalog, wonStageIds, events] = await Promise.all([
@@ -1673,18 +1678,32 @@ export function createReportingService(
       input.repository.getWonStageIds(),
       input.repository.getAllEventSnapshots()
     ]);
+    if (
+      options?.requiredCrmStageId &&
+      !stageCatalog.some(
+        (stage) =>
+          stage.entityType === "deal" &&
+          stage.statusId === options.requiredCrmStageId
+      )
+    ) {
+      throw new SourceCohortConversionStageNotFoundError(
+        options.requiredCrmStageId
+      );
+    }
     const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
     const canonical = await loadScopedCanonicalReportInputs(
       scopedDeals.map((deal) => deal.id)
     );
-    const managerDirectory = await ensureManagerDirectory(
-      uniqueStrings([
-        ...scopedDeals.map(
-          (deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID
-        ),
-        ...canonical.eventVisitFacts.map((fact) => fact.managerId)
-      ])
-    );
+    const managerIds = uniqueStrings([
+      ...scopedDeals.map(
+        (deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID
+      ),
+      ...canonical.eventVisitFacts.map((fact) => fact.managerId)
+    ]);
+    const managerDirectory =
+      options?.managerDirectoryMode === "local"
+        ? await getLocalManagerDirectory(managerIds)
+        : await ensureManagerDirectory(managerIds);
 
     return {
       scopedDeals,
@@ -2552,7 +2571,12 @@ export function createReportingService(
         events,
         canonical,
         managerDirectory
-      } = await loadSourceCohortReportInputs(filters);
+      } = await loadSourceCohortReportInputs(filters, {
+        managerDirectoryMode: "local",
+        ...(drilldownKind === "crm_stage"
+          ? { requiredCrmStageId: stepKey }
+          : {})
+      });
       const reportNow = nowFactory();
       const resolvedRange = resolveRange(
         periodDays,

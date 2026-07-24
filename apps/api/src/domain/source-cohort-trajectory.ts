@@ -34,7 +34,10 @@ import {
   buildSourceCohortConversionJourney,
   buildSourceCohortConversionJourneyDrilldown
 } from "./source-cohort-conversion-journey.js";
-import { buildSourceCohortConversionStageDrilldown } from "./source-cohort-conversion-stage-drilldown.js";
+import {
+  buildSourceCohortConversionStageDrilldown,
+  type SourceCohortConversionStageDrilldownStageKind
+} from "./source-cohort-conversion-stage-drilldown.js";
 import { buildLossShape } from "./source-cohort-trajectory-loss-shape.js";
 import { buildManagerDiagnostics } from "./source-cohort-trajectory-manager-diagnostics.js";
 
@@ -49,6 +52,8 @@ const LOW_SAMPLE_MIN_DEALS = 10;
 const RELIABLE_SAMPLE_MIN_DEALS = 30;
 const KNOWN_MEETING_STAGE_IDS = new Set(["C10:MEETING"]);
 const KNOWN_CONTRACT_STAGE_IDS = new Set(["C10:CONTRACT"]);
+const REPAIRABLE_REJECTION_STAGE_IDS = new Set(["C10:UC_XEEP0A"]);
+const RETURN_TO_LEADGEN_STAGE_IDS = new Set(["C10:UC_EA3R76"]);
 const LOSS_STAGE_NAME_PATTERN = /корзин|возврат|неквал|проиг|отклон|отказ|утер/i;
 
 type SpeedBucketDefinition = {
@@ -264,7 +269,28 @@ function isLossStage(
     stageId?: string | null;
   }
 ) {
+  if (stage.stageId && REPAIRABLE_REJECTION_STAGE_IDS.has(stage.stageId)) {
+    return false;
+  }
+
   return stage.semanticId === "F" || LOSS_STAGE_NAME_PATTERN.test(stage.stageName);
+}
+
+function resolveStageDrilldownKind(
+  stage: StageSequenceEntry,
+  wonStageIds: ReadonlySet<string>
+): SourceCohortConversionStageDrilldownStageKind {
+  if (wonStageIds.has(stage.stageId)) {
+    return "won";
+  }
+  if (REPAIRABLE_REJECTION_STAGE_IDS.has(stage.stageId)) {
+    return "productive";
+  }
+  if (RETURN_TO_LEADGEN_STAGE_IDS.has(stage.stageId)) {
+    return "return";
+  }
+
+  return isLossStage(stage) ? "lost" : "productive";
 }
 
 function parsePayload(payloadJson: string | null) {
@@ -2252,11 +2278,7 @@ export function buildSourceCohortTrajectoryReport(
             stageId: stage.stageId,
             stageName: stage.stageName,
             sortOrder: stage.sortOrder,
-            terminalKind: wonStageIds.has(stage.stageId)
-              ? "won"
-              : isLossStage(stage)
-                ? "lost"
-                : null
+            stageKind: resolveStageDrilldownKind(stage, wonStageIds)
           })),
           dealFacts: journeyDrilldownDealFacts.map(
             ({ facts, managerId, currentStageName, outcome }) => ({

@@ -7,11 +7,29 @@ import type {
 
 const DAY_MS = 86_400_000;
 
+export const SOURCE_COHORT_CRM_STAGE_NOT_FOUND_ERROR_CODE =
+  "SOURCE_COHORT_CRM_STAGE_NOT_FOUND";
+
+export class SourceCohortConversionStageNotFoundError extends Error {
+  readonly code = SOURCE_COHORT_CRM_STAGE_NOT_FOUND_ERROR_CODE;
+
+  constructor(readonly stageId: string) {
+    super(`Unsupported CRM stage: ${stageId}`);
+    this.name = "SourceCohortConversionStageNotFoundError";
+  }
+}
+
+export type SourceCohortConversionStageDrilldownStageKind =
+  | "productive"
+  | "won"
+  | "lost"
+  | "return";
+
 export interface SourceCohortConversionStageDrilldownStage {
   stageId: string;
   stageName: string;
   sortOrder: number;
-  terminalKind: "won" | "lost" | null;
+  stageKind: SourceCohortConversionStageDrilldownStageKind;
 }
 
 export interface SourceCohortConversionStageDrilldownDealFacts {
@@ -35,9 +53,10 @@ type StageClassification = Pick<
 const STATUS_SORT_ORDER: Record<SourceCohortConversionJourneyDealStatus, number> = {
   stuck: 0,
   lost: 1,
-  data_gap: 2,
-  within_sla: 3,
-  advanced: 4
+  returned: 2,
+  data_gap: 3,
+  within_sla: 4,
+  advanced: 5
 };
 
 function timestamp(value: string | null | undefined) {
@@ -99,7 +118,8 @@ function firstLaterProductiveStage(input: {
     .filter(
       (stage) =>
         stage.sortOrder > input.selected.sortOrder &&
-        stage.terminalKind !== "lost"
+        stage.stageKind !== "lost" &&
+        stage.stageKind !== "return"
     )
     .flatMap((stage) => {
       const enteredAt = firstStageAt(input.facts, stage.stageId, input.after);
@@ -150,6 +170,17 @@ function lost(reason: string): StageClassification {
   };
 }
 
+function returned(reason: string): StageClassification {
+  return {
+    status: "returned",
+    statusLabel: "Возвращена в лидген",
+    reason,
+    ageFromAt: null,
+    ageDays: null,
+    slaDays: null
+  };
+}
+
 function classifyReached(input: {
   facts: SourceCohortConversionStageDrilldownDealFacts;
   selected: SourceCohortConversionStageDrilldownStage;
@@ -159,13 +190,74 @@ function classifyReached(input: {
   stages: SourceCohortConversionStageDrilldownStage[];
   asOf: string;
 }): StageClassification {
-  if (input.selected.terminalKind === "lost") {
+  const currentStage = input.stages.find(
+    (stage) => stage.stageId === input.facts.currentStageId
+  );
+
+  if (input.selected.stageKind === "lost") {
+    if (currentStage?.stageKind === "return") {
+      return returned(
+        `После CRM-этапа «${input.selected.stageName}» сделка переведена в отдельный маршрут «${currentStage.stageName}».`
+      );
+    }
+
+    if (input.facts.outcome === "won") {
+      return advanced({
+        statusLabel: "Возвращена в работу и передана",
+        reason: `После CRM-этапа «${input.selected.stageName}» сделка была возобновлена и передана в клуб.`,
+        fromAt: input.selectedAt,
+        toAt: input.asOf
+      });
+    }
+
+    if (input.facts.outcome === "open") {
+      return advanced({
+        statusLabel: "Снова в работе",
+        reason: `После CRM-этапа «${input.selected.stageName}» сделка возвращена в работу; текущий этап — «${input.facts.currentStageName}».`,
+        fromAt: input.selectedAt,
+        toAt: input.facts.currentStageEnteredAt
+      });
+    }
+
     return lost(
       `Сделка завершена на CRM-этапе «${input.selected.stageName}».`
     );
   }
 
-  if (input.selected.terminalKind === "won") {
+  if (input.selected.stageKind === "return") {
+    if (
+      input.facts.currentStageId === input.selected.stageId &&
+      input.facts.outcome === "lost"
+    ) {
+      return returned(
+        `Сделка возвращена поставщику на CRM-этапе «${input.selected.stageName}»; это отдельный маршрут, а не «Корзина».`
+      );
+    }
+
+    if (input.facts.outcome === "won") {
+      return advanced({
+        statusLabel: "Возвращена в работу и передана",
+        reason: `После возврата в лидген сделка была возобновлена и передана в клуб.`,
+        fromAt: input.selectedAt,
+        toAt: input.asOf
+      });
+    }
+
+    if (input.facts.outcome === "open") {
+      return advanced({
+        statusLabel: "Снова в работе",
+        reason: `После возврата в лидген сделка снова находится в работе; текущий этап — «${input.facts.currentStageName}».`,
+        fromAt: input.selectedAt,
+        toAt: input.facts.currentStageEnteredAt
+      });
+    }
+
+    return lost(
+      `После возврата в лидген сделка завершена на этапе «${input.facts.currentStageName}».`
+    );
+  }
+
+  if (input.selected.stageKind === "won") {
     return advanced({
       statusLabel: "Результат достигнут",
       reason: "Финальный CRM-этап «Передано в клуб» подтвержден.",
@@ -200,6 +292,14 @@ function classifyReached(input: {
   }
 
   if (input.facts.outcome === "lost") {
+    if (currentStage?.stageKind === "return") {
+      return returned(
+        input.next
+          ? `После «${input.selected.stageName}» сделка возвращена в лидген; перехода к «${input.next.stageName}» нет.`
+          : `После «${input.selected.stageName}» сделка возвращена в лидген.`
+      );
+    }
+
     return lost(
       input.next
         ? `После «${input.selected.stageName}» сделка завершена на этапе «${input.facts.currentStageName}»; перехода к «${input.next.stageName}» нет.`
@@ -234,9 +334,6 @@ function classifyReached(input: {
     };
   }
 
-  const currentStage = input.stages.find(
-    (stage) => stage.stageId === input.facts.currentStageId
-  );
   if (currentStage && currentStage.sortOrder < input.selected.sortOrder) {
     return dataGap(
       "Вернулась назад",
@@ -269,6 +366,9 @@ function classifyMissed(input: {
   stages: SourceCohortConversionStageDrilldownStage[];
   asOf: string;
 }): StageClassification {
+  const currentStage = input.stages.find(
+    (stage) => stage.stageId === input.facts.currentStageId
+  );
   const laterStage = firstLaterProductiveStage({
     facts: input.facts,
     selected: input.selected,
@@ -285,6 +385,12 @@ function classifyMissed(input: {
   }
 
   if (input.facts.outcome === "lost") {
+    if (currentStage?.stageKind === "return") {
+      return returned(
+        `После «${input.previous.stageName}» сделка возвращена в лидген, не дойдя до «${input.selected.stageName}».`
+      );
+    }
+
     return lost(
       `После «${input.previous.stageName}» сделка завершена на этапе «${input.facts.currentStageName}», не дойдя до «${input.selected.stageName}».`
     );
@@ -370,19 +476,23 @@ export function buildSourceCohortConversionStageDrilldown(input: {
   );
   const selected = stages.find((stage) => stage.stageId === input.stageId);
   if (!selected) {
-    throw new Error(`Unsupported CRM stage: ${input.stageId}`);
+    throw new SourceCohortConversionStageNotFoundError(input.stageId);
   }
 
-  const productiveStages = stages.filter((stage) => stage.terminalKind !== "lost");
+  const productiveStages = stages.filter(
+    (stage) => stage.stageKind !== "lost" && stage.stageKind !== "return"
+  );
   const selectedProductiveIndex = productiveStages.findIndex(
     (stage) => stage.stageId === selected.stageId
   );
+  const selectedIsTerminalRoute =
+    selected.stageKind === "lost" || selected.stageKind === "return";
   const previous =
-    selected.terminalKind === "lost"
+    selectedIsTerminalRoute
       ? null
       : productiveStages[selectedProductiveIndex - 1] ?? null;
   const next =
-    selected.terminalKind === "lost"
+    selectedIsTerminalRoute
       ? null
       : productiveStages[selectedProductiveIndex + 1] ?? null;
 
@@ -504,7 +614,7 @@ export function buildSourceCohortConversionStageDrilldown(input: {
       missed: {
         viewKey: "missed",
         label:
-          selected.terminalKind === "lost"
+          selectedIsTerminalRoute
             ? "Не применяется"
             : previous
               ? `Не дошли сюда из «${previous.stageName}»`
@@ -515,7 +625,7 @@ export function buildSourceCohortConversionStageDrilldown(input: {
       notAdvanced: {
         viewKey: "not_advanced",
         label:
-          selected.terminalKind === "lost"
+          selectedIsTerminalRoute
             ? "Не применяется"
             : next
               ? `Не дошли до «${next.stageName}»`

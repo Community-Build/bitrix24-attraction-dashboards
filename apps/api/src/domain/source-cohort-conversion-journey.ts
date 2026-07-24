@@ -416,15 +416,17 @@ const STATUS_LABELS: Record<SourceCohortConversionJourneyDealStatus, string> = {
   within_sla: "В пределах SLA",
   stuck: "Застряла",
   lost: "Завершена потерей",
+  returned: "Возвращена в лидген",
   data_gap: "Проверить данные"
 };
 
 const STATUS_SORT_ORDER: Record<SourceCohortConversionJourneyDealStatus, number> = {
   stuck: 0,
   lost: 1,
-  data_gap: 2,
-  within_sla: 3,
-  advanced: 4
+  returned: 2,
+  data_gap: 3,
+  within_sla: 4,
+  advanced: 5
 };
 
 function visibleCoreStepDefinitions() {

@@ -302,6 +302,77 @@ describe('apiClient', () => {
     expect(drilldown.drilldownKind).toBe('fact')
   })
 
+  it('preserves the distinct return-to-leadgen deal status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range: {
+          from: '2026-06-01T00:00:00.000Z',
+          to: '2026-06-30T23:59:59.999Z',
+        },
+        drilldownKind: 'crm_stage',
+        stepKey: 'C10:UC_EA3R76',
+        stepLabel: 'Возврат в Лидген(неквал)',
+        previousStepKey: null,
+        previousStepLabel: null,
+        nextStepKey: null,
+        nextStepLabel: null,
+        asOf: '2026-07-24T12:00:00.000Z',
+        views: {
+          reached: {
+            viewKey: 'reached',
+            label: 'Дошли сюда',
+            count: 1,
+            deals: [
+              {
+                dealId: '23843',
+                managerId: '7',
+                managerName: 'Мария',
+                currentStageId: 'C10:UC_EA3R76',
+                currentStageName: 'Возврат в Лидген(неквал)',
+                outcome: 'lost',
+                status: 'returned',
+                statusLabel: 'Возвращена в лидген',
+                reason: 'Отдельный маршрут возврата.',
+                createdAt: '2026-06-09T08:00:00.000Z',
+              },
+            ],
+          },
+          missed: {
+            viewKey: 'missed',
+            label: 'Не применяется',
+            count: 0,
+            deals: [],
+          },
+          notAdvanced: {
+            viewKey: 'not_advanced',
+            label: 'Не применяется',
+            count: 0,
+            deals: [],
+          },
+        },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const drilldown = await apiClient.getSourceCohortConversionJourneyDrilldown(
+      {
+        preset: 'custom',
+        from: '2026-06-01',
+        to: '2026-06-30',
+      },
+      'C10:UC_EA3R76',
+      'crm_stage',
+    )
+
+    expect(drilldown.views.reached.deals[0]).toMatchObject({
+      dealId: '23843',
+      outcome: 'lost',
+      status: 'returned',
+      statusLabel: 'Возвращена в лидген',
+    })
+  })
+
   it('does not fabricate attendance when invitation fields are missing', async () => {
     const range = {
       from: '2026-06-01T00:00:00.000Z',
