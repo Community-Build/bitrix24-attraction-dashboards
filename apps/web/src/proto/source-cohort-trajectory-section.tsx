@@ -1,8 +1,10 @@
 import { useMemo, useState, type ReactNode } from 'react'
 
 import type {
+  DashboardQuery,
   SourceCohortEventPerformance,
   SourceCohortEventPerformanceRow,
+  SourceCohortConversionJourneyCoreStepKey,
   SourceCohortTrajectoryBreakdownRow,
   SourceCohortTrajectoryFactStepKey,
   SourceCohortTrajectoryManagerRow,
@@ -11,6 +13,7 @@ import type {
 } from '@/lib/dashboard-types'
 import { formatInteger, formatPercent } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
+import { SourceCohortJourneyDrilldown } from '@/proto/source-cohort-journey-drilldown'
 
 type ReportMode = 'journey' | 'events'
 type JourneyView = 'facts' | 'stages' | 'gaps'
@@ -32,6 +35,20 @@ const CORE_STEP_LABELS: Record<string, string> = {
   meeting_completed: 'Встреча состоялась',
   contract: 'Контракт',
   transferred: 'Передано в клуб',
+}
+
+const CORE_STEP_KEYS = new Set<SourceCohortConversionJourneyCoreStepKey>([
+  'created',
+  'first_call',
+  'confirmed_conversation',
+  'meeting_scheduled',
+  'meeting_completed',
+  'contract',
+  'transferred',
+])
+
+function isCoreStepKey(value: string): value is SourceCohortConversionJourneyCoreStepKey {
+  return CORE_STEP_KEYS.has(value as SourceCohortConversionJourneyCoreStepKey)
 }
 
 const BREAKDOWN_META: Record<BreakdownKey, { label: string; subject: string; note: string }> = {
@@ -216,7 +233,16 @@ function ReliabilityBadge({ status }: { status: SourceCohortTrajectoryQualitySta
   )
 }
 
-function JourneyFacts({ trajectory }: { trajectory: SourceCohortTrajectoryReport }) {
+function JourneyFacts({
+  trajectory,
+  query,
+}: {
+  trajectory: SourceCohortTrajectoryReport
+  query: DashboardQuery
+}) {
+  const [selectedStepKey, setSelectedStepKey] =
+    useState<SourceCohortConversionJourneyCoreStepKey | null>(null)
+  const [returnFocus, setReturnFocus] = useState<HTMLElement | null>(null)
   const journey = trajectory.conversionJourney
   if (!journey) {
     return <p className="py-8 text-sm text-slate-500">Фактическая траектория недоступна в этом снимке.</p>
@@ -231,32 +257,50 @@ function JourneyFacts({ trajectory }: { trajectory: SourceCohortTrajectoryReport
         {mainSteps.map((step, index) => (
           <li
             key={step.stepKey}
-            className="relative min-w-0 border-b border-slate-200 p-4 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"
+            className="relative min-w-0 border-b border-slate-200 last:border-b-0 lg:border-b-0 lg:border-r lg:last:border-r-0"
           >
-            <div className="flex items-center gap-2">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-extrabold tabular-nums text-blue-700">
-                {index + 1}
-              </span>
-              <p className="text-sm font-bold leading-5 text-slate-900">
-                {CORE_STEP_LABELS[step.stepKey] ?? step.label}
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={selectedStepKey === step.stepKey}
+              onClick={(event) => {
+                if (!isCoreStepKey(step.stepKey)) return
+                setReturnFocus(event.currentTarget)
+                setSelectedStepKey(step.stepKey)
+              }}
+              className={cn(
+                'group h-full min-h-44 w-full p-4 text-left outline-none transition-[background-color,box-shadow,transform] duration-150 hover:bg-blue-50/60 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 active:scale-[0.99]',
+                selectedStepKey === step.stepKey && 'bg-blue-50/80',
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-extrabold tabular-nums text-blue-700 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.08)]">
+                  {index + 1}
+                </span>
+                <p className="text-sm font-bold leading-5 text-slate-900">
+                  {CORE_STEP_LABELS[step.stepKey] ?? step.label}
+                </p>
+              </div>
+              <p className="mt-4 text-2xl font-extrabold tabular-nums text-slate-950">
+                {formatInteger(step.deals)}
               </p>
-            </div>
-            <p className="mt-4 text-2xl font-extrabold tabular-nums text-slate-950">
-              {formatInteger(step.deals)}
-            </p>
-            <p className="mt-0.5 text-xs font-semibold tabular-nums text-blue-700">
-              {formatRate(step.rateFromCohort)} к когорте
-            </p>
-            <dl className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
-              <div className="flex justify-between gap-2">
-                <dt>После прошлого шага</dt>
-                <dd className="font-bold tabular-nums text-slate-700">{formatRate(step.rateFromPrevious)}</dd>
-              </div>
-              <div className="flex justify-between gap-2">
-                <dt>Медиана</dt>
-                <dd className="font-bold tabular-nums text-slate-700">{formatDays(step.medianDaysFromCreate)}</dd>
-              </div>
-            </dl>
+              <p className="mt-0.5 text-xs font-semibold tabular-nums text-blue-700">
+                {formatRate(step.rateFromCohort)} к когорте
+              </p>
+              <dl className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
+                <div className="flex justify-between gap-2">
+                  <dt>После прошлого шага</dt>
+                  <dd className="font-bold tabular-nums text-slate-700">{formatRate(step.rateFromPrevious)}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt>Медиана</dt>
+                  <dd className="font-bold tabular-nums text-slate-700">{formatDays(step.medianDaysFromCreate)}</dd>
+                </div>
+              </dl>
+              <span className="mt-4 inline-flex min-h-7 items-center text-xs font-extrabold text-blue-700 transition-[color,transform] duration-150 group-hover:translate-x-0.5 group-hover:text-blue-800">
+                Открыть сделки <span aria-hidden="true" className="ml-1">→</span>
+              </span>
+            </button>
           </li>
         ))}
       </ol>
@@ -274,6 +318,14 @@ function JourneyFacts({ trajectory }: { trajectory: SourceCohortTrajectoryReport
           </p>
         </div>
       ) : null}
+
+      <SourceCohortJourneyDrilldown
+        open={selectedStepKey !== null}
+        query={query}
+        stepKey={selectedStepKey}
+        returnFocus={returnFocus}
+        onRequestClose={() => setSelectedStepKey(null)}
+      />
     </div>
   )
 }
@@ -608,11 +660,13 @@ export function SourceCohortStageConversionSection({
   totalCreatedDeals,
   trajectory,
   trajectoryUnavailableReason,
+  query,
 }: {
   selectedMonthLabel: string
   totalCreatedDeals: number
   trajectory: SourceCohortTrajectoryReport | undefined
   trajectoryUnavailableReason?: string | null
+  query: DashboardQuery
 }) {
   const [mode, setMode] = useState<ReportMode>('journey')
   const [journeyView, setJourneyView] = useState<JourneyView>('facts')
@@ -677,7 +731,7 @@ export function SourceCohortStageConversionSection({
               ]}
             />
           </div>
-          {journeyView === 'facts' ? <JourneyFacts trajectory={trajectory} /> : null}
+          {journeyView === 'facts' ? <JourneyFacts trajectory={trajectory} query={query} /> : null}
           {journeyView === 'stages' ? <JourneyStages trajectory={trajectory} /> : null}
           {journeyView === 'gaps' ? <JourneyGaps trajectory={trajectory} /> : null}
           <ComparisonMatrix trajectory={trajectory} />

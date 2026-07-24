@@ -67,6 +67,30 @@ Stable dashboard anchors used by ontology report bindings:
   It is not proof that the meeting happened and it is not the denominator for
   `meeting_completed`; completed-meeting conversion is conditional on the
   confirmed-conversation step.
+- Deal drill-down is loaded lazily from
+  `/api/reports/source-cohort-conversion/journey-deals` for one visible journey
+  step and the same range, manager, source, business-club, and target-group
+  filters as the aggregate report. It exposes three reconciled views:
+  `reached` contains the deals counted at the selected step, `missed` contains
+  deals in the strict previous-step denominator that did not make the selected
+  transition, and `not_advanced` contains deals at the selected step without a
+  strict transition to the next visible step. The route reads the local
+  SQLite-backed reporting snapshot and never performs a direct Bitrix read
+  during page rendering.
+- Drill-down rows may expose only deal ID, a generated Bitrix deal URL, current
+  manager, current stage, outcome, relevant timestamps, deterministic status,
+  and deterministic reason. Deal titles, contact names, phones, emails, and raw
+  Bitrix payloads are excluded from the contract and UI.
+- Drill-down status is operational, not predictive:
+  `advanced` means the strict next transition exists; `within_sla` and `stuck`
+  mean the required fact is still missing before or after the configured
+  threshold; `lost` means the deal is already in a loss outcome; `data_gap`
+  means the observed chronology or successful outcome conflicts with the
+  required facts. The current thresholds are 3 days from creation to first
+  attempt or confirmed conversation, 7 days from creation to completed
+  meeting, 7 days from completed meeting to contract, and 14 days from
+  contract to transfer. These thresholds classify rows; they do not change the
+  aggregate journey numerator or denominator.
 - Fact-step chain:
   `SourceCohortConversionReport.trajectory.factSteps` is the canonical ordered
   chain `created -> first_successful_call -> meeting_stage -> completed_meeting

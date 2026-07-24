@@ -1686,6 +1686,61 @@ export interface SourceCohortConversionJourney {
   eventDepthRows: SourceCohortConversionEventDepthRow[];
 }
 
+export type SourceCohortConversionJourneyDrilldownViewKey =
+  | "reached"
+  | "missed"
+  | "not_advanced";
+
+export type SourceCohortConversionJourneyDealStatus =
+  | "advanced"
+  | "within_sla"
+  | "stuck"
+  | "lost"
+  | "data_gap";
+
+export interface SourceCohortConversionJourneyDealRow {
+  dealId: string;
+  dealUrl: string | null;
+  managerId: string;
+  managerName: string;
+  currentStageId: string;
+  currentStageName: string;
+  outcome: "open" | "lost" | "won";
+  status: SourceCohortConversionJourneyDealStatus;
+  statusLabel: string;
+  reason: string;
+  createdAt: string;
+  previousStepAt: string | null;
+  selectedStepAt: string | null;
+  nextStepAt: string | null;
+  ageFromAt: string | null;
+  ageDays: number | null;
+  slaDays: number | null;
+}
+
+export interface SourceCohortConversionJourneyDrilldownView {
+  viewKey: SourceCohortConversionJourneyDrilldownViewKey;
+  label: string;
+  count: number;
+  deals: SourceCohortConversionJourneyDealRow[];
+}
+
+export interface SourceCohortConversionJourneyDrilldown {
+  range: ReportRange;
+  stepKey: SourceCohortConversionJourneyCoreStepKey;
+  stepLabel: string;
+  previousStepKey: SourceCohortConversionJourneyCoreStepKey | null;
+  previousStepLabel: string | null;
+  nextStepKey: SourceCohortConversionJourneyCoreStepKey | null;
+  nextStepLabel: string | null;
+  asOf: string;
+  views: {
+    reached: SourceCohortConversionJourneyDrilldownView;
+    missed: SourceCohortConversionJourneyDrilldownView;
+    notAdvanced: SourceCohortConversionJourneyDrilldownView;
+  };
+}
+
 export interface SourceCohortEventPerformanceRow {
   key: string;
   label: string;
@@ -1721,6 +1776,7 @@ export interface SourceCohortTrajectoryReport {
   range: ReportRange;
   totalDeals: number;
   conversionJourney?: SourceCohortConversionJourney;
+  journeyDrilldown?: SourceCohortConversionJourneyDrilldown;
   stageNodes: SourceCohortTrajectoryStageNode[];
   stageTransitions: SourceCohortTrajectoryStageTransition[];
   actionNodes: SourceCohortTrajectoryActionNode[];

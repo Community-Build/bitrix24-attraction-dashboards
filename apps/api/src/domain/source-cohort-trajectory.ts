@@ -11,6 +11,7 @@ import type {
   SourceCohortTrajectoryDataQuality,
   SourceCohortEventPerformance,
   SourceCohortEventPerformanceRow,
+  SourceCohortConversionJourneyCoreStepKey,
   SourceCohortTrajectoryFactStepKey,
   SourceCohortTrajectoryManagerRow,
   SourceCohortTrajectoryQualityStatus,
@@ -29,7 +30,10 @@ import {
   resolveDealSource,
   resolveManagerName
 } from "./report-dimensions.js";
-import { buildSourceCohortConversionJourney } from "./source-cohort-conversion-journey.js";
+import {
+  buildSourceCohortConversionJourney,
+  buildSourceCohortConversionJourneyDrilldown
+} from "./source-cohort-conversion-journey.js";
 import { buildLossShape } from "./source-cohort-trajectory-loss-shape.js";
 import { buildManagerDiagnostics } from "./source-cohort-trajectory-manager-diagnostics.js";
 
@@ -136,6 +140,10 @@ interface SourceCohortTrajectoryInput {
   events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   now?: Date;
+  journeyDrilldown?: {
+    stepKey: SourceCohortConversionJourneyCoreStepKey;
+    dealUrlBuilder?: (dealId: string) => string | null;
+  };
 }
 
 interface StageSequenceEntry {
@@ -2206,6 +2214,45 @@ export function buildSourceCohortTrajectoryReport(
     })),
     asOf: reportNowIso
   });
+  const journeyDrilldown = input.journeyDrilldown
+    ? buildSourceCohortConversionJourneyDrilldown({
+        range: input.range,
+        stepKey: input.journeyDrilldown.stepKey,
+        asOf: reportNowIso,
+        dealFacts: dealFacts.map((facts) => {
+          const managerId = facts.deal.assignedById ?? UNASSIGNED_MANAGER_ID;
+          const currentStageName =
+            stageSequence.find((stage) => stage.stageId === facts.deal.stageId)
+              ?.stageName ?? facts.deal.stageId;
+          const outcome = facts.wonAt
+            ? "won"
+            : isOpenDeal(facts, stageSequence)
+              ? "open"
+              : "lost";
+
+          return {
+            dealId: facts.deal.id,
+            dealUrl:
+              input.journeyDrilldown?.dealUrlBuilder?.(facts.deal.id) ?? null,
+            managerId,
+            managerName: resolveManagerName(managerId, managerDirectory),
+            currentStageId: facts.deal.stageId,
+            currentStageName,
+            outcome,
+            createdAt: facts.deal.dateCreate,
+            firstCallAt: facts.firstCallAt,
+            confirmedConversationAt: facts.firstSuccessfulCallAt,
+            meetingScheduledAt: facts.meetingScheduledAt,
+            meetingCompletedAt: facts.completedMeetingAt,
+            attendedEventAts: facts.journeyAttendedEventAts,
+            contractAt: contractStage
+              ? facts.stageEnteredAt.get(contractStage.stageId) ?? null
+              : null,
+            transferredAt: facts.wonAt
+          };
+        })
+      })
+    : null;
   const eventPerformance = buildEventPerformance({
     range: input.range,
     now: reportNow,
@@ -2220,6 +2267,7 @@ export function buildSourceCohortTrajectoryReport(
     range: input.range,
     totalDeals: dealFacts.length,
     conversionJourney,
+    ...(journeyDrilldown ? { journeyDrilldown } : {}),
     stageNodes,
     stageTransitions,
     actionNodes,

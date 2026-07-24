@@ -7080,12 +7080,13 @@ export function SourceCohortsScene({ filters }: SceneComponentProps) {
           <p className="font-bold text-slate-900">За выбранный месяц нет сделок.</p>
           <p className="mt-1 text-sm text-slate-500">Проверьте месяц, менеджеров, источники и заказчиков в общих фильтрах.</p>
         </section>
-      ) : report ? (
+      ) : report && sourceCohortQuery ? (
         <SourceCohortStageConversionSection
           selectedMonthLabel={selectedMonthLabel}
           totalCreatedDeals={report.totalCreatedDeals}
           trajectory={report.trajectoryStatus === 'available' ? report.trajectory : undefined}
           trajectoryUnavailableReason={report.trajectoryUnavailableReason}
+          query={sourceCohortQuery}
         />
       ) : null}
     </div>

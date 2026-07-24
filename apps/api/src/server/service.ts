@@ -46,6 +46,8 @@ import type {
   SalesPlanQuarterInput,
   SalesPlanQuarterMonth,
   SourceCatalogEntry,
+  SourceCohortConversionJourneyCoreStepKey,
+  SourceCohortConversionJourneyDrilldown,
   SourceCohortConversionReport,
   SourceCohortConversionReportSnapshot,
   SourceQualityConversionReport,
@@ -188,6 +190,12 @@ export interface ReportingService {
     compareRanges?: ReportRange[];
     filters?: ReportFilters;
   }): Promise<SourceCohortConversionReport>;
+  getSourceCohortConversionJourneyDrilldown(input: {
+    periodDays?: number;
+    range?: ReportRange;
+    filters?: ReportFilters;
+    stepKey: SourceCohortConversionJourneyCoreStepKey;
+  }): Promise<SourceCohortConversionJourneyDrilldown>;
   getActivitiesWorkloadReport(input: {
     periodDays?: number;
     range?: ReportRange;
@@ -1654,6 +1662,39 @@ export function createReportingService(
           warnings: [] as string[]
         };
 
+  const loadSourceCohortReportInputs = async (
+    filters: ReportFilters | undefined
+  ) => {
+    const scopedFilters = await normalizeAttractionReportFilters(filters);
+    const [deals, stageCatalog, wonStageIds, events] = await Promise.all([
+      input.repository.getAllDeals(),
+      getScopedStageCatalog(true),
+      input.repository.getWonStageIds(),
+      input.repository.getAllEventSnapshots()
+    ]);
+    const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
+    const canonical = await loadScopedCanonicalReportInputs(
+      scopedDeals.map((deal) => deal.id)
+    );
+    const managerDirectory = await ensureManagerDirectory(
+      uniqueStrings([
+        ...scopedDeals.map(
+          (deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID
+        ),
+        ...canonical.eventVisitFacts.map((fact) => fact.managerId)
+      ])
+    );
+
+    return {
+      scopedDeals,
+      stageCatalog,
+      wonStageIds,
+      events,
+      canonical,
+      managerDirectory
+    };
+  };
+
   return {
     async getLeadgenFunnelReport({ periodDays, range, filters }) {
       const resolvedRange = resolveRange(
@@ -2456,25 +2497,14 @@ export function createReportingService(
       compareRanges,
       filters
     }) {
-      const scopedFilters = await normalizeAttractionReportFilters(filters);
-      const [deals, stageCatalog, wonStageIds, events] = await Promise.all([
-        input.repository.getAllDeals(),
-        getScopedStageCatalog(true),
-        input.repository.getWonStageIds(),
-        input.repository.getAllEventSnapshots()
-      ]);
-      const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
-      const canonical = await loadScopedCanonicalReportInputs(
-        scopedDeals.map((deal) => deal.id)
-      );
-      const managerDirectory = await ensureManagerDirectory(
-        uniqueStrings(
-          [
-            ...scopedDeals.map((deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID),
-            ...canonical.eventVisitFacts.map((fact) => fact.managerId)
-          ]
-        )
-      );
+      const {
+        scopedDeals,
+        stageCatalog,
+        wonStageIds,
+        events,
+        canonical,
+        managerDirectory
+      } = await loadSourceCohortReportInputs(filters);
       const reportNow = nowFactory();
       const buildSnapshot = (
         targetRange: ReportRange
@@ -2505,6 +2535,55 @@ export function createReportingService(
         compareRanges,
         buildSnapshot
       ) as SourceCohortConversionReport;
+    },
+
+    async getSourceCohortConversionJourneyDrilldown({
+      periodDays,
+      range,
+      filters,
+      stepKey
+    }) {
+      const {
+        scopedDeals,
+        stageCatalog,
+        wonStageIds,
+        events,
+        canonical,
+        managerDirectory
+      } = await loadSourceCohortReportInputs(filters);
+      const reportNow = nowFactory();
+      const resolvedRange = resolveRange(
+        periodDays,
+        range,
+        input.defaultPeriodDays,
+        reportNow
+      );
+      const snapshot = buildSourceCohortConversionReport({
+        range: resolvedRange,
+        wonStageIds,
+        deals: scopedDeals,
+        stageCatalog,
+        stageHistory: canonical.stageHistory,
+        dealStageFacts: canonical.dealStageFacts,
+        dealTouchpointFacts: canonical.dealTouchpointFacts,
+        eventVisitFacts: canonical.eventVisitFacts,
+        events,
+        managerDirectory,
+        includeTrajectory: true,
+        journeyDrilldown: {
+          stepKey,
+          dealUrlBuilder: (dealId) =>
+            buildBitrixDealUrl(bitrixPortalHost, dealId)
+        },
+        now: reportNow
+      });
+      const drilldown = snapshot.trajectory?.journeyDrilldown;
+
+      if (!drilldown) {
+        throw new Error("Source cohort conversion journey drill-down is unavailable.");
+      }
+
+      return drilldown;
     },
 
     async getActivitiesWorkloadReport({

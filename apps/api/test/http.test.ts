@@ -3529,6 +3529,7 @@ describe("createApp", () => {
     let receivedActivitiesInput: unknown = null;
     let receivedOperationalDashboardInput: unknown = null;
     let receivedCohortInput: unknown = null;
+    let receivedSourceCohortDrilldownInput: unknown = null;
     let receivedRevenueVelocityInput: unknown = null;
     let receivedLeadgenFunnelInput: unknown = null;
     let receivedLeadgenActivitiesInput: unknown = null;
@@ -3791,6 +3792,42 @@ describe("createApp", () => {
       getSourceQualityConversionReport: async () => sourceQualityReport,
       getSourceCohortConversionReport: async () =>
         createEmptySourceCohortConversionReport(),
+      getSourceCohortConversionJourneyDrilldown: async (input: unknown) => {
+        receivedSourceCohortDrilldownInput = input;
+        return {
+          range: {
+            from: "2026-04-01T00:00:00.000Z",
+            to: "2026-04-30T23:59:59.999Z"
+          },
+          stepKey: "first_call" as const,
+          stepLabel: "Первый звонок",
+          previousStepKey: "created" as const,
+          previousStepLabel: "Создана",
+          nextStepKey: "confirmed_conversation" as const,
+          nextStepLabel: "Подтвержденный разговор",
+          asOf: "2026-05-01T00:00:00.000Z",
+          views: {
+            reached: {
+              viewKey: "reached" as const,
+              label: "Дошли сюда",
+              count: 0,
+              deals: []
+            },
+            missed: {
+              viewKey: "missed" as const,
+              label: "Не дошли из «Создана»",
+              count: 0,
+              deals: []
+            },
+            notAdvanced: {
+              viewKey: "not_advanced" as const,
+              label: "Не перешли к «Подтвержденный разговор»",
+              count: 0,
+              deals: []
+            }
+          }
+        };
+      },
       getActivitiesWorkloadReport: async (input: unknown) => {
         receivedActivitiesInput = input;
         return activitiesReport;
@@ -4019,6 +4056,32 @@ describe("createApp", () => {
       .expect(({ body }) => {
         expect(body.totalCreatedDeals).toBe(4);
       });
+
+    await request(app)
+      .get("/api/reports/source-cohort-conversion/journey-deals")
+      .query({
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z",
+        managerIds: "7,9",
+        sourceKeys: "WEB",
+        stepKey: "first_call"
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.stepKey).toBe("first_call");
+        expect(body.views.notAdvanced.count).toBe(0);
+      });
+    expect(receivedSourceCohortDrilldownInput).toEqual({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      filters: {
+        managerIds: ["7", "9"],
+        sourceKeys: ["WEB"]
+      },
+      stepKey: "first_call"
+    });
 
     const activitiesResponse = await request(app)
       .get("/api/reports/activities-workload")

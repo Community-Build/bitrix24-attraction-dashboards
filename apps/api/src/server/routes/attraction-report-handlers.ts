@@ -1,6 +1,8 @@
 import type express from "express";
 import { z } from "zod";
 
+import type { SourceCohortConversionJourneyCoreStepKey } from "@bitrix24-reporting/contracts";
+
 import type { AttractionReportRouteHandlers } from "./attraction-routes.js";
 
 export interface RangeRequest {
@@ -35,6 +37,11 @@ export interface AttractionReportRouteService {
   getDashboard(input: RangeRequest): Promise<unknown>;
   getSourceQualityConversionReport(input: RangeRequest): Promise<unknown>;
   getSourceCohortConversionReport(input: RangeRequest): Promise<unknown>;
+  getSourceCohortConversionJourneyDrilldown?(
+    input: RangeRequest & {
+      stepKey: SourceCohortConversionJourneyCoreStepKey;
+    }
+  ): Promise<unknown>;
   getActivitiesWorkloadReport(input: RangeRequest): Promise<unknown>;
   getOperationalDashboardReport(input: RangeRequest): Promise<unknown>;
   getAcquisitionOutcomesReport(input: RangeRequest): Promise<unknown>;
@@ -92,6 +99,17 @@ export interface CreateAttractionReportRouteHandlersInput {
 
 const syncRunHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(5)
+});
+
+const sourceCohortJourneyDrilldownQuerySchema = z.object({
+  stepKey: z.enum([
+    "created",
+    "first_call",
+    "confirmed_conversation",
+    "meeting_completed",
+    "contract",
+    "transferred"
+  ])
 });
 
 function createErrorResponse(code: string, details?: unknown) {
@@ -203,6 +221,39 @@ export function createAttractionReportRouteHandlers({
           service.getSourceCohortConversionReport(
             await parseScopedRangeRequest(request, response)
           )
+      });
+    },
+    getSourceCohortConversionJourneyDrilldown: async (
+      request,
+      response,
+      next
+    ) => {
+      if (denyIfMissingAttractionAccess(response)) {
+        return;
+      }
+
+      await sendTimedJson({
+        request,
+        response,
+        next,
+        moduleId: "attraction",
+        route: "source-cohort-conversion-journey-deals",
+        handler: async () => {
+          if (!service.getSourceCohortConversionJourneyDrilldown) {
+            throw new Error(
+              "Source cohort conversion journey drill-down is unavailable."
+            );
+          }
+
+          const rangeRequest = await parseScopedRangeRequest(request, response);
+          const { stepKey } = sourceCohortJourneyDrilldownQuerySchema.parse(
+            request.query
+          );
+          return service.getSourceCohortConversionJourneyDrilldown({
+            ...rangeRequest,
+            stepKey
+          });
+        }
       });
     },
     getActivitiesWorkloadReport: async (request, response, next) => {

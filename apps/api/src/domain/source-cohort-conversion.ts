@@ -11,6 +11,7 @@ import type {
   SourceCohortConversionReportSnapshot,
   SourceCohortConversionRow,
   SourceCohortConversionTargetGroupRow,
+  SourceCohortConversionJourneyCoreStepKey,
   StageCatalogEntry,
   StageHistorySnapshot
 } from "@bitrix24-reporting/contracts";
@@ -43,6 +44,10 @@ export interface SourceCohortConversionInput {
   events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   includeTrajectory?: boolean;
+  journeyDrilldown?: {
+    stepKey: SourceCohortConversionJourneyCoreStepKey;
+    dealUrlBuilder?: (dealId: string) => string | null;
+  };
   now?: Date;
 }
 
@@ -576,6 +581,9 @@ export function buildSourceCohortConversionReport(
           eventVisitFacts: input.eventVisitFacts ?? [],
           events: input.events ?? [],
           managerDirectory: input.managerDirectory ?? [],
+          ...(input.journeyDrilldown
+            ? { journeyDrilldown: input.journeyDrilldown }
+            : {}),
           ...(input.now ? { now: input.now } : {})
         })
       }
