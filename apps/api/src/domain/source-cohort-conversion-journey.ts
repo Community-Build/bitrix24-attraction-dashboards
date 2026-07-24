@@ -1,7 +1,12 @@
 import type {
+  ReportRange,
+  SourceCohortDealOutcome,
   SourceCohortConversionEventDepthKey,
   SourceCohortConversionJourney,
   SourceCohortConversionJourneyCoreStepKey,
+  SourceCohortConversionJourneyDealRow,
+  SourceCohortConversionJourneyDealStatus,
+  SourceCohortConversionJourneyDrilldown,
   SourceCohortConversionJourneyEventStepKey
 } from "@bitrix24-reporting/contracts";
 
@@ -17,6 +22,16 @@ export interface SourceCohortConversionJourneyDealFacts {
   attendedEventAts: string[];
   contractAt: string | null;
   transferredAt: string | null;
+}
+
+export interface SourceCohortConversionJourneyDrilldownDealFacts
+  extends SourceCohortConversionJourneyDealFacts {
+  dealUrl: string | null;
+  managerId: string;
+  managerName: string;
+  currentStageId: string;
+  currentStageName: string;
+  outcome: SourceCohortDealOutcome;
 }
 
 type CoreStepDefinition = {
@@ -35,14 +50,14 @@ const CORE_STEP_DEFINITIONS: CoreStepDefinition[] = [
   },
   {
     stepKey: "first_call",
-    label: "Первый звонок",
+    label: "Первая попытка",
     evidence:
       "Первая прямая доверенная исходящая попытка звонка после создания, независимо от результата.",
     getDate: (facts) => facts.firstCallAt
   },
   {
     stepKey: "confirmed_conversation",
-    label: "Подтвержденный разговор",
+    label: "Успешный разговор",
     evidence:
       "Первый прямой исходящий звонок после создания: есть соединение и разговор дольше 30 секунд.",
     getDate: (facts) => facts.confirmedConversationAt
@@ -74,6 +89,27 @@ const CORE_STEP_DEFINITIONS: CoreStepDefinition[] = [
     getDate: (facts) => facts.transferredAt
   }
 ];
+
+const VISIBLE_CORE_STEP_KEYS: SourceCohortConversionJourneyCoreStepKey[] = [
+  "created",
+  "first_call",
+  "confirmed_conversation",
+  "meeting_completed",
+  "contract",
+  "transferred"
+];
+
+const STEP_SLA = {
+  first_call: { days: 3, basis: "created" },
+  confirmed_conversation: { days: 3, basis: "created" },
+  meeting_scheduled: { days: 7, basis: "created" },
+  meeting_completed: { days: 7, basis: "created" },
+  contract: { days: 7, basis: "previous" },
+  transferred: { days: 14, basis: "previous" }
+} satisfies Record<
+  Exclude<SourceCohortConversionJourneyCoreStepKey, "created">,
+  { days: number; basis: "created" | "previous" }
+>;
 
 function timestamp(value: string | null | undefined) {
   const parsed = Date.parse(value ?? "");
@@ -369,6 +405,341 @@ function buildEventDepthRows(
       )
     };
   });
+}
+
+type DealClassification = Pick<
+  SourceCohortConversionJourneyDealRow,
+  "status" | "statusLabel" | "reason" | "ageFromAt" | "ageDays" | "slaDays"
+>;
+
+const STATUS_LABELS: Record<SourceCohortConversionJourneyDealStatus, string> = {
+  advanced: "Перешла дальше",
+  within_sla: "В пределах SLA",
+  stuck: "Застряла",
+  lost: "Завершена потерей",
+  returned: "Возвращена в лидген",
+  data_gap: "Проверить данные"
+};
+
+const STATUS_SORT_ORDER: Record<SourceCohortConversionJourneyDealStatus, number> = {
+  stuck: 0,
+  lost: 1,
+  returned: 2,
+  data_gap: 3,
+  within_sla: 4,
+  advanced: 5
+};
+
+function visibleCoreStepDefinitions() {
+  const byKey = new Map(
+    CORE_STEP_DEFINITIONS.map((definition) => [definition.stepKey, definition])
+  );
+
+  return VISIBLE_CORE_STEP_KEYS.map((stepKey) => byKey.get(stepKey)).filter(
+    (definition): definition is CoreStepDefinition => Boolean(definition)
+  );
+}
+
+function toDaysFromDuration(value: number | null) {
+  return value === null ? null : Number((value / DAY_MS).toFixed(1));
+}
+
+function formatDaysForReason(value: number | null) {
+  return new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: 1
+  }).format(value ?? 0);
+}
+
+function dataGap(reason: string): DealClassification {
+  return {
+    status: "data_gap",
+    statusLabel: STATUS_LABELS.data_gap,
+    reason,
+    ageFromAt: null,
+    ageDays: null,
+    slaDays: null
+  };
+}
+
+function classifyMissingTarget(input: {
+  facts: SourceCohortConversionJourneyDrilldownDealFacts;
+  previous: CoreStepDefinition;
+  target: CoreStepDefinition;
+  asOf: string;
+}): DealClassification {
+  const previousAt = input.previous.getDate(input.facts);
+  const targetAt = input.target.getDate(input.facts);
+
+  if (targetAt) {
+    return dataGap(
+      `Факт «${input.target.label}» есть, но его время не следует за шагом «${input.previous.label}». Проверьте хронологию и привязку факта.`
+    );
+  }
+
+  if (input.facts.outcome === "returned") {
+    return {
+      status: "returned",
+      statusLabel: STATUS_LABELS.returned,
+      reason: `Сделка возвращена в лидген на этапе «${input.facts.currentStageName}»; это отдельный маршрут, а не потеря.`,
+      ageFromAt: null,
+      ageDays: null,
+      slaDays: null
+    };
+  }
+
+  if (input.facts.outcome === "lost") {
+    return {
+      status: "lost",
+      statusLabel: STATUS_LABELS.lost,
+      reason: `Текущий итог — «${input.facts.currentStageName}»; подтвержденного шага «${input.target.label}» нет.`,
+      ageFromAt: previousAt,
+      ageDays: toDaysFromDuration(durationMs(previousAt, input.asOf)),
+      slaDays: null
+    };
+  }
+
+  if (input.facts.outcome === "won") {
+    return dataGap(
+      `Сделка уже передана в клуб, но подтвержденного шага «${input.target.label}» в траектории нет.`
+    );
+  }
+
+  if (input.target.stepKey === "created") {
+    return dataGap("У сделки нет корректной даты создания внутри выбранной когорты.");
+  }
+
+  const sla = STEP_SLA[input.target.stepKey];
+  const ageFromAt = sla.basis === "created" ? input.facts.createdAt : previousAt;
+  const ageDuration = durationMs(ageFromAt, input.asOf);
+  if (ageDuration === null) {
+    return dataGap(
+      `Нельзя рассчитать срок до шага «${input.target.label}»: отсутствует корректная опорная дата.`
+    );
+  }
+
+  const ageDays = toDaysFromDuration(ageDuration);
+  const isStuck = ageDuration > sla.days * DAY_MS;
+
+  return {
+    status: isStuck ? "stuck" : "within_sla",
+    statusLabel: STATUS_LABELS[isStuck ? "stuck" : "within_sla"],
+    reason: isStuck
+      ? `Подтвержденного шага «${input.target.label}» нет: прошло ${formatDaysForReason(ageDays)} дн. при SLA ${sla.days} дн.`
+      : `Подтвержденного шага «${input.target.label}» пока нет: прошло ${formatDaysForReason(ageDays)} дн. из SLA ${sla.days} дн.`,
+    ageFromAt,
+    ageDays,
+    slaDays: sla.days
+  };
+}
+
+function classifyReachedDeal(input: {
+  facts: SourceCohortConversionJourneyDrilldownDealFacts;
+  previous: CoreStepDefinition | null;
+  selected: CoreStepDefinition;
+  next: CoreStepDefinition | null;
+  asOf: string;
+}): DealClassification {
+  const selectedAt = input.selected.getDate(input.facts);
+
+  if (
+    input.previous &&
+    durationMs(input.previous.getDate(input.facts), selectedAt) === null
+  ) {
+    return dataGap(
+      `Факт «${input.selected.label}» найден, но строгий переход после «${input.previous.label}» не подтвержден по времени.`
+    );
+  }
+
+  if (!input.next) {
+    return {
+      status: "advanced",
+      statusLabel: "Результат достигнут",
+      reason: "Финальный шаг «Передано в клуб» подтвержден.",
+      ageFromAt: selectedAt,
+      ageDays: 0,
+      slaDays: null
+    };
+  }
+
+  if (durationMs(selectedAt, input.next.getDate(input.facts)) !== null) {
+    return {
+      status: "advanced",
+      statusLabel: STATUS_LABELS.advanced,
+      reason: `Следующий шаг «${input.next.label}» подтвержден после выбранного шага.`,
+      ageFromAt: selectedAt,
+      ageDays: toDaysFromDuration(
+        durationMs(selectedAt, input.next.getDate(input.facts))
+      ),
+      slaDays:
+        input.next.stepKey === "created" ? null : STEP_SLA[input.next.stepKey].days
+    };
+  }
+
+  return classifyMissingTarget({
+    facts: input.facts,
+    previous: input.selected,
+    target: input.next,
+    asOf: input.asOf
+  });
+}
+
+function toDrilldownDealRow(input: {
+  facts: SourceCohortConversionJourneyDrilldownDealFacts;
+  previous: CoreStepDefinition | null;
+  selected: CoreStepDefinition;
+  next: CoreStepDefinition | null;
+  classification: DealClassification;
+}): SourceCohortConversionJourneyDealRow {
+  return {
+    dealId: input.facts.dealId,
+    dealUrl: input.facts.dealUrl,
+    managerId: input.facts.managerId,
+    managerName: input.facts.managerName,
+    currentStageId: input.facts.currentStageId,
+    currentStageName: input.facts.currentStageName,
+    outcome: input.facts.outcome,
+    ...input.classification,
+    createdAt: input.facts.createdAt,
+    previousStepAt: input.previous?.getDate(input.facts) ?? null,
+    selectedStepAt: input.selected.getDate(input.facts),
+    nextStepAt: input.next?.getDate(input.facts) ?? null
+  };
+}
+
+function sortDrilldownDeals(rows: SourceCohortConversionJourneyDealRow[]) {
+  return rows.sort((left, right) => {
+    const byStatus = STATUS_SORT_ORDER[left.status] - STATUS_SORT_ORDER[right.status];
+    if (byStatus !== 0) {
+      return byStatus;
+    }
+
+    const byAge = (right.ageDays ?? -1) - (left.ageDays ?? -1);
+    return byAge !== 0
+      ? byAge
+      : left.dealId.localeCompare(right.dealId, "ru", { numeric: true });
+  });
+}
+
+export function buildSourceCohortConversionJourneyDrilldown(input: {
+  range: ReportRange;
+  dealFacts: SourceCohortConversionJourneyDrilldownDealFacts[];
+  stepKey: SourceCohortConversionJourneyCoreStepKey;
+  asOf: string;
+}): SourceCohortConversionJourneyDrilldown {
+  const definitions = visibleCoreStepDefinitions();
+  const selectedIndex = definitions.findIndex(
+    (definition) => definition.stepKey === input.stepKey
+  );
+  const selected = definitions[selectedIndex];
+  if (!selected) {
+    throw new Error(`Unsupported conversion journey step: ${input.stepKey}`);
+  }
+
+  const previous = definitions[selectedIndex - 1] ?? null;
+  const next = definitions[selectedIndex + 1] ?? null;
+  const reached = input.dealFacts.filter((facts) =>
+    isReachedAfterCreation(facts, selected.getDate(facts))
+  );
+  const missed = previous
+    ? input.dealFacts.filter(
+        (facts) =>
+          isReachedAfterCreation(facts, previous.getDate(facts)) &&
+          durationMs(previous.getDate(facts), selected.getDate(facts)) === null
+      )
+    : [];
+  const notAdvanced = next
+    ? input.dealFacts.filter(
+        (facts) =>
+          isReachedAfterCreation(facts, selected.getDate(facts)) &&
+          durationMs(selected.getDate(facts), next.getDate(facts)) === null
+      )
+    : [];
+
+  const reachedRows = sortDrilldownDeals(
+    reached.map((facts) =>
+      toDrilldownDealRow({
+        facts,
+        previous,
+        selected,
+        next,
+        classification: classifyReachedDeal({
+          facts,
+          previous,
+          selected,
+          next,
+          asOf: input.asOf
+        })
+      })
+    )
+  );
+  const missedRows = previous
+    ? sortDrilldownDeals(
+        missed.map((facts) =>
+          toDrilldownDealRow({
+            facts,
+            previous,
+            selected,
+            next,
+            classification: classifyMissingTarget({
+              facts,
+              previous,
+              target: selected,
+              asOf: input.asOf
+            })
+          })
+        )
+      )
+    : [];
+  const notAdvancedRows = next
+    ? sortDrilldownDeals(
+        notAdvanced.map((facts) =>
+          toDrilldownDealRow({
+            facts,
+            previous,
+            selected,
+            next,
+            classification: classifyMissingTarget({
+              facts,
+              previous: selected,
+              target: next,
+              asOf: input.asOf
+            })
+          })
+        )
+      )
+    : [];
+
+  return {
+    range: input.range,
+    drilldownKind: "fact",
+    stepKey: selected.stepKey,
+    stepLabel: selected.label,
+    previousStepKey: previous?.stepKey ?? null,
+    previousStepLabel: previous?.label ?? null,
+    nextStepKey: next?.stepKey ?? null,
+    nextStepLabel: next?.label ?? null,
+    asOf: input.asOf,
+    views: {
+      reached: {
+        viewKey: "reached",
+        label: "Дошли сюда",
+        count: reachedRows.length,
+        deals: reachedRows
+      },
+      missed: {
+        viewKey: "missed",
+        label: previous ? `Не дошли из «${previous.label}»` : "Нет предыдущего шага",
+        count: missedRows.length,
+        deals: missedRows
+      },
+      notAdvanced: {
+        viewKey: "not_advanced",
+        label: next ? `Не перешли к «${next.label}»` : "Финальный шаг",
+        count: notAdvancedRows.length,
+        deals: notAdvancedRows
+      }
+    }
+  };
 }
 
 export function buildSourceCohortConversionJourney(input: {

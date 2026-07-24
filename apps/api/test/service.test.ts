@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type {
   ActivitySnapshot,
@@ -3180,6 +3180,139 @@ describe("createReportingService", () => {
     expect(scopedStageFactIds).toEqual(["1"]);
     expect(scopedTouchpointFactIds).toEqual(["1"]);
     expect(scopedEventVisitFactIds).toEqual(["1"]);
+  });
+
+  it("builds a filtered journey drill-down from local data without fetching Bitrix users", async () => {
+    const repository = withReportingRepositoryDefaults({
+      getAllDeals: async () => [
+        {
+          id: "23841",
+          leadId: null,
+          categoryId: "10",
+          stageId: "C10:NEW",
+          stageSemanticId: "P",
+          opportunity: 10000,
+          assignedById: "78",
+          sourceId: "WEB",
+          qualityValue: null,
+          businessClubValue: null,
+          targetGroupValue: null,
+          dateCreate: "2026-06-05T10:00:00.000Z",
+          dateModify: "2026-06-05T10:00:00.000Z",
+          dateClosed: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          utmContent: null,
+          utmTerm: null
+        },
+        {
+          id: "23842",
+          leadId: null,
+          categoryId: "10",
+          stageId: "C10:NEW",
+          stageSemanticId: "P",
+          opportunity: 10000,
+          assignedById: "999",
+          sourceId: "WEB",
+          qualityValue: null,
+          businessClubValue: null,
+          targetGroupValue: null,
+          dateCreate: "2026-06-06T10:00:00.000Z",
+          dateModify: "2026-06-06T10:00:00.000Z",
+          dateClosed: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          utmContent: null,
+          utmTerm: null
+        }
+      ],
+      getStageCatalog: async () => [
+        {
+          entityType: "deal" as const,
+          categoryId: "10",
+          statusId: "C10:NEW",
+          name: "База входящая",
+          semanticId: "P",
+          sortOrder: 10
+        },
+        {
+          entityType: "source" as const,
+          categoryId: null,
+          statusId: "WEB",
+          name: "Website",
+          semanticId: null,
+          sortOrder: 10
+        }
+      ],
+      getManagerWhitelistSettings: async () => [
+        {
+          moduleKey: "attraction",
+          managerId: "999",
+          managerName: "999",
+          enabled: true,
+          sortOrder: 0,
+          updatedAt: "2026-06-01T00:00:00.000Z"
+        }
+      ]
+    });
+    const fetchUsers = vi.fn(async () => []);
+    const service = createReportingService({
+      dealCategoryIds: ["10"],
+      qualityFieldName: "UF_CRM_TEST",
+      bitrixPortalHost: "example.bitrix24.ru",
+      repository,
+      client: {
+        fetchUsers
+      } as never,
+      defaultPeriodDays: 30,
+      now: () => new Date("2026-06-30T12:00:00.000Z")
+    });
+
+    const drilldown = await service.getSourceCohortConversionJourneyDrilldown({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      filters: {
+        managerIds: ["999"]
+      },
+      stepKey: "created"
+    });
+
+    expect(drilldown.views.reached.deals).toHaveLength(1);
+    expect(drilldown.views.notAdvanced.deals).toHaveLength(1);
+    expect(drilldown.views.notAdvanced.deals[0]).toMatchObject({
+      dealId: "23842",
+      dealUrl: "https://example.bitrix24.ru/crm/deal/details/23842/",
+      managerId: "999",
+      managerName: "999",
+      currentStageName: "База входящая",
+      status: "stuck"
+    });
+    expect(drilldown.views.notAdvanced.deals[0]).not.toHaveProperty("title");
+    expect(drilldown.views.notAdvanced.deals[0]).not.toHaveProperty("contactId");
+    expect(fetchUsers).not.toHaveBeenCalled();
+
+    await expect(
+      service.getSourceCohortConversionJourneyDrilldown({
+        range: {
+          from: "2026-06-01T00:00:00.000Z",
+          to: "2026-06-30T23:59:59.999Z"
+        },
+        filters: {
+          managerIds: ["999"]
+        },
+        drilldownKind: "crm_stage",
+        stepKey: "C10:UNKNOWN"
+      })
+    ).rejects.toMatchObject({
+      name: "SourceCohortConversionStageNotFoundError",
+      code: "SOURCE_COHORT_CRM_STAGE_NOT_FOUND",
+      stageId: "C10:UNKNOWN"
+    });
+    expect(fetchUsers).not.toHaveBeenCalled();
   });
 
   it("builds the cohort report from the latest twelve calendar months regardless of selected ranges", async () => {

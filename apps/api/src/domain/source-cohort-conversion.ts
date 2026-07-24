@@ -11,6 +11,8 @@ import type {
   SourceCohortConversionReportSnapshot,
   SourceCohortConversionRow,
   SourceCohortConversionTargetGroupRow,
+  SourceCohortDealOutcome,
+  SourceCohortConversionJourneyCoreStepKey,
   StageCatalogEntry,
   StageHistorySnapshot
 } from "@bitrix24-reporting/contracts";
@@ -25,6 +27,7 @@ import {
   resolveManagerName,
   toMonthBucket
 } from "./report-dimensions.js";
+import { resolveSourceCohortDealOutcome } from "./source-cohort-deal-outcome.js";
 
 const UNSPECIFIED_BUSINESS_CLUB = "UNSPECIFIED";
 const UNSPECIFIED_BUSINESS_CLUB_LABEL = "Без бизнес-клуба заказчика";
@@ -43,10 +46,21 @@ export interface SourceCohortConversionInput {
   events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   includeTrajectory?: boolean;
+  journeyDrilldown?:
+    | {
+        drilldownKind?: "fact";
+        stepKey: SourceCohortConversionJourneyCoreStepKey;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      }
+    | {
+        drilldownKind: "crm_stage";
+        stepKey: string;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      };
   now?: Date;
 }
 
-type SourceCohortDealOutcome = {
+type SourceCohortDealRecord = {
   deal: DealSnapshot;
   sourceKey: string;
   sourceLabel: string;
@@ -58,7 +72,7 @@ type SourceCohortDealOutcome = {
   managerName: string;
   currentStageId: string;
   currentStageName: string;
-  outcome: "won" | "lost" | "open";
+  outcome: SourceCohortDealOutcome;
   wonAt: string | null;
   targetGroupKey: string;
   targetGroupLabel: string;
@@ -68,6 +82,7 @@ type SourceCohortBaseAccumulator = {
   createdDeals: number;
   wonDeals: number;
   lostDeals: number;
+  returnedDeals: number;
   openDeals: number;
   totalWinDurationMs: number;
   winDurationCount: number;
@@ -238,6 +253,7 @@ function createSourceCohortBaseAccumulator(): SourceCohortBaseAccumulator {
     createdDeals: 0,
     wonDeals: 0,
     lostDeals: 0,
+    returnedDeals: 0,
     openDeals: 0,
     totalWinDurationMs: 0,
     winDurationCount: 0,
@@ -247,7 +263,7 @@ function createSourceCohortBaseAccumulator(): SourceCohortBaseAccumulator {
 
 function addSourceCohortOutcome(
   accumulator: SourceCohortBaseAccumulator,
-  outcome: SourceCohortDealOutcome
+  outcome: SourceCohortDealRecord
 ) {
   accumulator.createdDeals += 1;
 
@@ -263,6 +279,8 @@ function addSourceCohortOutcome(
     }
   } else if (outcome.outcome === "lost") {
     accumulator.lostDeals += 1;
+  } else if (outcome.outcome === "returned") {
+    accumulator.returnedDeals += 1;
   } else {
     accumulator.openDeals += 1;
     const current = accumulator.openStageBreakdown.get(outcome.currentStageId) ?? {
@@ -296,6 +314,7 @@ function toSourceCohortManagerRow(
     createdDeals: row.createdDeals,
     wonDeals: row.wonDeals,
     lostDeals: row.lostDeals,
+    returnedDeals: row.returnedDeals,
     openDeals: row.openDeals,
     winRate: toRate(row.wonDeals, row.createdDeals),
     averageDaysToWin: toAverageDays(row.totalWinDurationMs, row.winDurationCount),
@@ -328,6 +347,7 @@ function toSourceCohortRow(
     createdDeals: row.createdDeals,
     wonDeals: row.wonDeals,
     lostDeals: row.lostDeals,
+    returnedDeals: row.returnedDeals,
     openDeals: row.openDeals,
     winRate: toRate(row.wonDeals, row.createdDeals),
     averageDaysToWin: toAverageDays(row.totalWinDurationMs, row.winDurationCount),
@@ -432,6 +452,11 @@ export function buildSourceCohortConversionReport(
       .filter((entry) => entry.entityType === "deal")
       .map((entry) => [entry.statusId, entry.name])
   );
+  const dealStages = new Map(
+    input.stageCatalog
+      .filter((entry) => entry.entityType === "deal")
+      .map((entry) => [entry.statusId, entry])
+  );
   const scopedDeals = input.deals.filter((deal) =>
     allowedCategoryIds.has(normalizeCategoryId(deal.categoryId))
   );
@@ -451,13 +476,16 @@ export function buildSourceCohortConversionReport(
     const customerKey = resolveBusinessClubValue(deal);
     const managerId = deal.assignedById ?? UNASSIGNED_MANAGER_ID;
     const wonAt = resolveSourceCohortWonAt(deal, stageHistoryMap, wonStageIds);
-    const outcome: SourceCohortDealOutcome["outcome"] = wonAt
-      ? "won"
-      : deal.stageSemanticId === "F"
-        ? "lost"
-        : "open";
+    const currentStage = dealStages.get(deal.stageId);
+    const outcome = resolveSourceCohortDealOutcome({
+      wonAt,
+      stageId: deal.stageId,
+      stageName: currentStage?.name ?? deal.stageId,
+      stageSemanticId: currentStage?.semanticId ?? deal.stageSemanticId,
+      isWonStage: wonStageIds.has(deal.stageId)
+    });
     const targetGroupKey = resolveTargetGroupValue(deal);
-    const outcomeRow: SourceCohortDealOutcome = {
+    const outcomeRow: SourceCohortDealRecord = {
       deal,
       sourceKey: source.key,
       sourceLabel: source.label,
@@ -530,6 +558,7 @@ export function buildSourceCohortConversionReport(
     totalCreatedDeals: totals.createdDeals,
     totalWonDeals: totals.wonDeals,
     totalLostDeals: totals.lostDeals,
+    totalReturnedDeals: totals.returnedDeals,
     totalOpenDeals: totals.openDeals,
     winRate: toRate(totals.wonDeals, totals.createdDeals),
     averageDaysToWin: toAverageDays(
@@ -576,6 +605,9 @@ export function buildSourceCohortConversionReport(
           eventVisitFacts: input.eventVisitFacts ?? [],
           events: input.events ?? [],
           managerDirectory: input.managerDirectory ?? [],
+          ...(input.journeyDrilldown
+            ? { journeyDrilldown: input.journeyDrilldown }
+            : {}),
           ...(input.now ? { now: input.now } : {})
         })
       }

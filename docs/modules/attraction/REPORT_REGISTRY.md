@@ -39,6 +39,11 @@ Stable dashboard anchors used by ontology report bindings:
 - Stage identity is resolved by stable stage IDs/semantics first:
   `C10:MEETING` for the meeting stage and `C10:CONTRACT` for the contract
   stage. Russian name matching is only a fallback for incomplete catalogs.
+- Current deal outcome is resolved once for aggregates and both drill-down
+  kinds. `C10:UC_XEEP0A` (`Отклонено потребителем`) remains an open,
+  repairable route even though Bitrix publishes semantic `F`;
+  `C10:UC_EA3R76` (`Возврат в Лидген(неквал)`) is counted separately as
+  `returned`, never as an open or lost deal.
 - Stage transition lines: `SourceCohortConversionReport.trajectory.stageTransitions`
   is built from consecutive stages in the canonical per-deal timeline. A
   transition is counted once per deal for the pair `fromStageId -> toStageId`;
@@ -67,6 +72,38 @@ Stable dashboard anchors used by ontology report bindings:
   It is not proof that the meeting happened and it is not the denominator for
   `meeting_completed`; completed-meeting conversion is conditional on the
   confirmed-conversation step.
+- Deal drill-down is loaded lazily from
+  `/api/reports/source-cohort-conversion/journey-deals` for one visible journey
+  step and the same range, manager, source, business-club, and target-group
+  filters as the aggregate report. It exposes three reconciled views:
+  `reached` contains the deals counted at the selected step, `missed` contains
+  deals in the strict previous-step denominator that did not make the selected
+  transition, and `not_advanced` contains deals at the selected step without a
+  strict transition to the next visible step. The route reads the local
+  SQLite-backed reporting snapshot and never performs a direct Bitrix read
+  during page rendering.
+- The same lazy route accepts `drilldownKind=crm_stage` with a canonical stage
+  ID from `trajectory.stageNodes`. In the existing `CRM-этапы` table, each
+  visible stage row opens the same three reconciled views from canonical stage
+  history. A shortcut to a later productive stage is labeled as a skipped
+  stage, not a loss; terminal loss stages open a reached-only deal list. When a
+  deal enters the same stage more than once, the current cycle uses the latest
+  selected-stage entry and only a next-stage entry after that timestamp.
+- Drill-down rows may expose only deal ID, a generated Bitrix deal URL, current
+  manager, current stage, outcome, relevant timestamps, deterministic status,
+  and deterministic reason. Deal titles, contact names, phones, emails, and raw
+  Bitrix payloads are excluded from the contract and UI.
+- Drill-down status is operational, not predictive:
+  `advanced` means the strict next transition exists; `within_sla` and `stuck`
+  mean the required fact is still missing before or after the configured
+  threshold; `lost` means the deal is already in a loss outcome; `returned`
+  means the deal is currently in the separate return-to-leadgen route;
+  `data_gap` means the observed chronology or successful outcome conflicts
+  with the required facts. The current thresholds are 3 days from creation to
+  first attempt or confirmed conversation, 7 days from creation to completed
+  meeting, 7 days from completed meeting to contract, and 14 days from
+  contract to transfer. These thresholds classify rows; they do not change the
+  aggregate journey numerator or denominator.
 - Fact-step chain:
   `SourceCohortConversionReport.trajectory.factSteps` is the canonical ordered
   chain `created -> first_successful_call -> meeting_stage -> completed_meeting

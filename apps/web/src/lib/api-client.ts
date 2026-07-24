@@ -82,6 +82,10 @@ import type {
   SourceCohortConversionReport,
   SourceCohortConversionReportSnapshot,
   SourceCohortConversionEventDepthKey,
+  SourceCohortConversionJourneyCoreStepKey,
+  SourceCohortConversionJourneyDealStatus,
+  SourceCohortConversionJourneyDrilldown,
+  SourceCohortConversionJourneyDrilldownKind,
   SourceCohortConversionJourneyStepKey,
   SourceCohortTrajectoryActionKey,
   SourceCohortTrajectoryAvailabilityStatus,
@@ -2406,6 +2410,29 @@ function normalizeSourceCohortConversionJourneyStepKey(
     : 'created'
 }
 
+function normalizeSourceCohortConversionJourneyCoreStepKey(
+  value: unknown,
+): SourceCohortConversionJourneyCoreStepKey {
+  const stepKey = normalizeSourceCohortConversionJourneyStepKey(value)
+  return stepKey === 'event_1' || stepKey === 'event_2' || stepKey === 'event_3_plus'
+    ? 'created'
+    : stepKey
+}
+
+function normalizeSourceCohortConversionJourneyDealStatus(
+  value: unknown,
+): SourceCohortConversionJourneyDealStatus {
+  const status = asString(value, 'data_gap')
+  return status === 'advanced' ||
+    status === 'within_sla' ||
+    status === 'stuck' ||
+    status === 'lost' ||
+    status === 'returned' ||
+    status === 'data_gap'
+    ? status
+    : 'data_gap'
+}
+
 function normalizeSourceCohortConversionEventDepthKey(
   value: unknown,
 ): SourceCohortConversionEventDepthKey {
@@ -2464,6 +2491,83 @@ function normalizeSourceCohortConversionJourney(value: unknown) {
         medianDaysToContract: asNullableNumber(row.medianDaysToContract),
       }
     }),
+  }
+}
+
+function normalizeSourceCohortConversionJourneyDrilldown(
+  value: unknown,
+): SourceCohortConversionJourneyDrilldown {
+  const data = isRecord(value) ? value : {}
+  const views = isRecord(data.views) ? data.views : {}
+  const normalizeDeal = (entry: unknown) => {
+    const row = isRecord(entry) ? entry : {}
+    const outcome = asString(row.outcome, 'open')
+    const normalizedOutcome: 'open' | 'lost' | 'won' | 'returned' =
+      outcome === 'lost' || outcome === 'won' || outcome === 'returned'
+        ? outcome
+        : 'open'
+
+    return {
+      dealId: asString(row.dealId),
+      dealUrl: asNullableString(row.dealUrl),
+      managerId: asString(row.managerId),
+      managerName: asString(row.managerName, asString(row.managerId)),
+      currentStageId: asString(row.currentStageId),
+      currentStageName: asString(
+        row.currentStageName,
+        asString(row.currentStageId),
+      ),
+      outcome: normalizedOutcome,
+      status: normalizeSourceCohortConversionJourneyDealStatus(row.status),
+      statusLabel: asString(row.statusLabel),
+      reason: asString(row.reason),
+      createdAt: asString(row.createdAt),
+      previousStepAt: asNullableString(row.previousStepAt),
+      selectedStepAt: asNullableString(row.selectedStepAt),
+      nextStepAt: asNullableString(row.nextStepAt),
+      ageFromAt: asNullableString(row.ageFromAt),
+      ageDays: asNullableNumber(row.ageDays),
+      slaDays: asNullableNumber(row.slaDays),
+    }
+  }
+  const normalizeView = (
+    entry: unknown,
+    viewKey: 'reached' | 'missed' | 'not_advanced',
+  ) => {
+    const row = isRecord(entry) ? entry : {}
+    const deals = asArray(row.deals, normalizeDeal)
+    return {
+      viewKey,
+      label: asString(row.label),
+      count: asNumber(row.count, deals.length),
+      deals,
+    }
+  }
+  const previousStepKey = asNullableString(data.previousStepKey)
+  const nextStepKey = asNullableString(data.nextStepKey)
+  const rawDrilldownKind = asString(data.drilldownKind, 'fact')
+  const drilldownKind: SourceCohortConversionJourneyDrilldownKind =
+    rawDrilldownKind === 'crm_stage' ? 'crm_stage' : 'fact'
+  const normalizeStepKey = (value: unknown) =>
+    drilldownKind === 'fact'
+      ? normalizeSourceCohortConversionJourneyCoreStepKey(value)
+      : asString(value)
+
+  return {
+    range: normalizeRange(data.range),
+    drilldownKind,
+    stepKey: normalizeStepKey(data.stepKey),
+    stepLabel: asString(data.stepLabel, asString(data.stepKey)),
+    previousStepKey: previousStepKey ? normalizeStepKey(previousStepKey) : null,
+    previousStepLabel: asNullableString(data.previousStepLabel),
+    nextStepKey: nextStepKey ? normalizeStepKey(nextStepKey) : null,
+    nextStepLabel: asNullableString(data.nextStepLabel),
+    asOf: asString(data.asOf),
+    views: {
+      reached: normalizeView(views.reached, 'reached'),
+      missed: normalizeView(views.missed, 'missed'),
+      notAdvanced: normalizeView(views.notAdvanced, 'not_advanced'),
+    },
   }
 }
 
@@ -2634,6 +2738,7 @@ function normalizeSourceCohortTrajectoryBreakdownRow(value: unknown) {
     wonDeals: asNumber(row.wonDeals),
     wonRate: asNumber(row.wonRate),
     lostDeals: asNumber(row.lostDeals),
+    returnedDeals: asNumber(row.returnedDeals),
     openDeals: asNumber(row.openDeals),
     meetingStageWithoutFactDeals: asNumber(row.meetingStageWithoutFactDeals),
     completedMeetingWithoutNextStageDeals: asNumber(
@@ -2873,6 +2978,7 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
       medianDaysOnContractStage: asNullableNumber(signals.medianDaysOnContractStage),
       wonDeals: asNumber(signals.wonDeals),
       lostDeals: asNumber(signals.lostDeals),
+      returnedDeals: asNumber(signals.returnedDeals),
       openDeals: asNumber(signals.openDeals),
     },
     managerDiagnostics: asArray(value.managerDiagnostics, (entry) => {
@@ -3007,6 +3113,7 @@ function normalizeSourceCohortConversionSnapshot(
     totalCreatedDeals: asNumber(data.totalCreatedDeals),
     totalWonDeals: asNumber(data.totalWonDeals),
     totalLostDeals: asNumber(data.totalLostDeals),
+    totalReturnedDeals: asNumber(data.totalReturnedDeals),
     totalOpenDeals: asNumber(data.totalOpenDeals),
     winRate: asNumber(data.winRate),
     averageDaysToWin: asNumber(data.averageDaysToWin),
@@ -3033,6 +3140,7 @@ function normalizeSourceCohortConversionSnapshot(
         createdDeals: asNumber(item.createdDeals),
         wonDeals: asNumber(item.wonDeals),
         lostDeals: asNumber(item.lostDeals),
+        returnedDeals: asNumber(item.returnedDeals),
         openDeals: asNumber(item.openDeals),
         winRate: asNumber(item.winRate),
         averageDaysToWin: asNumber(item.averageDaysToWin),
@@ -3044,6 +3152,7 @@ function normalizeSourceCohortConversionSnapshot(
             createdDeals: asNumber(row.createdDeals),
             wonDeals: asNumber(row.wonDeals),
             lostDeals: asNumber(row.lostDeals),
+            returnedDeals: asNumber(row.returnedDeals),
             openDeals: asNumber(row.openDeals),
             winRate: asNumber(row.winRate),
             averageDaysToWin: asNumber(row.averageDaysToWin),
@@ -5098,6 +5207,21 @@ export const apiClient = {
       buildUrl('/api/reports/source-cohort-conversion', buildQueryParams(query)),
       { method: 'GET' },
       normalizeSourceCohortConversionReport,
+    )
+  },
+  async getSourceCohortConversionJourneyDrilldown(
+    query: DashboardQuery,
+    stepKey: string,
+    drilldownKind: SourceCohortConversionJourneyDrilldownKind = 'fact',
+  ) {
+    return requestJson(
+      buildUrl('/api/reports/source-cohort-conversion/journey-deals', {
+        ...buildQueryParams(query),
+        drilldownKind,
+        stepKey,
+      }),
+      { method: 'GET' },
+      normalizeSourceCohortConversionJourneyDrilldown,
     )
   },
   async getOperationalDashboardReport(query: DashboardQuery) {

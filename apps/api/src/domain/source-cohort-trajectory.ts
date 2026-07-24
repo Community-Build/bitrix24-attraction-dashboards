@@ -6,11 +6,13 @@ import type {
   EventVisitFactSnapshot,
   ManagerDirectoryEntry,
   ReportRange,
+  SourceCohortDealOutcome,
   SourceCohortTrajectoryActionKey,
   SourceCohortTrajectoryBreakdownRow,
   SourceCohortTrajectoryDataQuality,
   SourceCohortEventPerformance,
   SourceCohortEventPerformanceRow,
+  SourceCohortConversionJourneyCoreStepKey,
   SourceCohortTrajectoryFactStepKey,
   SourceCohortTrajectoryManagerRow,
   SourceCohortTrajectoryQualityStatus,
@@ -29,7 +31,18 @@ import {
   resolveDealSource,
   resolveManagerName
 } from "./report-dimensions.js";
-import { buildSourceCohortConversionJourney } from "./source-cohort-conversion-journey.js";
+import {
+  buildSourceCohortConversionJourney,
+  buildSourceCohortConversionJourneyDrilldown
+} from "./source-cohort-conversion-journey.js";
+import {
+  buildSourceCohortConversionStageDrilldown,
+  type SourceCohortConversionStageDrilldownStageKind
+} from "./source-cohort-conversion-stage-drilldown.js";
+import {
+  resolveSourceCohortDealOutcome,
+  resolveSourceCohortStageRoute
+} from "./source-cohort-deal-outcome.js";
 import { buildLossShape } from "./source-cohort-trajectory-loss-shape.js";
 import { buildManagerDiagnostics } from "./source-cohort-trajectory-manager-diagnostics.js";
 
@@ -44,7 +57,6 @@ const LOW_SAMPLE_MIN_DEALS = 10;
 const RELIABLE_SAMPLE_MIN_DEALS = 30;
 const KNOWN_MEETING_STAGE_IDS = new Set(["C10:MEETING"]);
 const KNOWN_CONTRACT_STAGE_IDS = new Set(["C10:CONTRACT"]);
-const LOSS_STAGE_NAME_PATTERN = /корзин|возврат|неквал|проиг|отклон|отказ|утер/i;
 
 type SpeedBucketDefinition = {
   bucketKey: string;
@@ -136,6 +148,17 @@ interface SourceCohortTrajectoryInput {
   events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   now?: Date;
+  journeyDrilldown?:
+    | {
+        drilldownKind?: "fact";
+        stepKey: SourceCohortConversionJourneyCoreStepKey;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      }
+    | {
+        drilldownKind: "crm_stage";
+        stepKey: string;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      };
 }
 
 interface StageSequenceEntry {
@@ -196,6 +219,7 @@ interface BreakdownAccumulator {
   daysOnContractStage: number[];
   wonDeals: number;
   lostDeals: number;
+  returnedDeals: number;
   openDeals: number;
   meetingStageWithoutFactDeals: number;
   completedMeetingWithoutNextStageDeals: number;
@@ -243,12 +267,29 @@ function median(values: number[]) {
   return toDays((left + right) / 2);
 }
 
-function isLossStage(
+function isTerminalRouteStage(
   stage: Pick<StageSequenceEntry, "stageName" | "semanticId"> & {
     stageId?: string | null;
   }
 ) {
-  return stage.semanticId === "F" || LOSS_STAGE_NAME_PATTERN.test(stage.stageName);
+  const route = resolveSourceCohortStageRoute({
+    stageId: stage.stageId ?? "",
+    stageName: stage.stageName,
+    stageSemanticId: stage.semanticId
+  });
+  return route === "lost" || route === "return";
+}
+
+function resolveStageDrilldownKind(
+  stage: StageSequenceEntry,
+  wonStageIds: ReadonlySet<string>
+): SourceCohortConversionStageDrilldownStageKind {
+  return resolveSourceCohortStageRoute({
+    stageId: stage.stageId,
+    stageName: stage.stageName,
+    stageSemanticId: stage.semanticId,
+    isWonStage: wonStageIds.has(stage.stageId)
+  });
 }
 
 function parsePayload(payloadJson: string | null) {
@@ -812,6 +853,7 @@ function createBreakdownAccumulator(key: string, label: string): BreakdownAccumu
     daysOnContractStage: [],
     wonDeals: 0,
     lostDeals: 0,
+    returnedDeals: 0,
     openDeals: 0,
     meetingStageWithoutFactDeals: 0,
     completedMeetingWithoutNextStageDeals: 0
@@ -853,16 +895,20 @@ function bucketContainsDuration(bucket: SpeedBucketDefinition, durationMs: numbe
   return minMatches && maxMatches;
 }
 
-function isOpenDeal(facts: DealTrajectoryFacts, stageSequence: StageSequenceEntry[]) {
+function resolveDealOutcome(
+  facts: DealTrajectoryFacts,
+  stageSequence: StageSequenceEntry[]
+): SourceCohortDealOutcome {
   const currentStage = stageSequence.find(
     (stage) => stage.stageId === facts.deal.stageId
   );
 
-  return (
-    !facts.wonAt &&
-    facts.deal.stageSemanticId !== "F" &&
-    (!currentStage || !isLossStage(currentStage))
-  );
+  return resolveSourceCohortDealOutcome({
+    wonAt: facts.wonAt,
+    stageId: facts.deal.stageId,
+    stageName: currentStage?.stageName ?? facts.deal.stageId,
+    stageSemanticId: currentStage?.semanticId ?? facts.deal.stageSemanticId
+  });
 }
 
 function toBreakdownRow(row: BreakdownAccumulator): SourceCohortTrajectoryBreakdownRow {
@@ -905,6 +951,7 @@ function toBreakdownRow(row: BreakdownAccumulator): SourceCohortTrajectoryBreakd
     wonDeals: row.wonDeals,
     wonRate: toRate(row.wonDeals, row.totalDeals),
     lostDeals: row.lostDeals,
+    returnedDeals: row.returnedDeals,
     openDeals: row.openDeals,
     meetingStageWithoutFactDeals: row.meetingStageWithoutFactDeals,
     completedMeetingWithoutNextStageDeals:
@@ -1216,7 +1263,7 @@ function addTrajectoryToBreakdown(input: {
   meetingStageId: string | null;
   contractStageId: string | null;
   hasCompletedMeetingWithoutNextStage: boolean;
-  dealIsOpen: boolean;
+  dealOutcome: SourceCohortDealOutcome;
   staleAfterCompletedMeeting: boolean;
   staleOpenContractStage: boolean;
 }) {
@@ -1318,10 +1365,12 @@ function addTrajectoryToBreakdown(input: {
     input.row.contractWithoutWinDeals += 1;
   }
 
-  if (input.facts.wonAt) {
+  if (input.dealOutcome === "won") {
     input.row.wonDeals += 1;
-  } else if (input.dealIsOpen) {
+  } else if (input.dealOutcome === "open") {
     input.row.openDeals += 1;
+  } else if (input.dealOutcome === "returned") {
+    input.row.returnedDeals += 1;
   } else {
     input.row.lostDeals += 1;
   }
@@ -1728,7 +1777,7 @@ function firstForwardStageAfter(input: {
         Number.isFinite(enteredMs) &&
         enteredMs > afterMs &&
         entry.stage.sortOrder > currentStage.sortOrder &&
-        !isLossStage(entry.stage)
+        !isTerminalRouteStage(entry.stage)
       );
     })
     .sort((left, right) => left.enteredAt.localeCompare(right.enteredAt))[0]?.enteredAt ?? null;
@@ -1953,7 +2002,8 @@ export function buildSourceCohortTrajectoryReport(
     });
     const hasCompletedMeetingWithoutNextStage =
       Boolean(facts.completedMeetingAt) && !nextStageAfterCompletedMeetingAt;
-    const dealIsOpen = isOpenDeal(facts, stageSequence);
+    const dealOutcome = resolveDealOutcome(facts, stageSequence);
+    const dealIsOpen = dealOutcome === "open";
     const staleAfterCompletedMeeting =
       hasCompletedMeetingWithoutNextStage &&
       dealIsOpen &&
@@ -1975,7 +2025,7 @@ export function buildSourceCohortTrajectoryReport(
       meetingStageId: meetingStage?.stageId ?? null,
       contractStageId: contractStage?.stageId ?? null,
       hasCompletedMeetingWithoutNextStage,
-      dealIsOpen,
+      dealOutcome,
       staleAfterCompletedMeeting,
       staleOpenContractStage
     });
@@ -1989,7 +2039,7 @@ export function buildSourceCohortTrajectoryReport(
       meetingStageId: meetingStage?.stageId ?? null,
       contractStageId: contractStage?.stageId ?? null,
       hasCompletedMeetingWithoutNextStage,
-      dealIsOpen,
+      dealOutcome,
       staleAfterCompletedMeeting,
       staleOpenContractStage
     });
@@ -2004,7 +2054,7 @@ export function buildSourceCohortTrajectoryReport(
       meetingStageId: meetingStage?.stageId ?? null,
       contractStageId: contractStage?.stageId ?? null,
       hasCompletedMeetingWithoutNextStage,
-      dealIsOpen,
+      dealOutcome,
       staleAfterCompletedMeeting,
       staleOpenContractStage
     });
@@ -2019,7 +2069,7 @@ export function buildSourceCohortTrajectoryReport(
       meetingStageId: meetingStage?.stageId ?? null,
       contractStageId: contractStage?.stageId ?? null,
       hasCompletedMeetingWithoutNextStage,
-      dealIsOpen,
+      dealOutcome,
       staleAfterCompletedMeeting,
       staleOpenContractStage
     });
@@ -2034,7 +2084,7 @@ export function buildSourceCohortTrajectoryReport(
       meetingStageId: meetingStage?.stageId ?? null,
       contractStageId: contractStage?.stageId ?? null,
       hasCompletedMeetingWithoutNextStage,
-      dealIsOpen,
+      dealOutcome,
       staleAfterCompletedMeeting,
       staleOpenContractStage
     });
@@ -2070,7 +2120,7 @@ export function buildSourceCohortTrajectoryReport(
       reachedDeals,
       reachedRate: toRate(reachedDeals, dealFacts.length),
       medianDaysFromCreate: median(daysFromCreate),
-      medianDaysOnStage: isLossStage(stage) ? null : median(durations)
+      medianDaysOnStage: isTerminalRouteStage(stage) ? null : median(durations)
     };
   });
   const stageTransitions = buildStageTransitionRows({
@@ -2158,6 +2208,7 @@ export function buildSourceCohortTrajectoryReport(
     medianDaysOnContractStage: median(overall.daysOnContractStage),
     wonDeals: overall.wonDeals,
     lostDeals: overall.lostDeals,
+    returnedDeals: overall.returnedDeals,
     openDeals: overall.openDeals
   };
   const factSteps = buildFactSteps({
@@ -2206,6 +2257,78 @@ export function buildSourceCohortTrajectoryReport(
     })),
     asOf: reportNowIso
   });
+  const journeyDrilldownDealFacts = input.journeyDrilldown
+    ? dealFacts.map((facts) => {
+        const managerId = facts.deal.assignedById ?? UNASSIGNED_MANAGER_ID;
+        const currentStageName =
+          stageSequence.find((stage) => stage.stageId === facts.deal.stageId)
+            ?.stageName ?? facts.deal.stageId;
+        const outcome = resolveDealOutcome(facts, stageSequence);
+
+        return {
+          facts,
+          managerId,
+          currentStageName,
+          outcome
+        };
+      })
+    : [];
+  const journeyDrilldown = input.journeyDrilldown
+    ? input.journeyDrilldown.drilldownKind === "crm_stage"
+      ? buildSourceCohortConversionStageDrilldown({
+          range: input.range,
+          stageId: input.journeyDrilldown.stepKey,
+          asOf: reportNowIso,
+          stages: stageSequence.map((stage) => ({
+            stageId: stage.stageId,
+            stageName: stage.stageName,
+            sortOrder: stage.sortOrder,
+            stageKind: resolveStageDrilldownKind(stage, wonStageIds)
+          })),
+          dealFacts: journeyDrilldownDealFacts.map(
+            ({ facts, managerId, currentStageName, outcome }) => ({
+              dealId: facts.deal.id,
+              dealUrl:
+                input.journeyDrilldown?.dealUrlBuilder?.(facts.deal.id) ?? null,
+              managerId,
+              managerName: resolveManagerName(managerId, managerDirectory),
+              currentStageId: facts.deal.stageId,
+              currentStageName,
+              currentStageEnteredAt: facts.currentStageEnteredAt,
+              outcome,
+              createdAt: facts.deal.dateCreate,
+              stageEnteredAts: facts.stageEnteredAts
+            })
+          )
+        })
+      : buildSourceCohortConversionJourneyDrilldown({
+          range: input.range,
+          stepKey: input.journeyDrilldown.stepKey,
+          asOf: reportNowIso,
+          dealFacts: journeyDrilldownDealFacts.map(
+            ({ facts, managerId, currentStageName, outcome }) => ({
+              dealId: facts.deal.id,
+              dealUrl:
+                input.journeyDrilldown?.dealUrlBuilder?.(facts.deal.id) ?? null,
+              managerId,
+              managerName: resolveManagerName(managerId, managerDirectory),
+              currentStageId: facts.deal.stageId,
+              currentStageName,
+              outcome,
+              createdAt: facts.deal.dateCreate,
+              firstCallAt: facts.firstCallAt,
+              confirmedConversationAt: facts.firstSuccessfulCallAt,
+              meetingScheduledAt: facts.meetingScheduledAt,
+              meetingCompletedAt: facts.completedMeetingAt,
+              attendedEventAts: facts.journeyAttendedEventAts,
+              contractAt: contractStage
+                ? facts.stageEnteredAt.get(contractStage.stageId) ?? null
+                : null,
+              transferredAt: facts.wonAt
+            })
+          )
+        })
+    : null;
   const eventPerformance = buildEventPerformance({
     range: input.range,
     now: reportNow,
@@ -2220,6 +2343,7 @@ export function buildSourceCohortTrajectoryReport(
     range: input.range,
     totalDeals: dealFacts.length,
     conversionJourney,
+    ...(journeyDrilldown ? { journeyDrilldown } : {}),
     stageNodes,
     stageTransitions,
     actionNodes,

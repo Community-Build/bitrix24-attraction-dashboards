@@ -112,6 +112,45 @@ tbody tr:hover {
     inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
+.journey-drilldown-dialog {
+  opacity: 1;
+  transition-property: opacity;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.journey-drilldown-dialog::backdrop {
+  background: rgba(15, 23, 42, 0.38);
+  opacity: 1;
+  transition-property: opacity;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.journey-drilldown-dialog[data-state="closed"],
+.journey-drilldown-dialog[data-state="closed"]::backdrop {
+  opacity: 0;
+}
+
+.journey-drilldown-drawer {
+  transform: translateX(0);
+  transition-property: transform;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.journey-drilldown-dialog[data-state="closed"] .journey-drilldown-drawer {
+  transform: translateX(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journey-drilldown-dialog,
+  .journey-drilldown-dialog::backdrop,
+  .journey-drilldown-drawer {
+    transition-duration: 1ms;
+  }
+}
+
 .metric {
   border: 1px solid rgba(100, 116, 139, 0.26);
   border-radius: 12px;

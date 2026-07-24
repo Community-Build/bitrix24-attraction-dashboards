@@ -27,6 +27,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
 import { NO_ATTRACTION_MANAGER_MATCH_ID } from "../src/domain/attraction-managers";
+import { SourceCohortConversionStageNotFoundError } from "../src/domain/source-cohort-conversion-stage-drilldown";
 import { createApp } from "../src/server/app";
 import type { ModuleCapabilityAdapter } from "../src/server/module-capabilities";
 
@@ -389,6 +390,7 @@ function createEmptySourceCohortConversionReport(): SourceCohortConversionReport
     totalCreatedDeals: 0,
     totalWonDeals: 0,
     totalLostDeals: 0,
+    totalReturnedDeals: 0,
     totalOpenDeals: 0,
     winRate: 0,
     averageDaysToWin: 0,
@@ -3529,6 +3531,7 @@ describe("createApp", () => {
     let receivedActivitiesInput: unknown = null;
     let receivedOperationalDashboardInput: unknown = null;
     let receivedCohortInput: unknown = null;
+    let receivedSourceCohortDrilldownInput: unknown = null;
     let receivedRevenueVelocityInput: unknown = null;
     let receivedLeadgenFunnelInput: unknown = null;
     let receivedLeadgenActivitiesInput: unknown = null;
@@ -3791,6 +3794,50 @@ describe("createApp", () => {
       getSourceQualityConversionReport: async () => sourceQualityReport,
       getSourceCohortConversionReport: async () =>
         createEmptySourceCohortConversionReport(),
+      getSourceCohortConversionJourneyDrilldown: async (input: unknown) => {
+        receivedSourceCohortDrilldownInput = input;
+        if (
+          (input as { drilldownKind?: string; stepKey?: string }).drilldownKind ===
+            "crm_stage" &&
+          (input as { stepKey?: string }).stepKey === "C10:UNKNOWN"
+        ) {
+          throw new SourceCohortConversionStageNotFoundError("C10:UNKNOWN");
+        }
+        return {
+          range: {
+            from: "2026-04-01T00:00:00.000Z",
+            to: "2026-04-30T23:59:59.999Z"
+          },
+          drilldownKind: "fact" as const,
+          stepKey: "first_call" as const,
+          stepLabel: "Первый звонок",
+          previousStepKey: "created" as const,
+          previousStepLabel: "Создана",
+          nextStepKey: "confirmed_conversation" as const,
+          nextStepLabel: "Подтвержденный разговор",
+          asOf: "2026-05-01T00:00:00.000Z",
+          views: {
+            reached: {
+              viewKey: "reached" as const,
+              label: "Дошли сюда",
+              count: 0,
+              deals: []
+            },
+            missed: {
+              viewKey: "missed" as const,
+              label: "Не дошли из «Создана»",
+              count: 0,
+              deals: []
+            },
+            notAdvanced: {
+              viewKey: "not_advanced" as const,
+              label: "Не перешли к «Подтвержденный разговор»",
+              count: 0,
+              deals: []
+            }
+          }
+        };
+      },
       getActivitiesWorkloadReport: async (input: unknown) => {
         receivedActivitiesInput = input;
         return activitiesReport;
@@ -4018,6 +4065,67 @@ describe("createApp", () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.totalCreatedDeals).toBe(4);
+      });
+
+    await request(app)
+      .get("/api/reports/source-cohort-conversion/journey-deals")
+      .query({
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z",
+        managerIds: "7,9",
+        sourceKeys: "WEB",
+        stepKey: "first_call"
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.stepKey).toBe("first_call");
+        expect(body.views.notAdvanced.count).toBe(0);
+      });
+    expect(receivedSourceCohortDrilldownInput).toEqual({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      filters: {
+        managerIds: ["7", "9"],
+        sourceKeys: ["WEB"]
+      },
+      drilldownKind: "fact",
+      stepKey: "first_call"
+    });
+
+    await request(app)
+      .get("/api/reports/source-cohort-conversion/journey-deals")
+      .query({
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z",
+        drilldownKind: "crm_stage",
+        stepKey: "C10:NEW"
+      })
+      .expect(200);
+    expect(receivedSourceCohortDrilldownInput).toEqual({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      drilldownKind: "crm_stage",
+      stepKey: "C10:NEW"
+    });
+
+    await request(app)
+      .get("/api/reports/source-cohort-conversion/journey-deals")
+      .query({
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z",
+        drilldownKind: "crm_stage",
+        stepKey: "C10:UNKNOWN"
+      })
+      .expect(404)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          error: "SOURCE_COHORT_CRM_STAGE_NOT_FOUND",
+          code: "SOURCE_COHORT_CRM_STAGE_NOT_FOUND"
+        });
       });
 
     const activitiesResponse = await request(app)

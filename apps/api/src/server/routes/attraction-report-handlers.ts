@@ -35,6 +35,12 @@ export interface AttractionReportRouteService {
   getDashboard(input: RangeRequest): Promise<unknown>;
   getSourceQualityConversionReport(input: RangeRequest): Promise<unknown>;
   getSourceCohortConversionReport(input: RangeRequest): Promise<unknown>;
+  getSourceCohortConversionJourneyDrilldown?(
+    input: RangeRequest & {
+      drilldownKind?: "fact" | "crm_stage";
+      stepKey: string;
+    }
+  ): Promise<unknown>;
   getActivitiesWorkloadReport(input: RangeRequest): Promise<unknown>;
   getOperationalDashboardReport(input: RangeRequest): Promise<unknown>;
   getAcquisitionOutcomesReport(input: RangeRequest): Promise<unknown>;
@@ -92,6 +98,20 @@ export interface CreateAttractionReportRouteHandlersInput {
 
 const syncRunHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(5)
+});
+
+const sourceCohortJourneyCoreStepKeySchema = z.enum([
+  "created",
+  "first_call",
+  "confirmed_conversation",
+  "meeting_completed",
+  "contract",
+  "transferred"
+]);
+
+const sourceCohortJourneyDrilldownQuerySchema = z.object({
+  drilldownKind: z.enum(["fact", "crm_stage"]).default("fact"),
+  stepKey: z.string().trim().min(1).max(128)
 });
 
 function createErrorResponse(code: string, details?: unknown) {
@@ -203,6 +223,44 @@ export function createAttractionReportRouteHandlers({
           service.getSourceCohortConversionReport(
             await parseScopedRangeRequest(request, response)
           )
+      });
+    },
+    getSourceCohortConversionJourneyDrilldown: async (
+      request,
+      response,
+      next
+    ) => {
+      if (denyIfMissingAttractionAccess(response)) {
+        return;
+      }
+
+      await sendTimedJson({
+        request,
+        response,
+        next,
+        moduleId: "attraction",
+        route: "source-cohort-conversion-journey-deals",
+        handler: async () => {
+          if (!service.getSourceCohortConversionJourneyDrilldown) {
+            throw new Error(
+              "Source cohort conversion journey drill-down is unavailable."
+            );
+          }
+
+          const rangeRequest = await parseScopedRangeRequest(request, response);
+          const { drilldownKind, stepKey } =
+            sourceCohortJourneyDrilldownQuerySchema.parse(
+            request.query
+          );
+          return service.getSourceCohortConversionJourneyDrilldown({
+            ...rangeRequest,
+            drilldownKind,
+            stepKey:
+              drilldownKind === "fact"
+                ? sourceCohortJourneyCoreStepKeySchema.parse(stepKey)
+                : stepKey
+          });
+        }
       });
     },
     getActivitiesWorkloadReport: async (request, response, next) => {

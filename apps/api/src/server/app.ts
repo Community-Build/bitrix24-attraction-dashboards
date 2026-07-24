@@ -32,6 +32,7 @@ import type {
   SalesPlanQuarterData,
   SalesPlanQuarterInput,
   SnapshotStats,
+  SourceCohortConversionJourneyDrilldown,
   SourceCohortConversionReport,
   SourceCatalogEntry,
   SourceQualityConversionReport,
@@ -98,6 +99,7 @@ import {
   NO_ATTRACTION_MANAGER_MATCH_ID,
   resolveAttractionManagerAccessScope
 } from "../domain/attraction-managers.js";
+import { SOURCE_COHORT_CRM_STAGE_NOT_FOUND_ERROR_CODE } from "../domain/source-cohort-conversion-stage-drilldown.js";
 import {
   type ModuleCapabilityAdapter,
   createAttractionCapabilityAdapter,
@@ -178,6 +180,12 @@ interface AppService {
   getSourceCohortConversionReport(
     input: RangeRequest
   ): Promise<SourceCohortConversionReport>;
+  getSourceCohortConversionJourneyDrilldown?(
+    input: RangeRequest & {
+      drilldownKind?: "fact" | "crm_stage";
+      stepKey: string;
+    }
+  ): Promise<SourceCohortConversionJourneyDrilldown>;
   getActivitiesWorkloadReport(
     input: RangeRequest
   ): Promise<ActivitiesWorkloadReport>;
@@ -938,6 +946,15 @@ function createErrorResponse(code: string, details?: unknown) {
   };
 }
 
+function readErrorCode(error: unknown) {
+  return error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
 function summarizeReportQuery(request: express.Request) {
   const query = request.query as Record<string, unknown>;
   return {
@@ -958,8 +975,7 @@ function describeError(error: unknown) {
   if (error instanceof Error) {
     return {
       name: error.name,
-      code:
-        "code" in error && typeof error.code === "string" ? error.code : undefined
+      code: readErrorCode(error)
     };
   }
 
@@ -983,6 +999,10 @@ function timingErrorStatusCode(response: express.Response, error: unknown) {
 
   if (error instanceof z.ZodError) {
     return 400;
+  }
+
+  if (readErrorCode(error) === SOURCE_COHORT_CRM_STAGE_NOT_FOUND_ERROR_CODE) {
+    return 404;
   }
 
   return 500;
@@ -3546,6 +3566,20 @@ export function createApp(
         response
           .status(400)
           .json(createErrorResponse("VALIDATION_ERROR", error.flatten()));
+        return;
+      }
+
+      if (
+        readErrorCode(error) ===
+        SOURCE_COHORT_CRM_STAGE_NOT_FOUND_ERROR_CODE
+      ) {
+        response
+          .status(404)
+          .json(
+            createErrorResponse(
+              SOURCE_COHORT_CRM_STAGE_NOT_FOUND_ERROR_CODE
+            )
+          );
         return;
       }
 

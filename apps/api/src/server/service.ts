@@ -46,6 +46,8 @@ import type {
   SalesPlanQuarterInput,
   SalesPlanQuarterMonth,
   SourceCatalogEntry,
+  SourceCohortConversionJourneyCoreStepKey,
+  SourceCohortConversionJourneyDrilldown,
   SourceCohortConversionReport,
   SourceCohortConversionReportSnapshot,
   SourceQualityConversionReport,
@@ -78,6 +80,7 @@ import {
   buildSourceQualityConversionReport,
   buildTargetGroupConversionReport
 } from "../domain/operational-reports.js";
+import { SourceCohortConversionStageNotFoundError } from "../domain/source-cohort-conversion-stage-drilldown.js";
 import {
   OPERATIONAL_LOST_STAGE_IDS,
   buildOperationalDashboardReport
@@ -188,6 +191,13 @@ export interface ReportingService {
     compareRanges?: ReportRange[];
     filters?: ReportFilters;
   }): Promise<SourceCohortConversionReport>;
+  getSourceCohortConversionJourneyDrilldown(input: {
+    periodDays?: number;
+    range?: ReportRange;
+    filters?: ReportFilters;
+    drilldownKind?: "fact" | "crm_stage";
+    stepKey: string;
+  }): Promise<SourceCohortConversionJourneyDrilldown>;
   getActivitiesWorkloadReport(input: {
     periodDays?: number;
     range?: ReportRange;
@@ -1654,6 +1664,57 @@ export function createReportingService(
           warnings: [] as string[]
         };
 
+  const loadSourceCohortReportInputs = async (
+    filters: ReportFilters | undefined,
+    options?: {
+      managerDirectoryMode?: "ensure" | "local";
+      requiredCrmStageId?: string;
+    }
+  ) => {
+    const scopedFilters = await normalizeAttractionReportFilters(filters);
+    const [deals, stageCatalog, wonStageIds, events] = await Promise.all([
+      input.repository.getAllDeals(),
+      getScopedStageCatalog(true),
+      input.repository.getWonStageIds(),
+      input.repository.getAllEventSnapshots()
+    ]);
+    if (
+      options?.requiredCrmStageId &&
+      !stageCatalog.some(
+        (stage) =>
+          stage.entityType === "deal" &&
+          stage.statusId === options.requiredCrmStageId
+      )
+    ) {
+      throw new SourceCohortConversionStageNotFoundError(
+        options.requiredCrmStageId
+      );
+    }
+    const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
+    const canonical = await loadScopedCanonicalReportInputs(
+      scopedDeals.map((deal) => deal.id)
+    );
+    const managerIds = uniqueStrings([
+      ...scopedDeals.map(
+        (deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID
+      ),
+      ...canonical.eventVisitFacts.map((fact) => fact.managerId)
+    ]);
+    const managerDirectory =
+      options?.managerDirectoryMode === "local"
+        ? await getLocalManagerDirectory(managerIds)
+        : await ensureManagerDirectory(managerIds);
+
+    return {
+      scopedDeals,
+      stageCatalog,
+      wonStageIds,
+      events,
+      canonical,
+      managerDirectory
+    };
+  };
+
   return {
     async getLeadgenFunnelReport({ periodDays, range, filters }) {
       const resolvedRange = resolveRange(
@@ -2456,25 +2517,14 @@ export function createReportingService(
       compareRanges,
       filters
     }) {
-      const scopedFilters = await normalizeAttractionReportFilters(filters);
-      const [deals, stageCatalog, wonStageIds, events] = await Promise.all([
-        input.repository.getAllDeals(),
-        getScopedStageCatalog(true),
-        input.repository.getWonStageIds(),
-        input.repository.getAllEventSnapshots()
-      ]);
-      const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
-      const canonical = await loadScopedCanonicalReportInputs(
-        scopedDeals.map((deal) => deal.id)
-      );
-      const managerDirectory = await ensureManagerDirectory(
-        uniqueStrings(
-          [
-            ...scopedDeals.map((deal) => deal.assignedById ?? UNASSIGNED_MANAGER_ID),
-            ...canonical.eventVisitFacts.map((fact) => fact.managerId)
-          ]
-        )
-      );
+      const {
+        scopedDeals,
+        stageCatalog,
+        wonStageIds,
+        events,
+        canonical,
+        managerDirectory
+      } = await loadSourceCohortReportInputs(filters);
       const reportNow = nowFactory();
       const buildSnapshot = (
         targetRange: ReportRange
@@ -2505,6 +2555,70 @@ export function createReportingService(
         compareRanges,
         buildSnapshot
       ) as SourceCohortConversionReport;
+    },
+
+    async getSourceCohortConversionJourneyDrilldown({
+      periodDays,
+      range,
+      filters,
+      drilldownKind = "fact",
+      stepKey
+    }) {
+      const {
+        scopedDeals,
+        stageCatalog,
+        wonStageIds,
+        events,
+        canonical,
+        managerDirectory
+      } = await loadSourceCohortReportInputs(filters, {
+        managerDirectoryMode: "local",
+        ...(drilldownKind === "crm_stage"
+          ? { requiredCrmStageId: stepKey }
+          : {})
+      });
+      const reportNow = nowFactory();
+      const resolvedRange = resolveRange(
+        periodDays,
+        range,
+        input.defaultPeriodDays,
+        reportNow
+      );
+      const snapshot = buildSourceCohortConversionReport({
+        range: resolvedRange,
+        wonStageIds,
+        deals: scopedDeals,
+        stageCatalog,
+        stageHistory: canonical.stageHistory,
+        dealStageFacts: canonical.dealStageFacts,
+        dealTouchpointFacts: canonical.dealTouchpointFacts,
+        eventVisitFacts: canonical.eventVisitFacts,
+        events,
+        managerDirectory,
+        includeTrajectory: true,
+        journeyDrilldown:
+          drilldownKind === "crm_stage"
+            ? {
+                drilldownKind,
+                stepKey,
+                dealUrlBuilder: (dealId) =>
+                  buildBitrixDealUrl(bitrixPortalHost, dealId)
+              }
+            : {
+                drilldownKind,
+                stepKey: stepKey as SourceCohortConversionJourneyCoreStepKey,
+                dealUrlBuilder: (dealId) =>
+                  buildBitrixDealUrl(bitrixPortalHost, dealId)
+              },
+        now: reportNow
+      });
+      const drilldown = snapshot.trajectory?.journeyDrilldown;
+
+      if (!drilldown) {
+        throw new Error("Source cohort conversion journey drill-down is unavailable.");
+      }
+
+      return drilldown;
     },
 
     async getActivitiesWorkloadReport({

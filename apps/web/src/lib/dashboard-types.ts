@@ -856,12 +856,15 @@ export interface SourceCohortConversionOpenStageRow {
   openDeals: number
 }
 
+export type SourceCohortDealOutcome = 'open' | 'lost' | 'won' | 'returned'
+
 export interface SourceCohortConversionManagerRow {
   managerId: string
   managerName: string
   createdDeals: number
   wonDeals: number
   lostDeals: number
+  returnedDeals: number
   openDeals: number
   winRate: number
   averageDaysToWin: number
@@ -886,6 +889,7 @@ export interface SourceCohortConversionRow {
   createdDeals: number
   wonDeals: number
   lostDeals: number
+  returnedDeals: number
   openDeals: number
   winRate: number
   averageDaysToWin: number
@@ -1093,6 +1097,7 @@ export interface SourceCohortTrajectorySignals {
   medianDaysOnContractStage: number | null
   wonDeals: number
   lostDeals: number
+  returnedDeals: number
   openDeals: number
 }
 
@@ -1191,6 +1196,67 @@ export interface SourceCohortConversionJourney {
   eventDepthRows: SourceCohortConversionEventDepthRow[]
 }
 
+export type SourceCohortConversionJourneyDrilldownViewKey =
+  | 'reached'
+  | 'missed'
+  | 'not_advanced'
+
+export type SourceCohortConversionJourneyDrilldownKind =
+  | 'fact'
+  | 'crm_stage'
+
+export type SourceCohortConversionJourneyDealStatus =
+  | 'advanced'
+  | 'within_sla'
+  | 'stuck'
+  | 'lost'
+  | 'returned'
+  | 'data_gap'
+
+export interface SourceCohortConversionJourneyDealRow {
+  dealId: string
+  dealUrl: string | null
+  managerId: string
+  managerName: string
+  currentStageId: string
+  currentStageName: string
+  outcome: SourceCohortDealOutcome
+  status: SourceCohortConversionJourneyDealStatus
+  statusLabel: string
+  reason: string
+  createdAt: string
+  previousStepAt: string | null
+  selectedStepAt: string | null
+  nextStepAt: string | null
+  ageFromAt: string | null
+  ageDays: number | null
+  slaDays: number | null
+}
+
+export interface SourceCohortConversionJourneyDrilldownView {
+  viewKey: SourceCohortConversionJourneyDrilldownViewKey
+  label: string
+  count: number
+  deals: SourceCohortConversionJourneyDealRow[]
+}
+
+export interface SourceCohortConversionJourneyDrilldown {
+  range: ReportRange
+  drilldownKind: SourceCohortConversionJourneyDrilldownKind
+  stepKey: string
+  stepLabel: string
+  previousStepKey: string | null
+  previousStepLabel: string | null
+  nextStepKey: string | null
+  nextStepLabel: string | null
+  asOf: string
+  views: {
+    reached: SourceCohortConversionJourneyDrilldownView
+    missed: SourceCohortConversionJourneyDrilldownView
+    notAdvanced: SourceCohortConversionJourneyDrilldownView
+  }
+}
+
 export interface SourceCohortEventPerformanceRow {
   key: string
   label: string
@@ -1251,6 +1317,7 @@ export interface SourceCohortConversionReportSnapshot {
   totalCreatedDeals: number
   totalWonDeals: number
   totalLostDeals: number
+  totalReturnedDeals: number
   totalOpenDeals: number
   winRate: number
   averageDaysToWin: number

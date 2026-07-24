@@ -207,6 +207,172 @@ describe('apiClient', () => {
     expect(report.trajectory?.conversionJourney?.eventDepthRows[0]?.depthKey).toBe('0')
   })
 
+  it('loads a privacy-safe conversion journey deal drill-down for the selected step', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range: {
+          from: '2026-06-01T00:00:00.000Z',
+          to: '2026-06-30T23:59:59.999Z',
+        },
+        stepKey: 'first_call',
+        stepLabel: 'Первая попытка',
+        previousStepKey: 'created',
+        previousStepLabel: 'Создана',
+        nextStepKey: 'confirmed_conversation',
+        nextStepLabel: 'Успешный разговор',
+        asOf: '2026-07-24T12:00:00.000Z',
+        views: {
+          reached: {
+            viewKey: 'reached',
+            label: 'Дошли до этапа',
+            count: 1,
+            deals: [
+              {
+                dealId: '23841',
+                dealUrl: 'https://example.bitrix24.ru/crm/deal/details/23841/',
+                managerId: '7',
+                managerName: 'Мария',
+                currentStageId: 'C10:QUALIFICATION',
+                currentStageName: 'Квалификация',
+                outcome: 'open',
+                status: 'advanced',
+                statusLabel: 'Прошла дальше',
+                reason: 'После первой попытки зафиксирован успешный разговор.',
+                createdAt: '2026-06-09T08:00:00.000Z',
+                previousStepAt: '2026-06-09T08:00:00.000Z',
+                selectedStepAt: '2026-06-09T08:40:00.000Z',
+                nextStepAt: '2026-06-09T08:45:00.000Z',
+                ageFromAt: '2026-06-09T08:40:00.000Z',
+                ageDays: 0,
+                slaDays: 3,
+                title: 'should be ignored',
+                phone: '+79990000000',
+              },
+            ],
+          },
+          missed: {
+            viewKey: 'missed',
+            label: 'Потерялись на переходе',
+            count: 0,
+            deals: [],
+          },
+          notAdvanced: {
+            viewKey: 'not_advanced',
+            label: 'Не пошли дальше',
+            count: 0,
+            deals: [],
+          },
+        },
+      }),
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const drilldown = await apiClient.getSourceCohortConversionJourneyDrilldown(
+      {
+        preset: 'custom',
+        from: '2026-06-01',
+        to: '2026-06-30',
+        managerIds: ['7'],
+        sourceKeys: ['LEADGEN_US'],
+      },
+      'first_call',
+    )
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const parsedUrl = new URL(url, window.location.origin)
+    const deal = drilldown.views.reached.deals[0]
+
+    expect(init.method).toBe('GET')
+    expect(parsedUrl.pathname).toBe('/api/reports/source-cohort-conversion/journey-deals')
+    expect(parsedUrl.searchParams.get('drilldownKind')).toBe('fact')
+    expect(parsedUrl.searchParams.get('stepKey')).toBe('first_call')
+    expect(parsedUrl.searchParams.get('managerIds')).toBe('7')
+    expect(parsedUrl.searchParams.get('sourceKeys')).toBe('LEADGEN_US')
+    expect(deal).toMatchObject({
+      dealId: '23841',
+      dealUrl: 'https://example.bitrix24.ru/crm/deal/details/23841/',
+      status: 'advanced',
+      ageDays: 0,
+      slaDays: 3,
+    })
+    expect(deal).not.toHaveProperty('title')
+    expect(deal).not.toHaveProperty('phone')
+    expect(drilldown.drilldownKind).toBe('fact')
+  })
+
+  it('preserves the distinct return-to-leadgen deal status', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        range: {
+          from: '2026-06-01T00:00:00.000Z',
+          to: '2026-06-30T23:59:59.999Z',
+        },
+        drilldownKind: 'crm_stage',
+        stepKey: 'C10:UC_EA3R76',
+        stepLabel: 'Возврат в Лидген(неквал)',
+        previousStepKey: null,
+        previousStepLabel: null,
+        nextStepKey: null,
+        nextStepLabel: null,
+        asOf: '2026-07-24T12:00:00.000Z',
+        views: {
+          reached: {
+            viewKey: 'reached',
+            label: 'Дошли сюда',
+            count: 1,
+            deals: [
+              {
+                dealId: '23843',
+                managerId: '7',
+                managerName: 'Мария',
+                currentStageId: 'C10:UC_EA3R76',
+                currentStageName: 'Возврат в Лидген(неквал)',
+                outcome: 'returned',
+                status: 'returned',
+                statusLabel: 'Возвращена в лидген',
+                reason: 'Отдельный маршрут возврата.',
+                createdAt: '2026-06-09T08:00:00.000Z',
+              },
+            ],
+          },
+          missed: {
+            viewKey: 'missed',
+            label: 'Не применяется',
+            count: 0,
+            deals: [],
+          },
+          notAdvanced: {
+            viewKey: 'not_advanced',
+            label: 'Не применяется',
+            count: 0,
+            deals: [],
+          },
+        },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const drilldown = await apiClient.getSourceCohortConversionJourneyDrilldown(
+      {
+        preset: 'custom',
+        from: '2026-06-01',
+        to: '2026-06-30',
+      },
+      'C10:UC_EA3R76',
+      'crm_stage',
+    )
+
+    expect(drilldown.views.reached.deals[0]).toMatchObject({
+      dealId: '23843',
+      outcome: 'returned',
+      status: 'returned',
+      statusLabel: 'Возвращена в лидген',
+    })
+  })
+
   it('does not fabricate attendance when invitation fields are missing', async () => {
     const range = {
       from: '2026-06-01T00:00:00.000Z',
