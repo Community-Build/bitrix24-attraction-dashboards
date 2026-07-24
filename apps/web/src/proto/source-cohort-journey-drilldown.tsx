@@ -8,8 +8,8 @@ import type {
   SourceCohortConversionJourneyDealRow,
   SourceCohortConversionJourneyDealStatus,
   SourceCohortConversionJourneyDrilldown,
+  SourceCohortConversionJourneyDrilldownKind,
   SourceCohortConversionJourneyDrilldownViewKey,
-  SourceCohortConversionJourneyCoreStepKey,
 } from '@/lib/dashboard-types'
 import { formatInteger } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
@@ -161,13 +161,15 @@ function DealCard({
 export function SourceCohortJourneyDrilldown({
   open,
   query,
+  drilldownKind,
   stepKey,
   returnFocus,
   onRequestClose,
 }: {
   open: boolean
   query: DashboardQuery
-  stepKey: SourceCohortConversionJourneyCoreStepKey | null
+  drilldownKind: SourceCohortConversionJourneyDrilldownKind
+  stepKey: string | null
   returnFocus: HTMLElement | null
   onRequestClose: () => void
 }) {
@@ -227,7 +229,11 @@ export function SourceCohortJourneyDrilldown({
       setData(null)
 
       void apiClient
-        .getSourceCohortConversionJourneyDrilldown(query, stepKey)
+        .getSourceCohortConversionJourneyDrilldown(
+          query,
+          stepKey,
+          drilldownKind,
+        )
         .then((response) => {
           if (!current) return
           setData(response)
@@ -238,7 +244,9 @@ export function SourceCohortJourneyDrilldown({
           setError(
             requestError instanceof Error
               ? requestError.message
-              : 'Не удалось загрузить сделки для этого перехода.',
+              : drilldownKind === 'crm_stage'
+                ? 'Не удалось загрузить сделки для этого CRM-этапа.'
+                : 'Не удалось загрузить сделки для этого перехода.',
           )
         })
         .finally(() => {
@@ -250,7 +258,7 @@ export function SourceCohortJourneyDrilldown({
       current = false
       window.clearTimeout(requestTimer)
     }
-  }, [open, query, reloadKey, stepKey])
+  }, [drilldownKind, open, query, reloadKey, stepKey])
 
   const views = useMemo(
     () =>
@@ -283,7 +291,11 @@ export function SourceCohortJourneyDrilldown({
       >
         <header className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur sm:px-6">
           <div className="min-w-0">
-            <p className="subtle-label">Сделки этапа</p>
+            <p className="subtle-label">
+              {data?.drilldownKind === 'crm_stage' || drilldownKind === 'crm_stage'
+                ? 'Сделки CRM-этапа'
+                : 'Сделки этапа'}
+            </p>
             <h3 id="journey-drilldown-title" className="mt-1 text-xl font-extrabold text-slate-950">
               {data?.stepLabel ?? 'Загрузка перехода'}
             </h3>
@@ -309,7 +321,11 @@ export function SourceCohortJourneyDrilldown({
                 strokeWidth={2}
                 className="size-6 animate-spin text-blue-600"
               />
-              <p className="mt-3 text-sm font-bold text-slate-700">Собираю сделки перехода…</p>
+              <p className="mt-3 text-sm font-bold text-slate-700">
+                {drilldownKind === 'crm_stage'
+                  ? 'Собираю сделки CRM-этапа…'
+                  : 'Собираю сделки перехода…'}
+              </p>
               <p className="mt-1 text-xs text-slate-500">Основной отчет при этом не пересчитывается.</p>
             </div>
           ) : null}

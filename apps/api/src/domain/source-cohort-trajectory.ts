@@ -34,6 +34,7 @@ import {
   buildSourceCohortConversionJourney,
   buildSourceCohortConversionJourneyDrilldown
 } from "./source-cohort-conversion-journey.js";
+import { buildSourceCohortConversionStageDrilldown } from "./source-cohort-conversion-stage-drilldown.js";
 import { buildLossShape } from "./source-cohort-trajectory-loss-shape.js";
 import { buildManagerDiagnostics } from "./source-cohort-trajectory-manager-diagnostics.js";
 
@@ -140,10 +141,17 @@ interface SourceCohortTrajectoryInput {
   events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   now?: Date;
-  journeyDrilldown?: {
-    stepKey: SourceCohortConversionJourneyCoreStepKey;
-    dealUrlBuilder?: (dealId: string) => string | null;
-  };
+  journeyDrilldown?:
+    | {
+        drilldownKind?: "fact";
+        stepKey: SourceCohortConversionJourneyCoreStepKey;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      }
+    | {
+        drilldownKind: "crm_stage";
+        stepKey: string;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      };
 }
 
 interface StageSequenceEntry {
@@ -2214,44 +2222,85 @@ export function buildSourceCohortTrajectoryReport(
     })),
     asOf: reportNowIso
   });
-  const journeyDrilldown = input.journeyDrilldown
-    ? buildSourceCohortConversionJourneyDrilldown({
-        range: input.range,
-        stepKey: input.journeyDrilldown.stepKey,
-        asOf: reportNowIso,
-        dealFacts: dealFacts.map((facts) => {
-          const managerId = facts.deal.assignedById ?? UNASSIGNED_MANAGER_ID;
-          const currentStageName =
-            stageSequence.find((stage) => stage.stageId === facts.deal.stageId)
-              ?.stageName ?? facts.deal.stageId;
-          const outcome = facts.wonAt
-            ? "won"
-            : isOpenDeal(facts, stageSequence)
-              ? "open"
-              : "lost";
+  const journeyDrilldownDealFacts = input.journeyDrilldown
+    ? dealFacts.map((facts) => {
+        const managerId = facts.deal.assignedById ?? UNASSIGNED_MANAGER_ID;
+        const currentStageName =
+          stageSequence.find((stage) => stage.stageId === facts.deal.stageId)
+            ?.stageName ?? facts.deal.stageId;
+        const outcome = facts.wonAt
+          ? "won" as const
+          : isOpenDeal(facts, stageSequence)
+            ? "open" as const
+            : "lost" as const;
 
-          return {
-            dealId: facts.deal.id,
-            dealUrl:
-              input.journeyDrilldown?.dealUrlBuilder?.(facts.deal.id) ?? null,
-            managerId,
-            managerName: resolveManagerName(managerId, managerDirectory),
-            currentStageId: facts.deal.stageId,
-            currentStageName,
-            outcome,
-            createdAt: facts.deal.dateCreate,
-            firstCallAt: facts.firstCallAt,
-            confirmedConversationAt: facts.firstSuccessfulCallAt,
-            meetingScheduledAt: facts.meetingScheduledAt,
-            meetingCompletedAt: facts.completedMeetingAt,
-            attendedEventAts: facts.journeyAttendedEventAts,
-            contractAt: contractStage
-              ? facts.stageEnteredAt.get(contractStage.stageId) ?? null
-              : null,
-            transferredAt: facts.wonAt
-          };
-        })
+        return {
+          facts,
+          managerId,
+          currentStageName,
+          outcome
+        };
       })
+    : [];
+  const journeyDrilldown = input.journeyDrilldown
+    ? input.journeyDrilldown.drilldownKind === "crm_stage"
+      ? buildSourceCohortConversionStageDrilldown({
+          range: input.range,
+          stageId: input.journeyDrilldown.stepKey,
+          asOf: reportNowIso,
+          stages: stageSequence.map((stage) => ({
+            stageId: stage.stageId,
+            stageName: stage.stageName,
+            sortOrder: stage.sortOrder,
+            terminalKind: wonStageIds.has(stage.stageId)
+              ? "won"
+              : isLossStage(stage)
+                ? "lost"
+                : null
+          })),
+          dealFacts: journeyDrilldownDealFacts.map(
+            ({ facts, managerId, currentStageName, outcome }) => ({
+              dealId: facts.deal.id,
+              dealUrl:
+                input.journeyDrilldown?.dealUrlBuilder?.(facts.deal.id) ?? null,
+              managerId,
+              managerName: resolveManagerName(managerId, managerDirectory),
+              currentStageId: facts.deal.stageId,
+              currentStageName,
+              currentStageEnteredAt: facts.currentStageEnteredAt,
+              outcome,
+              createdAt: facts.deal.dateCreate,
+              stageEnteredAts: facts.stageEnteredAts
+            })
+          )
+        })
+      : buildSourceCohortConversionJourneyDrilldown({
+          range: input.range,
+          stepKey: input.journeyDrilldown.stepKey,
+          asOf: reportNowIso,
+          dealFacts: journeyDrilldownDealFacts.map(
+            ({ facts, managerId, currentStageName, outcome }) => ({
+              dealId: facts.deal.id,
+              dealUrl:
+                input.journeyDrilldown?.dealUrlBuilder?.(facts.deal.id) ?? null,
+              managerId,
+              managerName: resolveManagerName(managerId, managerDirectory),
+              currentStageId: facts.deal.stageId,
+              currentStageName,
+              outcome,
+              createdAt: facts.deal.dateCreate,
+              firstCallAt: facts.firstCallAt,
+              confirmedConversationAt: facts.firstSuccessfulCallAt,
+              meetingScheduledAt: facts.meetingScheduledAt,
+              meetingCompletedAt: facts.completedMeetingAt,
+              attendedEventAts: facts.journeyAttendedEventAts,
+              contractAt: contractStage
+                ? facts.stageEnteredAt.get(contractStage.stageId) ?? null
+                : null,
+              transferredAt: facts.wonAt
+            })
+          )
+        })
     : null;
   const eventPerformance = buildEventPerformance({
     range: input.range,

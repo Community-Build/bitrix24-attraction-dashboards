@@ -194,7 +194,8 @@ export interface ReportingService {
     periodDays?: number;
     range?: ReportRange;
     filters?: ReportFilters;
-    stepKey: SourceCohortConversionJourneyCoreStepKey;
+    drilldownKind?: "fact" | "crm_stage";
+    stepKey: string;
   }): Promise<SourceCohortConversionJourneyDrilldown>;
   getActivitiesWorkloadReport(input: {
     periodDays?: number;
@@ -2541,6 +2542,7 @@ export function createReportingService(
       periodDays,
       range,
       filters,
+      drilldownKind = "fact",
       stepKey
     }) {
       const {
@@ -2570,11 +2572,20 @@ export function createReportingService(
         events,
         managerDirectory,
         includeTrajectory: true,
-        journeyDrilldown: {
-          stepKey,
-          dealUrlBuilder: (dealId) =>
-            buildBitrixDealUrl(bitrixPortalHost, dealId)
-        },
+        journeyDrilldown:
+          drilldownKind === "crm_stage"
+            ? {
+                drilldownKind,
+                stepKey,
+                dealUrlBuilder: (dealId) =>
+                  buildBitrixDealUrl(bitrixPortalHost, dealId)
+              }
+            : {
+                drilldownKind,
+                stepKey: stepKey as SourceCohortConversionJourneyCoreStepKey,
+                dealUrlBuilder: (dealId) =>
+                  buildBitrixDealUrl(bitrixPortalHost, dealId)
+              },
         now: reportNow
       });
       const drilldown = snapshot.trajectory?.journeyDrilldown;

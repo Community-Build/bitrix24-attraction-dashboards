@@ -286,6 +286,7 @@ describe('apiClient', () => {
 
     expect(init.method).toBe('GET')
     expect(parsedUrl.pathname).toBe('/api/reports/source-cohort-conversion/journey-deals')
+    expect(parsedUrl.searchParams.get('drilldownKind')).toBe('fact')
     expect(parsedUrl.searchParams.get('stepKey')).toBe('first_call')
     expect(parsedUrl.searchParams.get('managerIds')).toBe('7')
     expect(parsedUrl.searchParams.get('sourceKeys')).toBe('LEADGEN_US')
@@ -298,6 +299,7 @@ describe('apiClient', () => {
     })
     expect(deal).not.toHaveProperty('title')
     expect(deal).not.toHaveProperty('phone')
+    expect(drilldown.drilldownKind).toBe('fact')
   })
 
   it('does not fabricate attendance when invitation fields are missing', async () => {

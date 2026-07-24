@@ -322,6 +322,7 @@ function JourneyFacts({
       <SourceCohortJourneyDrilldown
         open={selectedStepKey !== null}
         query={query}
+        drilldownKind="fact"
         stepKey={selectedStepKey}
         returnFocus={returnFocus}
         onRequestClose={() => setSelectedStepKey(null)}
@@ -330,33 +331,84 @@ function JourneyFacts({
   )
 }
 
-function JourneyStages({ trajectory }: { trajectory: SourceCohortTrajectoryReport }) {
+function JourneyStages({
+  trajectory,
+  query,
+}: {
+  trajectory: SourceCohortTrajectoryReport
+  query: DashboardQuery
+}) {
+  const [selectedStageId, setSelectedStageId] = useState<string | null>(null)
+  const [returnFocus, setReturnFocus] = useState<HTMLElement | null>(null)
   const rows = trajectory.stageNodes.filter((row) => row.reachedDeals > 0)
+
+  const openStage = (stageId: string, trigger: HTMLElement | null) => {
+    setReturnFocus(trigger)
+    setSelectedStageId(stageId)
+  }
+
   return (
-    <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
-      <table className="min-w-[760px] text-sm">
-        <thead className="bg-slate-50">
-          <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
-            <th className="px-4 py-3">CRM-этап</th>
-            <th className="px-3 py-3">Дошли</th>
-            <th className="px-3 py-3">Доля когорты</th>
-            <th className="px-3 py-3">До этапа</th>
-            <th className="px-3 py-3">На этапе</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.stageId} className="border-b border-slate-100 last:border-b-0">
-              <td className="px-4 py-3 font-semibold text-slate-900">{row.stageName}</td>
-              <td className="px-3 py-3 tabular-nums">{formatInteger(row.reachedDeals)}</td>
-              <td className="px-3 py-3 tabular-nums">{formatRate(row.reachedRate)}</td>
-              <td className="px-3 py-3 tabular-nums">{formatDays(row.medianDaysFromCreate)}</td>
-              <td className="px-3 py-3 tabular-nums">{formatDays(row.medianDaysOnStage)}</td>
+    <>
+      <div className="mt-5 overflow-x-auto rounded-lg border border-slate-200">
+        <table className="min-w-[760px] text-sm">
+          <thead className="bg-slate-50">
+            <tr className="border-b border-slate-200 text-left text-xs text-slate-500">
+              <th className="px-4 py-3">CRM-этап</th>
+              <th className="px-3 py-3">Дошли</th>
+              <th className="px-3 py-3">Доля когорты</th>
+              <th className="px-3 py-3">До этапа</th>
+              <th className="px-3 py-3">На этапе</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.stageId}
+                onClick={(event) => {
+                  const trigger = event.currentTarget.querySelector('button')
+                  openStage(row.stageId, trigger)
+                }}
+                className={cn(
+                  'group cursor-pointer border-b border-slate-100 transition-[background-color] duration-150 last:border-b-0 hover:bg-blue-50/60',
+                  selectedStageId === row.stageId && 'bg-blue-50/80',
+                )}
+              >
+                <td className="p-0 font-semibold text-slate-900">
+                  <button
+                    type="button"
+                    aria-haspopup="dialog"
+                    aria-expanded={selectedStageId === row.stageId}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      openStage(row.stageId, event.currentTarget)
+                    }}
+                    className="flex min-h-12 w-full items-center justify-between gap-3 px-4 py-2 text-left outline-none transition-[color,transform] duration-150 focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 active:scale-[0.96]"
+                  >
+                    <span>{row.stageName}</span>
+                    <span className="shrink-0 text-xs font-extrabold text-blue-700 transition-[color,transform] duration-150 group-hover:translate-x-0.5 group-hover:text-blue-800">
+                      Сделки <span aria-hidden="true">→</span>
+                    </span>
+                  </button>
+                </td>
+                <td className="px-3 py-3 tabular-nums">{formatInteger(row.reachedDeals)}</td>
+                <td className="px-3 py-3 tabular-nums">{formatRate(row.reachedRate)}</td>
+                <td className="px-3 py-3 tabular-nums">{formatDays(row.medianDaysFromCreate)}</td>
+                <td className="px-3 py-3 tabular-nums">{formatDays(row.medianDaysOnStage)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <SourceCohortJourneyDrilldown
+        open={selectedStageId !== null}
+        query={query}
+        drilldownKind="crm_stage"
+        stepKey={selectedStageId}
+        returnFocus={returnFocus}
+        onRequestClose={() => setSelectedStageId(null)}
+      />
+    </>
   )
 }
 
@@ -732,7 +784,7 @@ export function SourceCohortStageConversionSection({
             />
           </div>
           {journeyView === 'facts' ? <JourneyFacts trajectory={trajectory} query={query} /> : null}
-          {journeyView === 'stages' ? <JourneyStages trajectory={trajectory} /> : null}
+          {journeyView === 'stages' ? <JourneyStages trajectory={trajectory} query={query} /> : null}
           {journeyView === 'gaps' ? <JourneyGaps trajectory={trajectory} /> : null}
           <ComparisonMatrix trajectory={trajectory} />
         </>

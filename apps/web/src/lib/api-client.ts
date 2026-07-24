@@ -85,6 +85,7 @@ import type {
   SourceCohortConversionJourneyCoreStepKey,
   SourceCohortConversionJourneyDealStatus,
   SourceCohortConversionJourneyDrilldown,
+  SourceCohortConversionJourneyDrilldownKind,
   SourceCohortConversionJourneyStepKey,
   SourceCohortTrajectoryActionKey,
   SourceCohortTrajectoryAvailabilityStatus,
@@ -2541,18 +2542,22 @@ function normalizeSourceCohortConversionJourneyDrilldown(
   }
   const previousStepKey = asNullableString(data.previousStepKey)
   const nextStepKey = asNullableString(data.nextStepKey)
+  const rawDrilldownKind = asString(data.drilldownKind, 'fact')
+  const drilldownKind: SourceCohortConversionJourneyDrilldownKind =
+    rawDrilldownKind === 'crm_stage' ? 'crm_stage' : 'fact'
+  const normalizeStepKey = (value: unknown) =>
+    drilldownKind === 'fact'
+      ? normalizeSourceCohortConversionJourneyCoreStepKey(value)
+      : asString(value)
 
   return {
     range: normalizeRange(data.range),
-    stepKey: normalizeSourceCohortConversionJourneyCoreStepKey(data.stepKey),
+    drilldownKind,
+    stepKey: normalizeStepKey(data.stepKey),
     stepLabel: asString(data.stepLabel, asString(data.stepKey)),
-    previousStepKey: previousStepKey
-      ? normalizeSourceCohortConversionJourneyCoreStepKey(previousStepKey)
-      : null,
+    previousStepKey: previousStepKey ? normalizeStepKey(previousStepKey) : null,
     previousStepLabel: asNullableString(data.previousStepLabel),
-    nextStepKey: nextStepKey
-      ? normalizeSourceCohortConversionJourneyCoreStepKey(nextStepKey)
-      : null,
+    nextStepKey: nextStepKey ? normalizeStepKey(nextStepKey) : null,
     nextStepLabel: asNullableString(data.nextStepLabel),
     asOf: asString(data.asOf),
     views: {
@@ -5198,11 +5203,13 @@ export const apiClient = {
   },
   async getSourceCohortConversionJourneyDrilldown(
     query: DashboardQuery,
-    stepKey: SourceCohortConversionJourneyCoreStepKey,
+    stepKey: string,
+    drilldownKind: SourceCohortConversionJourneyDrilldownKind = 'fact',
   ) {
     return requestJson(
       buildUrl('/api/reports/source-cohort-conversion/journey-deals', {
         ...buildQueryParams(query),
+        drilldownKind,
         stepKey,
       }),
       { method: 'GET' },

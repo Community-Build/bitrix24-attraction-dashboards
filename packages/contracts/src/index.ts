@@ -1691,6 +1691,10 @@ export type SourceCohortConversionJourneyDrilldownViewKey =
   | "missed"
   | "not_advanced";
 
+export type SourceCohortConversionJourneyDrilldownKind =
+  | "fact"
+  | "crm_stage";
+
 export type SourceCohortConversionJourneyDealStatus =
   | "advanced"
   | "within_sla"
@@ -1727,11 +1731,12 @@ export interface SourceCohortConversionJourneyDrilldownView {
 
 export interface SourceCohortConversionJourneyDrilldown {
   range: ReportRange;
-  stepKey: SourceCohortConversionJourneyCoreStepKey;
+  drilldownKind: SourceCohortConversionJourneyDrilldownKind;
+  stepKey: string;
   stepLabel: string;
-  previousStepKey: SourceCohortConversionJourneyCoreStepKey | null;
+  previousStepKey: string | null;
   previousStepLabel: string | null;
-  nextStepKey: SourceCohortConversionJourneyCoreStepKey | null;
+  nextStepKey: string | null;
   nextStepLabel: string | null;
   asOf: string;
   views: {

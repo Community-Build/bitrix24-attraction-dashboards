@@ -3799,6 +3799,7 @@ describe("createApp", () => {
             from: "2026-04-01T00:00:00.000Z",
             to: "2026-04-30T23:59:59.999Z"
           },
+          drilldownKind: "fact" as const,
           stepKey: "first_call" as const,
           stepLabel: "Первый звонок",
           previousStepKey: "created" as const,
@@ -4080,7 +4081,26 @@ describe("createApp", () => {
         managerIds: ["7", "9"],
         sourceKeys: ["WEB"]
       },
+      drilldownKind: "fact",
       stepKey: "first_call"
+    });
+
+    await request(app)
+      .get("/api/reports/source-cohort-conversion/journey-deals")
+      .query({
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z",
+        drilldownKind: "crm_stage",
+        stepKey: "C10:NEW"
+      })
+      .expect(200);
+    expect(receivedSourceCohortDrilldownInput).toEqual({
+      range: {
+        from: "2026-04-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      drilldownKind: "crm_stage",
+      stepKey: "C10:NEW"
     });
 
     const activitiesResponse = await request(app)

@@ -32,7 +32,6 @@ import type {
   SalesPlanQuarterData,
   SalesPlanQuarterInput,
   SnapshotStats,
-  SourceCohortConversionJourneyCoreStepKey,
   SourceCohortConversionJourneyDrilldown,
   SourceCohortConversionReport,
   SourceCatalogEntry,
@@ -182,7 +181,8 @@ interface AppService {
   ): Promise<SourceCohortConversionReport>;
   getSourceCohortConversionJourneyDrilldown?(
     input: RangeRequest & {
-      stepKey: SourceCohortConversionJourneyCoreStepKey;
+      drilldownKind?: "fact" | "crm_stage";
+      stepKey: string;
     }
   ): Promise<SourceCohortConversionJourneyDrilldown>;
   getActivitiesWorkloadReport(

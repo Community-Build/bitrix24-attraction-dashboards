@@ -1,8 +1,6 @@
 import type express from "express";
 import { z } from "zod";
 
-import type { SourceCohortConversionJourneyCoreStepKey } from "@bitrix24-reporting/contracts";
-
 import type { AttractionReportRouteHandlers } from "./attraction-routes.js";
 
 export interface RangeRequest {
@@ -39,7 +37,8 @@ export interface AttractionReportRouteService {
   getSourceCohortConversionReport(input: RangeRequest): Promise<unknown>;
   getSourceCohortConversionJourneyDrilldown?(
     input: RangeRequest & {
-      stepKey: SourceCohortConversionJourneyCoreStepKey;
+      drilldownKind?: "fact" | "crm_stage";
+      stepKey: string;
     }
   ): Promise<unknown>;
   getActivitiesWorkloadReport(input: RangeRequest): Promise<unknown>;
@@ -101,15 +100,18 @@ const syncRunHistoryQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(5)
 });
 
+const sourceCohortJourneyCoreStepKeySchema = z.enum([
+  "created",
+  "first_call",
+  "confirmed_conversation",
+  "meeting_completed",
+  "contract",
+  "transferred"
+]);
+
 const sourceCohortJourneyDrilldownQuerySchema = z.object({
-  stepKey: z.enum([
-    "created",
-    "first_call",
-    "confirmed_conversation",
-    "meeting_completed",
-    "contract",
-    "transferred"
-  ])
+  drilldownKind: z.enum(["fact", "crm_stage"]).default("fact"),
+  stepKey: z.string().trim().min(1).max(128)
 });
 
 function createErrorResponse(code: string, details?: unknown) {
@@ -246,12 +248,17 @@ export function createAttractionReportRouteHandlers({
           }
 
           const rangeRequest = await parseScopedRangeRequest(request, response);
-          const { stepKey } = sourceCohortJourneyDrilldownQuerySchema.parse(
+          const { drilldownKind, stepKey } =
+            sourceCohortJourneyDrilldownQuerySchema.parse(
             request.query
           );
           return service.getSourceCohortConversionJourneyDrilldown({
             ...rangeRequest,
-            stepKey
+            drilldownKind,
+            stepKey:
+              drilldownKind === "fact"
+                ? sourceCohortJourneyCoreStepKeySchema.parse(stepKey)
+                : stepKey
           });
         }
       });

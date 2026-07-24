@@ -77,6 +77,11 @@ Stable dashboard anchors used by ontology report bindings:
   strict transition to the next visible step. The route reads the local
   SQLite-backed reporting snapshot and never performs a direct Bitrix read
   during page rendering.
+- The same lazy route accepts `drilldownKind=crm_stage` with a canonical stage
+  ID from `trajectory.stageNodes`. In the existing `CRM-этапы` table, each
+  visible stage row opens the same three reconciled views from canonical stage
+  history. A shortcut to a later productive stage is labeled as a skipped
+  stage, not a loss; terminal loss stages open a reached-only deal list.
 - Drill-down rows may expose only deal ID, a generated Bitrix deal URL, current
   manager, current stage, outcome, relevant timestamps, deterministic status,
   and deterministic reason. Deal titles, contact names, phones, emails, and raw

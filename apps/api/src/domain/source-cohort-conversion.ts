@@ -44,10 +44,17 @@ export interface SourceCohortConversionInput {
   events?: EventSnapshot[];
   managerDirectory?: ManagerDirectoryEntry[];
   includeTrajectory?: boolean;
-  journeyDrilldown?: {
-    stepKey: SourceCohortConversionJourneyCoreStepKey;
-    dealUrlBuilder?: (dealId: string) => string | null;
-  };
+  journeyDrilldown?:
+    | {
+        drilldownKind?: "fact";
+        stepKey: SourceCohortConversionJourneyCoreStepKey;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      }
+    | {
+        drilldownKind: "crm_stage";
+        stepKey: string;
+        dealUrlBuilder?: (dealId: string) => string | null;
+      };
   now?: Date;
 }
 

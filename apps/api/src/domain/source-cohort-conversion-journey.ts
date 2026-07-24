@@ -697,6 +697,7 @@ export function buildSourceCohortConversionJourneyDrilldown(input: {
 
   return {
     range: input.range,
+    drilldownKind: "fact",
     stepKey: selected.stepKey,
     stepLabel: selected.label,
     previousStepKey: previous?.stepKey ?? null,

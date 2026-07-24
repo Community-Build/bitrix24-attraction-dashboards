@@ -19,6 +19,7 @@ const drilldown: SourceCohortConversionJourneyDrilldown = {
     from: '2026-06-01T00:00:00.000Z',
     to: '2026-06-30T23:59:59.999Z',
   },
+  drilldownKind: 'fact',
   stepKey: 'first_call',
   stepLabel: 'Первая попытка',
   previousStepKey: 'created',
@@ -104,6 +105,7 @@ describe('SourceCohortJourneyDrilldown', () => {
           to: '2026-06-30',
           managerIds: ['7', '8'],
         }}
+        drilldownKind="fact"
         stepKey="first_call"
         returnFocus={null}
         onRequestClose={vi.fn()}
@@ -117,6 +119,7 @@ describe('SourceCohortJourneyDrilldown', () => {
         managerIds: ['7', '8'],
       }),
       'first_call',
+      'fact',
     )
 
     const stuckTab = screen.getByRole('tab', { name: /Не пошли дальше 1/ })
@@ -140,6 +143,7 @@ describe('SourceCohortJourneyDrilldown', () => {
       <SourceCohortJourneyDrilldown
         open
         query={{ preset: 30 }}
+        drilldownKind="fact"
         stepKey="first_call"
         returnFocus={null}
         onRequestClose={onRequestClose}
@@ -153,5 +157,39 @@ describe('SourceCohortJourneyDrilldown', () => {
     fireEvent(dialog as HTMLDialogElement, new Event('cancel', { cancelable: true }))
 
     await waitFor(() => expect(onRequestClose).toHaveBeenCalledOnce())
+  })
+
+  it('loads the same drawer for a CRM stage target', async () => {
+    apiMock.getDrilldown.mockResolvedValue({
+      ...drilldown,
+      drilldownKind: 'crm_stage',
+      stepKey: 'C10:PREPARATION',
+      stepLabel: 'Звонок-знакомство',
+      previousStepKey: 'C10:NEW',
+      previousStepLabel: 'База входящая',
+      nextStepKey: 'C10:MEETING',
+      nextStepLabel: 'Встреча-знакомство',
+    })
+
+    render(
+      <SourceCohortJourneyDrilldown
+        open
+        query={{ preset: 30 }}
+        drilldownKind="crm_stage"
+        stepKey="C10:PREPARATION"
+        returnFocus={null}
+        onRequestClose={vi.fn()}
+      />,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: 'Звонок-знакомство' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Сделки CRM-этапа')).toBeInTheDocument()
+    expect(apiMock.getDrilldown).toHaveBeenCalledWith(
+      expect.objectContaining({ preset: 30 }),
+      'C10:PREPARATION',
+      'crm_stage',
+    )
   })
 })
