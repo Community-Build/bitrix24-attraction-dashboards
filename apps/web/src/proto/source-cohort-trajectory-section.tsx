@@ -765,11 +765,12 @@ export function SourceCohortStageConversionSection({
 
       {mode === 'journey' ? (
         <>
-          <div className="mt-5 grid gap-4 border-y border-slate-200 py-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-5 grid gap-4 border-y border-slate-200 py-4 sm:grid-cols-2 lg:grid-cols-5">
             <SummaryMetric label="Когорта" value={formatInteger(trajectory.totalDeals)} note="создано в месяце" />
             <SummaryMetric label="Передано в клуб" value={`${formatInteger(trajectory.overallSignals.wonDeals)} · ${formatRate(trajectory.totalDeals > 0 ? (trajectory.overallSignals.wonDeals / trajectory.totalDeals) * 100 : 0)}`} note="финальный результат" />
             <SummaryMetric label="В работе" value={formatInteger(trajectory.overallSignals.openDeals)} note="текущие открытые сделки" />
             <SummaryMetric label="Проиграно" value={formatInteger(trajectory.overallSignals.lostDeals)} note="текущий финальный статус" />
+            <SummaryMetric label="Возврат в лидген" value={formatInteger(trajectory.overallSignals.returnedDeals)} note="отдельный текущий маршрут" />
           </div>
           <div className="mt-5">
             <SegmentControl

@@ -856,12 +856,15 @@ export interface SourceCohortConversionOpenStageRow {
   openDeals: number
 }
 
+export type SourceCohortDealOutcome = 'open' | 'lost' | 'won' | 'returned'
+
 export interface SourceCohortConversionManagerRow {
   managerId: string
   managerName: string
   createdDeals: number
   wonDeals: number
   lostDeals: number
+  returnedDeals: number
   openDeals: number
   winRate: number
   averageDaysToWin: number
@@ -886,6 +889,7 @@ export interface SourceCohortConversionRow {
   createdDeals: number
   wonDeals: number
   lostDeals: number
+  returnedDeals: number
   openDeals: number
   winRate: number
   averageDaysToWin: number
@@ -1093,6 +1097,7 @@ export interface SourceCohortTrajectorySignals {
   medianDaysOnContractStage: number | null
   wonDeals: number
   lostDeals: number
+  returnedDeals: number
   openDeals: number
 }
 
@@ -1215,7 +1220,7 @@ export interface SourceCohortConversionJourneyDealRow {
   managerName: string
   currentStageId: string
   currentStageName: string
-  outcome: 'open' | 'lost' | 'won'
+  outcome: SourceCohortDealOutcome
   status: SourceCohortConversionJourneyDealStatus
   statusLabel: string
   reason: string
@@ -1312,6 +1317,7 @@ export interface SourceCohortConversionReportSnapshot {
   totalCreatedDeals: number
   totalWonDeals: number
   totalLostDeals: number
+  totalReturnedDeals: number
   totalOpenDeals: number
   winRate: number
   averageDaysToWin: number

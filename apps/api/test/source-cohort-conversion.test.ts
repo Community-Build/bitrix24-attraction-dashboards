@@ -119,6 +119,7 @@ describe("buildSourceCohortConversionReport", () => {
     expect(result.totalCreatedDeals).toBe(3);
     expect(result.totalWonDeals).toBe(1);
     expect(result.totalLostDeals).toBe(1);
+    expect(result.totalReturnedDeals).toBe(0);
     expect(result.totalOpenDeals).toBe(1);
     expect(result.winRate).toBeCloseTo(33.33, 2);
     expect(result.averageDaysToWin).toBe(11);
@@ -139,6 +140,7 @@ describe("buildSourceCohortConversionReport", () => {
         createdDeals: 2,
         wonDeals: 1,
         lostDeals: 0,
+        returnedDeals: 0,
         openDeals: 1,
         winRate: 50,
         averageDaysToWin: 11,
@@ -149,6 +151,7 @@ describe("buildSourceCohortConversionReport", () => {
             createdDeals: 1,
             wonDeals: 1,
             lostDeals: 0,
+            returnedDeals: 0,
             openDeals: 0,
             winRate: 100,
             averageDaysToWin: 11,
@@ -160,6 +163,7 @@ describe("buildSourceCohortConversionReport", () => {
             createdDeals: 1,
             wonDeals: 0,
             lostDeals: 0,
+            returnedDeals: 0,
             openDeals: 1,
             winRate: 0,
             averageDaysToWin: 0,
@@ -199,6 +203,7 @@ describe("buildSourceCohortConversionReport", () => {
         createdDeals: 1,
         wonDeals: 0,
         lostDeals: 1,
+        returnedDeals: 0,
         openDeals: 0,
         winRate: 0,
         averageDaysToWin: 0,
@@ -209,6 +214,7 @@ describe("buildSourceCohortConversionReport", () => {
             createdDeals: 1,
             wonDeals: 0,
             lostDeals: 1,
+            returnedDeals: 0,
             openDeals: 0,
             winRate: 0,
             averageDaysToWin: 0,
@@ -281,5 +287,78 @@ describe("buildSourceCohortConversionReport", () => {
     expect(result.averageDaysToWin).toBe(4);
     expect(result.rows[0]?.averageDaysToWin).toBe(4);
     expect(result.rows[0]?.targetGroupBreakdown[0]?.averageDaysToWin).toBe(4);
+  });
+
+  it("keeps repairable rejection and return routes out of loss totals", () => {
+    const result = buildSourceCohortConversionReport({
+      range: {
+        from: "2026-05-01T00:00:00.000Z",
+        to: "2026-05-31T23:59:59.999Z"
+      },
+      wonStageIds: ["C10:WON"],
+      deals: [
+        makeDeal({
+          id: "repairable",
+          stageId: "C10:UC_XEEP0A",
+          stageSemanticId: "F",
+          dateCreate: "2026-05-10T10:00:00.000Z"
+        }),
+        makeDeal({
+          id: "returned",
+          stageId: "C10:UC_EA3R76",
+          stageSemanticId: "F",
+          dateCreate: "2026-05-11T10:00:00.000Z"
+        }),
+        makeDeal({
+          id: "lost",
+          stageId: "C10:LOSE",
+          stageSemanticId: "F",
+          dateCreate: "2026-05-12T10:00:00.000Z"
+        })
+      ],
+      stageCatalog: [
+        {
+          entityType: "deal",
+          categoryId: "10",
+          statusId: "C10:UC_XEEP0A",
+          name: "Отклонено потребителем",
+          semanticId: "F",
+          sortOrder: 80
+        },
+        {
+          entityType: "deal",
+          categoryId: "10",
+          statusId: "C10:LOSE",
+          name: "Корзина",
+          semanticId: "F",
+          sortOrder: 90
+        },
+        {
+          entityType: "deal",
+          categoryId: "10",
+          statusId: "C10:UC_EA3R76",
+          name: "Возврат в Лидген(неквал)",
+          semanticId: "F",
+          sortOrder: 100
+        }
+      ],
+      stageHistory: [],
+      managerDirectory: [{ id: "7", name: "Иван" }]
+    });
+
+    expect(result).toMatchObject({
+      totalCreatedDeals: 3,
+      totalWonDeals: 0,
+      totalLostDeals: 1,
+      totalReturnedDeals: 1,
+      totalOpenDeals: 1
+    });
+    expect(result.rows[0]).toMatchObject({
+      createdDeals: 3,
+      wonDeals: 0,
+      lostDeals: 1,
+      returnedDeals: 1,
+      openDeals: 1
+    });
   });
 });

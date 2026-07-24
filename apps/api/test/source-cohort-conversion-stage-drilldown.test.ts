@@ -174,7 +174,7 @@ describe("source cohort CRM-stage drill-down", () => {
     ).toMatchObject({
       status: "within_sla",
       statusLabel: "Сейчас на этапе",
-      selectedStepAt: "2026-06-02T00:30:00+01:00",
+      selectedStepAt: "2026-06-01T23:45:00.000Z",
       ageDays: 8,
       slaDays: null
     });
@@ -235,7 +235,7 @@ describe("source cohort CRM-stage drill-down", () => {
             currentStageId: "C10:UC_EA3R76",
             currentStageName: "Возврат в Лидген(неквал)",
             currentStageEnteredAt: "2026-06-05T00:00:00.000Z",
-            outcome: "lost"
+            outcome: "returned"
           }
         )
       ]
@@ -260,7 +260,7 @@ describe("source cohort CRM-stage drill-down", () => {
       drilldown.views.reached.deals.find((row) => row.dealId === "10")
     ).toMatchObject({
       dealId: "10",
-      outcome: "lost",
+      outcome: "returned",
       status: "returned",
       statusLabel: "Возвращена в лидген"
     });
@@ -326,7 +326,7 @@ describe("source cohort CRM-stage drill-down", () => {
             currentStageId: "C10:UC_EA3R76",
             currentStageName: "Возврат в Лидген(неквал)",
             currentStageEnteredAt: "2026-06-03T00:00:00.000Z",
-            outcome: "lost"
+            outcome: "returned"
           }
         ),
         deal(
@@ -349,7 +349,7 @@ describe("source cohort CRM-stage drill-down", () => {
       expect.arrayContaining([
         expect.objectContaining({
           dealId: "8",
-          outcome: "lost",
+          outcome: "returned",
           status: "returned",
           statusLabel: "Возвращена в лидген"
         }),
@@ -388,7 +388,7 @@ describe("source cohort CRM-stage drill-down", () => {
             currentStageId: "C10:UC_EA3R76",
             currentStageName: "Возврат в Лидген(неквал)",
             currentStageEnteredAt: "2026-06-04T00:00:00.000Z",
-            outcome: "lost"
+            outcome: "returned"
           }
         ),
         deal(
@@ -401,7 +401,7 @@ describe("source cohort CRM-stage drill-down", () => {
             currentStageId: "C10:UC_EA3R76",
             currentStageName: "Возврат в Лидген(неквал)",
             currentStageEnteredAt: "2026-06-04T00:00:00.000Z",
-            outcome: "lost"
+            outcome: "returned"
           }
         )
       ]
@@ -419,6 +419,49 @@ describe("source cohort CRM-stage drill-down", () => {
       dealId: "12",
       status: "returned"
     });
+  });
+
+  it("uses the latest CRM-stage visit when a deal returns from the next stage", () => {
+    const drilldown = buildSourceCohortConversionStageDrilldown({
+      range,
+      stages,
+      stageId: "C10:CALL",
+      asOf,
+      dealFacts: [
+        deal(
+          "13",
+          {
+            "C10:NEW": ["2026-06-01T00:00:00.000Z"],
+            "C10:CALL": [
+              "2026-06-02T00:00:00.000Z",
+              "2026-06-05T00:00:00.000Z"
+            ],
+            "C10:MEETING": ["2026-06-03T00:00:00.000Z"]
+          },
+          {
+            currentStageId: "C10:CALL",
+            currentStageName: "Звонок-знакомство",
+            currentStageEnteredAt: "2026-06-05T00:00:00.000Z"
+          }
+        )
+      ]
+    });
+
+    expect(drilldown.views.reached.deals[0]).toMatchObject({
+      dealId: "13",
+      selectedStepAt: "2026-06-05T00:00:00.000Z",
+      nextStepAt: null,
+      status: "within_sla",
+      statusLabel: "Сейчас на этапе"
+    });
+    expect(drilldown.views.notAdvanced.deals).toEqual([
+      expect.objectContaining({
+        dealId: "13",
+        selectedStepAt: "2026-06-05T00:00:00.000Z",
+        nextStepAt: null,
+        status: "within_sla"
+      })
+    ]);
   });
 
   it("throws a typed error for an unknown CRM stage", () => {

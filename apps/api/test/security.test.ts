@@ -254,6 +254,7 @@ function createEmptySourceCohortConversionReport(): SourceCohortConversionReport
     totalCreatedDeals: 0,
     totalWonDeals: 0,
     totalLostDeals: 0,
+    totalReturnedDeals: 0,
     totalOpenDeals: 0,
     winRate: 0,
     averageDaysToWin: 0,

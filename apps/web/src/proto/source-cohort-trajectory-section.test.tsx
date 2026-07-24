@@ -51,6 +51,7 @@ const trajectory = {
   overallSignals: {
     wonDeals: 1,
     lostDeals: 2,
+    returnedDeals: 0,
     openDeals: 9,
   },
   managerDiagnostics: [],

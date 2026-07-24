@@ -330,7 +330,7 @@ describe('apiClient', () => {
                 managerName: 'Мария',
                 currentStageId: 'C10:UC_EA3R76',
                 currentStageName: 'Возврат в Лидген(неквал)',
-                outcome: 'lost',
+                outcome: 'returned',
                 status: 'returned',
                 statusLabel: 'Возвращена в лидген',
                 reason: 'Отдельный маршрут возврата.',
@@ -367,7 +367,7 @@ describe('apiClient', () => {
 
     expect(drilldown.views.reached.deals[0]).toMatchObject({
       dealId: '23843',
-      outcome: 'lost',
+      outcome: 'returned',
       status: 'returned',
       statusLabel: 'Возвращена в лидген',
     })

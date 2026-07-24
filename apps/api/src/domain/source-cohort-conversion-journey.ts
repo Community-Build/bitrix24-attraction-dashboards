@@ -1,5 +1,6 @@
 import type {
   ReportRange,
+  SourceCohortDealOutcome,
   SourceCohortConversionEventDepthKey,
   SourceCohortConversionJourney,
   SourceCohortConversionJourneyCoreStepKey,
@@ -30,7 +31,7 @@ export interface SourceCohortConversionJourneyDrilldownDealFacts
   managerName: string;
   currentStageId: string;
   currentStageName: string;
-  outcome: "open" | "lost" | "won";
+  outcome: SourceCohortDealOutcome;
 }
 
 type CoreStepDefinition = {
@@ -473,6 +474,17 @@ function classifyMissingTarget(input: {
     return dataGap(
       `Факт «${input.target.label}» есть, но его время не следует за шагом «${input.previous.label}». Проверьте хронологию и привязку факта.`
     );
+  }
+
+  if (input.facts.outcome === "returned") {
+    return {
+      status: "returned",
+      statusLabel: STATUS_LABELS.returned,
+      reason: `Сделка возвращена в лидген на этапе «${input.facts.currentStageName}»; это отдельный маршрут, а не потеря.`,
+      ageFromAt: null,
+      ageDays: null,
+      slaDays: null
+    };
   }
 
   if (input.facts.outcome === "lost") {

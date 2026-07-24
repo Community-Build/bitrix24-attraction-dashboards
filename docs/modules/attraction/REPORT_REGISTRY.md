@@ -39,6 +39,11 @@ Stable dashboard anchors used by ontology report bindings:
 - Stage identity is resolved by stable stage IDs/semantics first:
   `C10:MEETING` for the meeting stage and `C10:CONTRACT` for the contract
   stage. Russian name matching is only a fallback for incomplete catalogs.
+- Current deal outcome is resolved once for aggregates and both drill-down
+  kinds. `C10:UC_XEEP0A` (`Отклонено потребителем`) remains an open,
+  repairable route even though Bitrix publishes semantic `F`;
+  `C10:UC_EA3R76` (`Возврат в Лидген(неквал)`) is counted separately as
+  `returned`, never as an open or lost deal.
 - Stage transition lines: `SourceCohortConversionReport.trajectory.stageTransitions`
   is built from consecutive stages in the canonical per-deal timeline. A
   transition is counted once per deal for the pair `fromStageId -> toStageId`;
@@ -81,7 +86,9 @@ Stable dashboard anchors used by ontology report bindings:
   ID from `trajectory.stageNodes`. In the existing `CRM-этапы` table, each
   visible stage row opens the same three reconciled views from canonical stage
   history. A shortcut to a later productive stage is labeled as a skipped
-  stage, not a loss; terminal loss stages open a reached-only deal list.
+  stage, not a loss; terminal loss stages open a reached-only deal list. When a
+  deal enters the same stage more than once, the current cycle uses the latest
+  selected-stage entry and only a next-stage entry after that timestamp.
 - Drill-down rows may expose only deal ID, a generated Bitrix deal URL, current
   manager, current stage, outcome, relevant timestamps, deterministic status,
   and deterministic reason. Deal titles, contact names, phones, emails, and raw
@@ -89,10 +96,11 @@ Stable dashboard anchors used by ontology report bindings:
 - Drill-down status is operational, not predictive:
   `advanced` means the strict next transition exists; `within_sla` and `stuck`
   mean the required fact is still missing before or after the configured
-  threshold; `lost` means the deal is already in a loss outcome; `data_gap`
-  means the observed chronology or successful outcome conflicts with the
-  required facts. The current thresholds are 3 days from creation to first
-  attempt or confirmed conversation, 7 days from creation to completed
+  threshold; `lost` means the deal is already in a loss outcome; `returned`
+  means the deal is currently in the separate return-to-leadgen route;
+  `data_gap` means the observed chronology or successful outcome conflicts
+  with the required facts. The current thresholds are 3 days from creation to
+  first attempt or confirmed conversation, 7 days from creation to completed
   meeting, 7 days from completed meeting to contract, and 14 days from
   contract to transfer. These thresholds classify rows; they do not change the
   aggregate journey numerator or denominator.

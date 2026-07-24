@@ -1,5 +1,6 @@
 import type {
   ReportRange,
+  SourceCohortDealOutcome,
   SourceCohortConversionJourneyDealRow,
   SourceCohortConversionJourneyDealStatus,
   SourceCohortConversionJourneyDrilldown
@@ -40,7 +41,7 @@ export interface SourceCohortConversionStageDrilldownDealFacts {
   currentStageId: string;
   currentStageName: string;
   currentStageEnteredAt: string | null;
-  outcome: "open" | "lost" | "won";
+  outcome: SourceCohortDealOutcome;
   createdAt: string;
   stageEnteredAts: ReadonlyMap<string, readonly string[]>;
 }
@@ -105,6 +106,61 @@ function firstStageAt(
           (timestamp(left) ?? Number.POSITIVE_INFINITY) -
           (timestamp(right) ?? Number.POSITIVE_INFINITY)
       )[0] ?? null
+  );
+}
+
+function latestStageAt(
+  facts: SourceCohortConversionStageDrilldownDealFacts,
+  stageId: string,
+  after: string | null = facts.createdAt
+) {
+  const afterMs = timestamp(after);
+  if (afterMs === null) {
+    return null;
+  }
+
+  return (
+    [...(facts.stageEnteredAts.get(stageId) ?? [])]
+      .filter((value) => {
+        const valueMs = timestamp(value);
+        return valueMs !== null && valueMs >= afterMs;
+      })
+      .sort(
+        (left, right) =>
+          (timestamp(left) ?? Number.NEGATIVE_INFINITY) -
+          (timestamp(right) ?? Number.NEGATIVE_INFINITY)
+      )
+      .at(-1) ?? null
+  );
+}
+
+function latestStageAtOrBefore(
+  facts: SourceCohortConversionStageDrilldownDealFacts,
+  stageId: string,
+  before: string | null
+) {
+  const createdAtMs = timestamp(facts.createdAt);
+  const beforeMs = timestamp(before);
+  if (createdAtMs === null || beforeMs === null) {
+    return null;
+  }
+
+  return (
+    [...(facts.stageEnteredAts.get(stageId) ?? [])]
+      .filter((value) => {
+        const valueMs = timestamp(value);
+        return (
+          valueMs !== null &&
+          valueMs >= createdAtMs &&
+          valueMs <= beforeMs
+        );
+      })
+      .sort(
+        (left, right) =>
+          (timestamp(left) ?? Number.NEGATIVE_INFINITY) -
+          (timestamp(right) ?? Number.NEGATIVE_INFINITY)
+      )
+      .at(-1) ?? null
   );
 }
 
@@ -225,10 +281,7 @@ function classifyReached(input: {
   }
 
   if (input.selected.stageKind === "return") {
-    if (
-      input.facts.currentStageId === input.selected.stageId &&
-      input.facts.outcome === "lost"
-    ) {
+    if (input.facts.currentStageId === input.selected.stageId) {
       return returned(
         `Сделка возвращена поставщику на CRM-этапе «${input.selected.stageName}»; это отдельный маршрут, а не «Корзина».`
       );
@@ -304,6 +357,14 @@ function classifyReached(input: {
       input.next
         ? `После «${input.selected.stageName}» сделка завершена на этапе «${input.facts.currentStageName}»; перехода к «${input.next.stageName}» нет.`
         : `Сделка завершена на этапе «${input.facts.currentStageName}».`
+    );
+  }
+
+  if (input.facts.outcome === "returned") {
+    return returned(
+      input.next
+        ? `После «${input.selected.stageName}» сделка возвращена в лидген; перехода к «${input.next.stageName}» нет.`
+        : `После «${input.selected.stageName}» сделка возвращена в лидген.`
     );
   }
 
@@ -393,6 +454,12 @@ function classifyMissed(input: {
 
     return lost(
       `После «${input.previous.stageName}» сделка завершена на этапе «${input.facts.currentStageName}», не дойдя до «${input.selected.stageName}».`
+    );
+  }
+
+  if (input.facts.outcome === "returned") {
+    return returned(
+      `После «${input.previous.stageName}» сделка возвращена в лидген, не дойдя до «${input.selected.stageName}».`
     );
   }
 
@@ -498,12 +565,12 @@ export function buildSourceCohortConversionStageDrilldown(input: {
 
   const reachedRows = sortDeals(
     input.dealFacts.flatMap((facts) => {
-      const selectedAt = firstStageAt(facts, selected.stageId);
+      const selectedAt = latestStageAt(facts, selected.stageId);
       if (!selectedAt) {
         return [];
       }
       const previousAt = previous
-        ? firstStageAt(facts, previous.stageId)
+        ? latestStageAtOrBefore(facts, previous.stageId, selectedAt)
         : null;
       const nextAt = next
         ? firstStageAt(facts, next.stageId, selectedAt)
@@ -532,7 +599,7 @@ export function buildSourceCohortConversionStageDrilldown(input: {
   const missedRows = previous
     ? sortDeals(
         input.dealFacts.flatMap((facts) => {
-          const previousAt = firstStageAt(facts, previous.stageId);
+          const previousAt = latestStageAt(facts, previous.stageId);
           if (
             !previousAt ||
             firstStageAt(facts, selected.stageId, previousAt)
@@ -563,7 +630,7 @@ export function buildSourceCohortConversionStageDrilldown(input: {
   const notAdvancedRows = next
     ? sortDeals(
         input.dealFacts.flatMap((facts) => {
-          const selectedAt = firstStageAt(facts, selected.stageId);
+          const selectedAt = latestStageAt(facts, selected.stageId);
           if (
             !selectedAt ||
             firstStageAt(facts, next.stageId, selectedAt)
@@ -575,7 +642,7 @@ export function buildSourceCohortConversionStageDrilldown(input: {
             toDealRow({
               facts,
               previousAt: previous
-                ? firstStageAt(facts, previous.stageId)
+                ? latestStageAtOrBefore(facts, previous.stageId, selectedAt)
                 : null,
               selectedAt,
               nextAt: null,

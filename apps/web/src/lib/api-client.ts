@@ -2502,8 +2502,10 @@ function normalizeSourceCohortConversionJourneyDrilldown(
   const normalizeDeal = (entry: unknown) => {
     const row = isRecord(entry) ? entry : {}
     const outcome = asString(row.outcome, 'open')
-    const normalizedOutcome: 'open' | 'lost' | 'won' =
-      outcome === 'lost' || outcome === 'won' ? outcome : 'open'
+    const normalizedOutcome: 'open' | 'lost' | 'won' | 'returned' =
+      outcome === 'lost' || outcome === 'won' || outcome === 'returned'
+        ? outcome
+        : 'open'
 
     return {
       dealId: asString(row.dealId),
@@ -2736,6 +2738,7 @@ function normalizeSourceCohortTrajectoryBreakdownRow(value: unknown) {
     wonDeals: asNumber(row.wonDeals),
     wonRate: asNumber(row.wonRate),
     lostDeals: asNumber(row.lostDeals),
+    returnedDeals: asNumber(row.returnedDeals),
     openDeals: asNumber(row.openDeals),
     meetingStageWithoutFactDeals: asNumber(row.meetingStageWithoutFactDeals),
     completedMeetingWithoutNextStageDeals: asNumber(
@@ -2975,6 +2978,7 @@ function normalizeSourceCohortTrajectoryReport(value: unknown) {
       medianDaysOnContractStage: asNullableNumber(signals.medianDaysOnContractStage),
       wonDeals: asNumber(signals.wonDeals),
       lostDeals: asNumber(signals.lostDeals),
+      returnedDeals: asNumber(signals.returnedDeals),
       openDeals: asNumber(signals.openDeals),
     },
     managerDiagnostics: asArray(value.managerDiagnostics, (entry) => {
@@ -3109,6 +3113,7 @@ function normalizeSourceCohortConversionSnapshot(
     totalCreatedDeals: asNumber(data.totalCreatedDeals),
     totalWonDeals: asNumber(data.totalWonDeals),
     totalLostDeals: asNumber(data.totalLostDeals),
+    totalReturnedDeals: asNumber(data.totalReturnedDeals),
     totalOpenDeals: asNumber(data.totalOpenDeals),
     winRate: asNumber(data.winRate),
     averageDaysToWin: asNumber(data.averageDaysToWin),
@@ -3135,6 +3140,7 @@ function normalizeSourceCohortConversionSnapshot(
         createdDeals: asNumber(item.createdDeals),
         wonDeals: asNumber(item.wonDeals),
         lostDeals: asNumber(item.lostDeals),
+        returnedDeals: asNumber(item.returnedDeals),
         openDeals: asNumber(item.openDeals),
         winRate: asNumber(item.winRate),
         averageDaysToWin: asNumber(item.averageDaysToWin),
@@ -3146,6 +3152,7 @@ function normalizeSourceCohortConversionSnapshot(
             createdDeals: asNumber(row.createdDeals),
             wonDeals: asNumber(row.wonDeals),
             lostDeals: asNumber(row.lostDeals),
+            returnedDeals: asNumber(row.returnedDeals),
             openDeals: asNumber(row.openDeals),
             winRate: asNumber(row.winRate),
             averageDaysToWin: asNumber(row.averageDaysToWin),

@@ -97,7 +97,7 @@ describe("source cohort conversion journey drill-down", () => {
     ).toEqual(["2", "3", "4", "7"]);
   });
 
-  it("separates stuck, within-SLA, lost and data-gap explanations without PII", () => {
+  it("separates stuck, within-SLA, lost, returned and data-gap explanations without PII", () => {
     const drilldown = buildSourceCohortConversionJourneyDrilldown({
       range,
       stepKey: "first_call",
@@ -117,6 +117,12 @@ describe("source cohort conversion journey drill-down", () => {
         deal("7", {
           firstCallAt: "2026-06-03T00:00:00.000Z",
           confirmedConversationAt: "2026-06-02T00:00:00.000Z"
+        }),
+        deal("8", {
+          firstCallAt: "2026-06-02T00:00:00.000Z",
+          currentStageId: "C10:UC_EA3R76",
+          currentStageName: "Возврат в Лидген(неквал)",
+          outcome: "returned"
         })
       ]
     });
@@ -143,6 +149,11 @@ describe("source cohort conversion journey drill-down", () => {
     expect(rows.get("7")).toMatchObject({
       status: "data_gap",
       statusLabel: "Проверить данные"
+    });
+    expect(rows.get("8")).toMatchObject({
+      outcome: "returned",
+      status: "returned",
+      statusLabel: "Возвращена в лидген"
     });
     expect(Object.keys(rows.get("2") ?? {})).not.toEqual(
       expect.arrayContaining(["title", "contactId", "phone", "email"])

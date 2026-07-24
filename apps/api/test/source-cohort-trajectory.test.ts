@@ -2717,6 +2717,11 @@ describe("buildSourceCohortTrajectoryReport", () => {
         stageSemanticId: "F"
       }),
       deal({
+        id: "currently-rejected",
+        stageId: "C10:UC_XEEP0A",
+        stageSemanticId: "F"
+      }),
+      deal({
         id: "returned-then-resumed",
         stageId: "C10:PREPARATION",
         stageSemanticId: "P"
@@ -2776,20 +2781,27 @@ describe("buildSourceCohortTrajectoryReport", () => {
       }).journeyDrilldown;
 
     const rejected = buildDrilldown("C10:UC_XEEP0A");
-    expect(rejected?.views.reached.deals).toEqual([
-      expect.objectContaining({
-        dealId: "rejected-then-won",
-        outcome: "won",
-        status: "advanced"
-      })
-    ]);
+    expect(rejected?.views.reached.deals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dealId: "currently-rejected",
+          outcome: "open",
+          status: "within_sla"
+        }),
+        expect.objectContaining({
+          dealId: "rejected-then-won",
+          outcome: "won",
+          status: "advanced"
+        })
+      ])
+    );
 
     const returned = buildDrilldown("C10:UC_EA3R76");
     expect(returned?.views.reached.deals).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           dealId: "currently-returned",
-          outcome: "lost",
+          outcome: "returned",
           status: "returned"
         }),
         expect.objectContaining({
@@ -2805,5 +2817,54 @@ describe("buildSourceCohortTrajectoryReport", () => {
         (row) => row.status === "lost" && row.outcome !== "lost"
       )
     ).toEqual([]);
+
+    const summary = buildSourceCohortTrajectoryReport({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      wonStageIds: ["C10:WON"],
+      deals,
+      stageCatalog: stageCatalogWithAlternativeRoutes,
+      stageHistory,
+      now: new Date("2026-06-10T00:00:00.000Z")
+    });
+    expect(summary.overallSignals).toMatchObject({
+      wonDeals: 1,
+      lostDeals: 0,
+      returnedDeals: 1,
+      openDeals: 2
+    });
+
+    const factDrilldown = buildSourceCohortTrajectoryReport({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      },
+      wonStageIds: ["C10:WON"],
+      deals,
+      stageCatalog: stageCatalogWithAlternativeRoutes,
+      stageHistory,
+      journeyDrilldown: {
+        drilldownKind: "fact",
+        stepKey: "first_call"
+      },
+      now: new Date("2026-06-10T00:00:00.000Z")
+    }).journeyDrilldown;
+    expect(
+      factDrilldown?.views.missed.deals.find(
+        (row) => row.dealId === "currently-returned"
+      )
+    ).toMatchObject({
+      outcome: "returned",
+      status: "returned"
+    });
+    expect(
+      factDrilldown?.views.missed.deals.find(
+        (row) => row.dealId === "currently-rejected"
+      )
+    ).toMatchObject({
+      outcome: "open"
+    });
   });
 });
