@@ -61,6 +61,15 @@ export interface LastSyncSummary {
 }
 
 const OPERATIONAL_THRESHOLD_SETTINGS_KEY = "attraction";
+const CURRENT_ATTRACTION_SCOPE_KEY_STATE = "attraction_current_scope_key";
+const CURRENT_ATTRACTION_SCOPE_RECONCILED_AT_STATE =
+  "attraction_current_scope_reconciled_at";
+
+export interface CurrentAttractionScopeSnapshot {
+  scopeKey: string | null;
+  reconciledAt: string | null;
+  dealIds: string[];
+}
 
 const DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS: OperationalStageAgingThreshold[] = [
   {
@@ -556,6 +565,12 @@ export interface SqliteRepository {
     assignedByIds?: string[]
   ): Promise<string[]>;
   getDealsByIds(dealIds: string[]): Promise<DealSnapshot[]>;
+  getCurrentAttractionScope(): Promise<CurrentAttractionScopeSnapshot>;
+  replaceCurrentAttractionScope(input: {
+    scopeKey: string;
+    dealIds: string[];
+    reconciledAt: string;
+  }): Promise<void>;
   getActivitiesByIds(activityIds: string[]): Promise<ActivitySnapshot[]>;
   getActivityBindingsByActivityIds(
     activityIds: string[]
@@ -1197,6 +1212,10 @@ export function createSqliteRepository(
       utm_campaign TEXT,
       utm_content TEXT,
       utm_term TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS attraction_current_deal_ids (
+      deal_id TEXT PRIMARY KEY
     );
 
     CREATE TABLE IF NOT EXISTS stage_catalog (
@@ -2973,6 +2992,13 @@ export function createSqliteRepository(
     ON CONFLICT(key) DO UPDATE SET
       value = excluded.value
   `);
+  const deleteCurrentAttractionDealIdsStatement = database.prepare(`
+    DELETE FROM attraction_current_deal_ids
+  `);
+  const insertCurrentAttractionDealIdStatement = database.prepare(`
+    INSERT INTO attraction_current_deal_ids (deal_id)
+    VALUES (?)
+  `);
   const upsertSyncCursorStatement = database.prepare(`
     INSERT INTO sync_cursors (key, cursor_value, updated_at)
     VALUES (@key, @cursorValue, @updatedAt)
@@ -3723,6 +3749,56 @@ export function createSqliteRepository(
           .all(...chunk) as DealSnapshot[];
       });
       return hydrateDealMeetingSlots(deals);
+    },
+
+    async getCurrentAttractionScope() {
+      const stateRows = database
+        .prepare(
+          `SELECT key, value
+          FROM sync_state
+          WHERE key IN (?, ?)`
+        )
+        .all(
+          CURRENT_ATTRACTION_SCOPE_KEY_STATE,
+          CURRENT_ATTRACTION_SCOPE_RECONCILED_AT_STATE
+        ) as Array<{ key: string; value: string }>;
+      const state = new Map(stateRows.map((row) => [row.key, row.value]));
+      const rows = database
+        .prepare(
+          `SELECT deal_id AS dealId
+          FROM attraction_current_deal_ids
+          ORDER BY deal_id ASC`
+        )
+        .all() as Array<{ dealId: string }>;
+
+      return {
+        scopeKey: state.get(CURRENT_ATTRACTION_SCOPE_KEY_STATE) ?? null,
+        reconciledAt:
+          state.get(CURRENT_ATTRACTION_SCOPE_RECONCILED_AT_STATE) ?? null,
+        dealIds: rows.map((row) => row.dealId)
+      };
+    },
+
+    replaceCurrentAttractionScope(inputRow) {
+      const dealIds = Array.from(
+        new Set(inputRow.dealIds.map((dealId) => dealId.trim()).filter(Boolean))
+      ).sort((left, right) => left.localeCompare(right));
+      const transaction = database.transaction(() => {
+        deleteCurrentAttractionDealIdsStatement.run();
+        for (const dealId of dealIds) {
+          insertCurrentAttractionDealIdStatement.run(dealId);
+        }
+        upsertSyncStateStatement.run(
+          CURRENT_ATTRACTION_SCOPE_KEY_STATE,
+          inputRow.scopeKey
+        );
+        upsertSyncStateStatement.run(
+          CURRENT_ATTRACTION_SCOPE_RECONCILED_AT_STATE,
+          inputRow.reconciledAt
+        );
+      });
+      transaction();
+      return Promise.resolve();
     },
 
     async getActivitiesByIds(activityIds) {

@@ -784,7 +784,11 @@ async function seedCallAnalysis(repository: SqliteRepository, calls: CallSnapsho
   }
 }
 
-async function seedCoverage(repository: SqliteRepository, now: Date, dealsSynced: number) {
+async function seedCoverage(
+  repository: SqliteRepository,
+  now: Date,
+  dealIds: string[]
+) {
   const managerIds = MANAGERS.map((manager) => manager.id);
   const scopeKey = buildCategoryScopeKey([CATEGORY_ID], managerIds);
   const syncedAt = iso(now);
@@ -838,15 +842,20 @@ async function seedCoverage(repository: SqliteRepository, now: Date, dealsSynced
     modifiedAfter: null,
     scopeKey
   });
+  await repository.replaceCurrentAttractionScope({
+    scopeKey,
+    dealIds,
+    reconciledAt: syncedAt
+  });
   await repository.finishSyncRun({
     syncRunId,
     finishedAt: syncedAt,
     status: "success",
     leadsSynced: 0,
-    dealsSynced,
+    dealsSynced: dealIds.length,
     dealBreakdown: {
-      total: dealsSynced,
-      created: dealsSynced,
+      total: dealIds.length,
+      created: dealIds.length,
       updated: 0,
       closed: 0,
       reopened: 0,
@@ -961,7 +970,11 @@ export async function seedStandData(input: SeedStandDataInput) {
   });
   await input.repository.upsertUnitEconomicsCostFacts(buildCostFacts(now, months));
   await seedCallAnalysis(input.repository, built.calls, now);
-  await seedCoverage(input.repository, now, built.deals.length);
+  await seedCoverage(
+    input.repository,
+    now,
+    built.deals.map((deal) => deal.id)
+  );
 
   return {
     deals: built.deals.length,

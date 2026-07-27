@@ -432,6 +432,11 @@ vi.mock('@/lib/api-client', () => ({
         to: '2026-04-30T23:59:59.999+03:00',
       },
       generatedAt: '2026-04-30T12:00:00.000Z',
+      currentScope: {
+        status: 'ready' as const,
+        reconciledAt: '2026-04-30T11:55:00.000Z',
+        dealCount: 0,
+      },
       createdDeals: 0,
       meetingsHeld: {
         total: 0,

@@ -2409,6 +2409,54 @@ describe("createSqliteRepository", () => {
     ).resolves.toBe(null);
   });
 
+  it("atomically replaces the authoritative current attraction deal set", async () => {
+    const repository = createTempRepository();
+
+    await expect(repository.getCurrentAttractionScope()).resolves.toEqual({
+      scopeKey: null,
+      reconciledAt: null,
+      dealIds: []
+    });
+
+    await repository.replaceCurrentAttractionScope({
+      scopeKey: "category:10:assigned:78,6994",
+      dealIds: ["139938", "138542", "139938", " "],
+      reconciledAt: "2026-07-27T07:00:00.000Z"
+    });
+    await expect(repository.getCurrentAttractionScope()).resolves.toEqual({
+      scopeKey: "category:10:assigned:78,6994",
+      reconciledAt: "2026-07-27T07:00:00.000Z",
+      dealIds: ["138542", "139938"]
+    });
+
+    expect(() =>
+      repository.runSnapshotTransaction(() => {
+        void repository.replaceCurrentAttractionScope({
+          scopeKey: "category:10:assigned:78",
+          dealIds: ["140784"],
+          reconciledAt: "2026-07-27T08:00:00.000Z"
+        });
+        throw new Error("rollback-current-scope");
+      })
+    ).toThrow("rollback-current-scope");
+    await expect(repository.getCurrentAttractionScope()).resolves.toEqual({
+      scopeKey: "category:10:assigned:78,6994",
+      reconciledAt: "2026-07-27T07:00:00.000Z",
+      dealIds: ["138542", "139938"]
+    });
+
+    await repository.replaceCurrentAttractionScope({
+      scopeKey: "category:10:assigned:78",
+      dealIds: ["140784"],
+      reconciledAt: "2026-07-27T09:00:00.000Z"
+    });
+    await expect(repository.getCurrentAttractionScope()).resolves.toEqual({
+      scopeKey: "category:10:assigned:78",
+      reconciledAt: "2026-07-27T09:00:00.000Z",
+      dealIds: ["140784"]
+    });
+  });
+
   it("initializes schema, persists won stage settings and tracks the latest sync cursor", async () => {
     const directory = mkdtempSync(join(tmpdir(), "bitrix24-reporting-"));
     tempDirs.push(directory);

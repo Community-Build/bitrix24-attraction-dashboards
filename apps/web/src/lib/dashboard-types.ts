@@ -316,9 +316,22 @@ export interface OperationalManagerRow {
   riskDeals: number
 }
 
+export type OperationalCurrentScopeStatus =
+  | 'ready'
+  | 'stale'
+  | 'uninitialized'
+  | 'scope_mismatch'
+
+export interface OperationalCurrentScope {
+  status: OperationalCurrentScopeStatus
+  reconciledAt: string | null
+  dealCount: number
+}
+
 export interface OperationalDashboardReport {
   range: ReportRange
   generatedAt: string
+  currentScope: OperationalCurrentScope
   createdDeals: number
   meetingsHeld: {
     total: number
@@ -2500,6 +2513,9 @@ export interface SyncHealthIssue {
     | 'STALE_SUCCESSFUL_SYNC'
     | 'STALE_RUNNING_SYNC'
     | 'MISSING_COVERAGE'
+    | 'CURRENT_SCOPE_UNINITIALIZED'
+    | 'CURRENT_SCOPE_MISMATCH'
+    | 'CURRENT_SCOPE_STALE'
   severity: SyncHealthIssueSeverity
   message: string
 }

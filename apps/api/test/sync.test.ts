@@ -429,6 +429,7 @@ describe("performManualSync", () => {
     let listDealCalls = 0;
     let syncRunScopeKey: string | null = null;
     let finishedSummary: unknown = null;
+    let currentScopeReplacement: unknown = null;
     const repo = {
       getLatestSuccessCursor: async () => {
         cursorReads += 1;
@@ -445,6 +446,14 @@ describe("performManualSync", () => {
           calls: 7,
           stageHistory: 21
         };
+      },
+      getCurrentAttractionScope: async () => ({
+        scopeKey: attractionScopeKey,
+        reconciledAt: "2026-05-31T10:00:00.000Z",
+        dealIds: ["D_OLD"]
+      }),
+      replaceCurrentAttractionScope: async (input: unknown) => {
+        currentScopeReplacement = input;
       },
       createSyncRun: async (input: { scopeKey: string }) => {
         syncRunScopeKey = input.scopeKey;
@@ -482,7 +491,7 @@ describe("performManualSync", () => {
     expect(cursorReads).toBe(0);
     expect(stageCatalogFetches).toBe(0);
     expect(listDealCalls).toBe(0);
-    expect(syncRunScopeKey).toBe("category:10:assigned:");
+    expect(syncRunScopeKey).toBe("category:10");
     expect(result).toMatchObject({
       syncRunId: 130,
       dealsSynced: 0,
@@ -499,7 +508,16 @@ describe("performManualSync", () => {
         calls: 0,
         stageHistory: 0
       },
-      diagnostics: ["attractionSkipped=empty-scope", "attractionManagers=0"]
+      diagnostics: [
+        "attractionSkipped=empty-scope",
+        "attractionManagers=0",
+        "currentScopeDeals=0"
+      ]
+    });
+    expect(currentScopeReplacement).toEqual({
+      scopeKey: "category:10",
+      dealIds: [],
+      reconciledAt: "2026-06-01T10:00:00.000Z"
     });
     expect(finishedSummary).toEqual(
       expect.objectContaining({
@@ -5925,6 +5943,214 @@ describe("performManualSync", () => {
     );
   });
 
+  it("atomically reconciles the full current attraction scope during a delta sync", async () => {
+    const dealRequests: Array<string | null> = [];
+    const activityOwnerRequests: string[][] = [];
+    const callStatOwnerRequests: string[][] = [];
+    const conversionVisitOwnerRequests: string[][] = [];
+    const storedDeals: Array<Array<{ id: string; stageId: string }>> = [];
+    let replacedScope:
+      | { scopeKey: string; dealIds: string[]; reconciledAt: string }
+      | null = null;
+    let finishedDiagnostics: string[] = [];
+    const repo = {
+      getLatestSuccessCursor: async () => "2026-04-25T12:00:00.000Z",
+      getSyncCursor: async (key: string) => {
+        if (key === `${attractionScopeKey}:deals:date_modify`) {
+          return "2026-04-25T12:00:00.000Z";
+        }
+
+        if (key === `${attractionScopeKey}:activities:last_updated`) {
+          return "2026-04-25T11:00:00.000Z";
+        }
+
+        if (key === `${attractionScopeKey}:call_stats:call_start_date`) {
+          return "2026-04-25T10:00:00.000Z";
+        }
+
+        return null;
+      },
+      setSyncCursor: async () => undefined,
+      hasSyncCoverage: async () => true,
+      upsertSyncCoverage: async () => undefined,
+      getSnapshotStats: async () => ({
+        deals: 2,
+        activities: 0,
+        calls: 0,
+        stageHistory: 0
+      }),
+      getOperationalHistoryBootstrappedAt: async () =>
+        "2026-04-24T00:00:00.000Z",
+      getCallHistoryBootstrappedAt: async () =>
+        "2026-04-24T00:00:00.000Z",
+      getCallActivityHistoryBootstrappedAt: async () =>
+        "2026-04-24T00:00:00.000Z",
+      getMeetingActivityHistoryBootstrappedAt: async () =>
+        "2026-04-24T00:00:00.000Z",
+      getTaskActivityHistoryBootstrappedAt: async () =>
+        "2026-04-24T00:00:00.000Z",
+      getDealCustomFieldsBootstrappedAt: async () =>
+        "2026-04-24T00:00:00.000Z",
+      getActivitySnapshotCount: async () => 0,
+      getDealIdsByCategoryIds: async () => ["D1", "D_MOVED"],
+      getOpenDealIdsByCategoryIds: async () => ["D1", "D_MOVED"],
+      getDealsByIds: async () => [
+        {
+          id: "D1",
+          title: null,
+          leadId: null,
+          categoryId: "10",
+          stageId: "C10:PREPARATION",
+          stageSemanticId: "P",
+          opportunity: null,
+          assignedById: "78",
+          sourceId: "WEB",
+          qualityValue: null,
+          businessClubValue: null,
+          targetGroupValue: null,
+          meetingTypeValue: null,
+          meetingDateValue: null,
+          tariffValue: null,
+          refusalReasonValue: null,
+          refusalReasonDetail: null,
+          dateCreate: "2026-03-01T00:00:00.000Z",
+          dateModify: "2026-04-24T00:00:00.000Z",
+          dateClosed: null,
+          utmSource: null,
+          utmMedium: null,
+          utmCampaign: null,
+          utmContent: null,
+          utmTerm: null
+        }
+      ],
+      getCurrentAttractionScope: async () => ({
+        scopeKey: attractionScopeKey,
+        reconciledAt: "2026-04-25T11:00:00.000Z",
+        dealIds: ["D1", "D_MOVED"]
+      }),
+      replaceCurrentAttractionScope: async (input: {
+        scopeKey: string;
+        dealIds: string[];
+        reconciledAt: string;
+      }) => {
+        replacedScope = input;
+      },
+      getActivitiesByIds: async () => [],
+      getCallActivityIdsMissingActivities: async (
+        _limit: number,
+        _createdFrom: string | null,
+        ownerIds: string[]
+      ) => {
+        callStatOwnerRequests.push(ownerIds);
+        return [];
+      },
+      getCallActivityIdsMissingCallStats: async (
+        _limit: number,
+        _createdFrom: string | null,
+        ownerIds: string[]
+      ) => {
+        callStatOwnerRequests.push(ownerIds);
+        return [];
+      },
+      replaceStageCatalog: async () => undefined,
+      upsertDeals: async (rows: Array<{ id: string; stageId: string }>) => {
+        storedDeals.push(rows);
+        return rows.length;
+      },
+      upsertStageHistory: async () => 0,
+      upsertActivities: async () => 0,
+      upsertActivityDeadlineChanges: async () => 0,
+      upsertCalls: async () => 0,
+      upsertManagerDirectory: async () => 0,
+      createSyncRun: async () => 61,
+      markOperationalHistoryBootstrapped: async () => undefined,
+      markCallHistoryBootstrapped: async () => undefined,
+      markCallActivityHistoryBootstrapped: async () => undefined,
+      markMeetingActivityHistoryBootstrapped: async () => undefined,
+      markTaskActivityHistoryBootstrapped: async () => undefined,
+      markDealCustomFieldsBootstrapped: async () => undefined,
+      finishSyncRun: async (input: { diagnostics?: string[] }) => {
+        finishedDiagnostics = input.diagnostics ?? [];
+      },
+      failSyncRun: async () => undefined
+    };
+    const client = {
+      fetchDealStages: async () => [],
+      fetchSourceCatalog: async () => [],
+      fetchDealQualityMap: async () => ({}),
+      fetchDealFieldValueMap: async () => ({}),
+      listDeals: async (input: { modifiedAfter: string | null }) => {
+        dealRequests.push(input.modifiedAfter);
+        if (input.modifiedAfter !== null) {
+          return [];
+        }
+
+        return [
+          {
+            ID: "D1",
+            LEAD_ID: null,
+            DATE_CREATE: "2026-03-01T00:00:00.000Z",
+            DATE_MODIFY: "2026-04-25T12:30:00.000Z",
+            DATE_CLOSED: null,
+            CATEGORY_ID: "10",
+            STAGE_ID: "C10:NEW",
+            STAGE_SEMANTIC_ID: "P",
+            OPPORTUNITY: null,
+            ASSIGNED_BY_ID: "78",
+            SOURCE_ID: "WEB",
+            UTM_SOURCE: null,
+            UTM_MEDIUM: null,
+            UTM_CAMPAIGN: null,
+            UTM_CONTENT: null,
+            UTM_TERM: null
+          }
+        ];
+      },
+      listStageHistory: async () => [],
+      listActivities: async (input: { ownerIds: string[] }) => {
+        activityOwnerRequests.push(input.ownerIds);
+        return [];
+      },
+      listConversionEventVisits: async (input: { dealIds?: string[] }) => {
+        conversionVisitOwnerRequests.push(input.dealIds ?? []);
+        return [];
+      },
+      listCalls: async () => [],
+      fetchUsers: async () => []
+    };
+
+    await performManualSync({
+      client,
+      repository: repo,
+      categoryIds: ["10"],
+      qualityFieldName: "UF_CRM_1730380390",
+      now: () => "2026-04-25T13:00:00.000Z"
+    });
+
+    expect(dealRequests).toEqual(
+      expect.arrayContaining(["2026-04-25T12:00:00.000Z", null])
+    );
+    expect(storedDeals.flat()).toEqual([
+      expect.objectContaining({ id: "D1", stageId: "C10:NEW" })
+    ]);
+    expect(replacedScope).toEqual({
+      scopeKey: attractionScopeKey,
+      dealIds: ["D1"],
+      reconciledAt: "2026-04-25T13:00:00.000Z"
+    });
+    expect(activityOwnerRequests.flat()).not.toContain("D_MOVED");
+    expect(callStatOwnerRequests.flat()).not.toContain("D_MOVED");
+    expect(conversionVisitOwnerRequests).toEqual([["D1"]]);
+    expect(finishedDiagnostics).toEqual(
+      expect.arrayContaining([
+        "currentScopeDeals=1",
+        "currentScopeAdded=0",
+        "currentScopeRemoved=1",
+        "currentScopeRefreshed=1"
+      ])
+    );
+  });
+
   it("does not advance the call stats cursor when the optional call fetch fails", async () => {
     const storedCursors: Array<{ key: string; cursorValue: string }> = [];
     let finishedDiagnostics: string[] = [];
@@ -6492,6 +6718,7 @@ describe("performManualSync", () => {
 
   it("marks a sync run as failed when the Bitrix client throws", async () => {
     const failedRuns: Array<{ syncRunId: number; finishedAt: string; status: "failed" }> = [];
+    let currentScopeReplaced = false;
     const repo = {
       getLatestSuccessCursor: async () => null,
       getOperationalHistoryBootstrappedAt: async () =>
@@ -6500,6 +6727,14 @@ describe("performManualSync", () => {
         "2026-04-09T00:00:00.000Z",
       getActivitySnapshotCount: async () => 1,
       getDealIdsByCategoryIds: async () => [],
+      getCurrentAttractionScope: async () => ({
+        scopeKey: attractionScopeKey,
+        reconciledAt: "2026-04-08T23:00:00.000Z",
+        dealIds: ["D_EXISTING"]
+      }),
+      replaceCurrentAttractionScope: async () => {
+        currentScopeReplaced = true;
+      },
       getActivitiesByIds: async () => [],
       replaceStageCatalog: async () => undefined,
       upsertDeals: async () => 0,
@@ -6554,6 +6789,7 @@ describe("performManualSync", () => {
         ]
       }
     ]);
+    expect(currentScopeReplaced).toBe(false);
   });
 
   it("continues when optional deal field metadata is unavailable", async () => {

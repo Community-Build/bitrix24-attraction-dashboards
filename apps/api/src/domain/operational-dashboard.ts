@@ -4,6 +4,7 @@ import type {
   DealSnapshot,
   ManagerDirectoryEntry,
   OperationalDashboardReport,
+  OperationalCurrentScope,
   OperationalManagerRow,
   OperationalMeetingSlotCount,
   OperationalRiskDeal,
@@ -50,6 +51,8 @@ interface BuildOperationalDashboardReportInput {
   range: ReportRange;
   now: string;
   deals: DealSnapshot[];
+  currentDealIds?: ReadonlySet<string>;
+  currentScope?: OperationalCurrentScope;
   stageCatalog: StageCatalogEntry[];
   stageHistory: StageHistorySnapshot[];
   activities: ActivitySnapshot[];
@@ -380,6 +383,9 @@ export function buildOperationalDashboardReport(
   const deals = input.deals.filter((deal) =>
     allowedCategoryIds.has(normalizeCategoryId(deal.categoryId))
   );
+  const currentDealIds =
+    input.currentDealIds ??
+    new Set(deals.map((deal) => deal.id));
   const dealMap = new Map(deals.map((deal) => [deal.id, deal]));
   const stageHistoryMap = buildStageHistoryMap(
     input.stageHistory.filter((row) => dealMap.has(row.ownerId))
@@ -429,7 +435,8 @@ export function buildOperationalDashboardReport(
     if (
       activity.completed ||
       (activity.ownerTypeId !== "2" && activity.ownerTypeId.toUpperCase() !== "DEAL") ||
-      !dealMap.has(activity.ownerId)
+      !dealMap.has(activity.ownerId) ||
+      !currentDealIds.has(activity.ownerId)
     ) {
       continue;
     }
@@ -443,6 +450,7 @@ export function buildOperationalDashboardReport(
   }
 
   for (const deal of deals) {
+    const isCurrentDeal = currentDealIds.has(deal.id);
     const managerId = deal.assignedById ?? "UNASSIGNED";
     const manager = ensureManager(managerId);
     const stageRows = stageHistoryMap.get(deal.id) ?? [];
@@ -469,9 +477,9 @@ export function buildOperationalDashboardReport(
       }
 
       const slotDateKey = toMoscowDateKey(slot.dateValue);
-      if (slotDateKey === todayKey) {
+      if (isCurrentDeal && slotDateKey === todayKey) {
         incrementSlotCount(meetingsToday, slot.index);
-      } else if (slotDateKey === tomorrowKey) {
+      } else if (isCurrentDeal && slotDateKey === tomorrowKey) {
         incrementSlotCount(meetingsTomorrow, slot.index);
       }
     }
@@ -501,7 +509,7 @@ export function buildOperationalDashboardReport(
       lostDeals += 1;
     }
 
-    if (!isOpenDeal(deal, wonStageIds)) {
+    if (!isCurrentDeal || !isOpenDeal(deal, wonStageIds)) {
       continue;
     }
 
@@ -680,6 +688,12 @@ export function buildOperationalDashboardReport(
   return {
     range: input.range,
     generatedAt,
+    currentScope:
+      input.currentScope ?? {
+        status: "ready",
+        reconciledAt: null,
+        dealCount: currentDealIds.size
+      },
     createdDeals,
     meetingsHeld: {
       total: meetingsHeld.reduce((total, slot) => total + slot.count, 0),

@@ -35,6 +35,7 @@ export type SnapshotReadRepository = Pick<
   | "getDealIdsByCategoryIds"
   | "getOpenDealIdsByCategoryIds"
   | "getDealsByIds"
+  | "getCurrentAttractionScope"
   | "getActivitiesByIds"
   | "getCallById"
   | "getStageAtDealTime"
@@ -64,6 +65,7 @@ export type SnapshotWriteRepository = Pick<
   | "replaceStageCatalog"
   | "upsertLeads"
   | "upsertDeals"
+  | "replaceCurrentAttractionScope"
   | "upsertStageHistory"
   | "upsertActivities"
   | "upsertActivityBindings"
@@ -137,6 +139,7 @@ export type ReportingRepository = SyncRepository &
     // Snapshot reads and report inputs.
     | "getSnapshotStats"
     | "getDealIdsByCategoryIds"
+    | "getCurrentAttractionScope"
     | "getAllDeals"
     | "getAllStageHistory"
     | "getStageHistoryByOwnerIds"

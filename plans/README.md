@@ -49,6 +49,7 @@ architectural issue found in the deep review.
 | [033](./033-fix-conversion-trajectory-review-findings.md) | Fix conversion trajectory review findings | P0 | M | 029, 030, 031, 032 | DONE |
 | [034](./034-simplify-conversion-report.md) | Simplify the conversion report around decisions and event outcomes | P0 | L | 029, 030, 031, 032, 033 | DONE |
 | [035](./035-fix-conversion-event-correctness.md) | Fix conversion event correctness | P0 | S | 034 | DONE |
+| [036](./036-fix-current-attraction-scope.md) | Reconcile current attraction scope without losing history | P0 | L | 027 | IN PROGRESS |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale - finding fixed independently or approach

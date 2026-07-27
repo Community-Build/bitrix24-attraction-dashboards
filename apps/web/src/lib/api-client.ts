@@ -1639,6 +1639,7 @@ function normalizeOperationalMeetingSlotCounts(
 
 function normalizeOperationalDashboardReport(value: unknown): OperationalDashboardReport {
   const data = isRecord(value) ? value : {}
+  const currentScope = isRecord(data.currentScope) ? data.currentScope : {}
   const meetingsHeld = isRecord(data.meetingsHeld) ? data.meetingsHeld : {}
   const sales = isRecord(data.sales) ? data.sales : {}
   const riskSummary = isRecord(data.riskSummary) ? data.riskSummary : {}
@@ -1647,6 +1648,16 @@ function normalizeOperationalDashboardReport(value: unknown): OperationalDashboa
   return {
     range: normalizeRange(data.range),
     generatedAt: asString(data.generatedAt),
+    currentScope: {
+      status:
+        currentScope.status === 'ready' ||
+        currentScope.status === 'stale' ||
+        currentScope.status === 'scope_mismatch'
+          ? currentScope.status
+          : 'uninitialized',
+      reconciledAt: asNullableString(currentScope.reconciledAt),
+      dealCount: asNumber(currentScope.dealCount),
+    },
     createdDeals: asNumber(data.createdDeals),
     meetingsHeld: {
       total: asNumber(meetingsHeld.total),

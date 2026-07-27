@@ -9,6 +9,7 @@ import type {
 import { BitrixClient, type ActivityRow, type CallRow } from "../bitrix/client.js";
 import { readEnv } from "../config/env.js";
 import { ATTRACTION_MANAGER_IDS } from "../domain/attraction-managers.js";
+import { buildCategoryScopeKey } from "../domain/sync.js";
 import { createSqliteRepository } from "../server/sqlite-repository.js";
 
 const DEFAULT_CATEGORY_ID = "10";
@@ -23,6 +24,11 @@ type AuditProviderId = (typeof AUDIT_PROVIDERS)[number];
 
 export type AuditMissingReason =
   | "missing_local_deal"
+  | "missing_current_scope_deal"
+  | "extra_local_deal"
+  | "category_mismatch"
+  | "manager_mismatch"
+  | "missing_in_bitrix"
   | "call_count_mismatch"
   | "meeting_count_mismatch"
   | "task_count_mismatch";
@@ -69,6 +75,7 @@ export interface AuditAttractionScopeDependencies {
     from: string;
     to: string;
   }): Promise<BitrixAuditDealRow[]>;
+  fetchDealsByIds?(dealIds: string[]): Promise<BitrixAuditDealRow[]>;
   listActivitiesByProvider(input: {
     dealIds: string[];
     providerId: AuditProviderId;
@@ -80,6 +87,11 @@ export interface AuditAttractionScopeDependencies {
     deals: DealSnapshot[];
     activities: ActivitySnapshot[];
     calls: CallSnapshot[];
+    currentScope: {
+      scopeKey: string | null;
+      reconciledAt: string | null;
+      dealIds: string[];
+    };
   }>;
 }
 
@@ -99,6 +111,11 @@ export interface AuditAttractionScopeSummary {
   dealsAudited: number;
   mismatchedDeals: number;
   dealsMissingLocally: number;
+  dealsMissingFromCurrentScope: number;
+  dealsExtraLocally: number;
+  categoryMismatches: number;
+  managerMismatches: number;
+  dealsMissingInBitrix: number;
   bitrixCallCount: number;
   bitrixMeetingCount: number;
   bitrixTaskCount: number;
@@ -109,6 +126,14 @@ export interface AuditAttractionScopeSummary {
 
 export interface AuditAttractionScopeResult {
   filter: ReturnType<typeof buildAttractionScopeDealFilter>;
+  currentScope: {
+    expectedScopeKey: string;
+    scopeKey: string | null;
+    reconciledAt: string | null;
+    dealCount: number;
+    comparedDealCount: number;
+    matchesExpectedScope: boolean;
+  };
   summary: AuditAttractionScopeSummary;
   rows: AuditAttractionScopeRow[];
 }
@@ -160,6 +185,25 @@ export function summarizeAuditRows(
       summary.dealsMissingLocally += row.missingReasons.includes("missing_local_deal")
         ? 1
         : 0;
+      summary.dealsMissingFromCurrentScope += row.missingReasons.includes(
+        "missing_current_scope_deal"
+      )
+        ? 1
+        : 0;
+      summary.dealsExtraLocally += row.missingReasons.includes("extra_local_deal")
+        ? 1
+        : 0;
+      summary.categoryMismatches += row.missingReasons.includes("category_mismatch")
+        ? 1
+        : 0;
+      summary.managerMismatches += row.missingReasons.includes("manager_mismatch")
+        ? 1
+        : 0;
+      summary.dealsMissingInBitrix += row.missingReasons.includes(
+        "missing_in_bitrix"
+      )
+        ? 1
+        : 0;
       summary.bitrixCallCount += row.bitrixCallCount;
       summary.bitrixMeetingCount += row.bitrixMeetingCount;
       summary.bitrixTaskCount += row.bitrixTaskCount;
@@ -173,6 +217,11 @@ export function summarizeAuditRows(
       dealsAudited: 0,
       mismatchedDeals: 0,
       dealsMissingLocally: 0,
+      dealsMissingFromCurrentScope: 0,
+      dealsExtraLocally: 0,
+      categoryMismatches: 0,
+      managerMismatches: 0,
+      dealsMissingInBitrix: 0,
       bitrixCallCount: 0,
       bitrixMeetingCount: 0,
       bitrixTaskCount: 0,
@@ -284,7 +333,47 @@ export async function auditAttractionScope(
     }
   }
 
-  const rows = bitrixDeals
+  const bitrixDealIds = new Set(bitrixDeals.map((deal) => String(deal.ID)));
+  const currentScopeDealIds = new Set(localSnapshots.currentScope.dealIds);
+  const managerIdSet = new Set(managerIds.map(String));
+  const fromMs = Date.parse(input.from);
+  const toMs = Date.parse(input.to);
+  const comparedCurrentScopeDealIds = localSnapshots.currentScope.dealIds.filter(
+    (dealId) => {
+      const deal = localDealsById.get(dealId);
+      if (!deal) {
+        return true;
+      }
+
+      const createdAtMs = Date.parse(deal.dateCreate);
+      return (
+        Number.isFinite(createdAtMs) &&
+        createdAtMs >= fromMs &&
+        createdAtMs <= toMs
+      );
+    }
+  );
+  const extraCurrentScopeDealIds = comparedCurrentScopeDealIds.filter(
+    (dealId) => !bitrixDealIds.has(dealId)
+  );
+  const observedExtraDeals = dependencies.fetchDealsByIds
+    ? (
+        await Promise.all(
+          Array.from(
+            { length: Math.ceil(extraCurrentScopeDealIds.length / 50) },
+            (_, index) =>
+              dependencies.fetchDealsByIds!(
+                extraCurrentScopeDealIds.slice(index * 50, index * 50 + 50)
+              )
+          )
+        )
+      ).flat()
+    : [];
+  const observedExtraDealsById = new Map(
+    observedExtraDeals.map((deal) => [String(deal.ID), deal])
+  );
+
+  const liveRows = bitrixDeals
     .map<AuditAttractionScopeRow>((deal) => {
       const dealId = String(deal.ID);
       const managerId =
@@ -311,6 +400,11 @@ export async function auditAttractionScope(
       );
       addMissingReason(
         missingReasons,
+        !currentScopeDealIds.has(dealId),
+        "missing_current_scope_deal"
+      );
+      addMissingReason(
+        missingReasons,
         bitrixMeetingCount !== localMeetingCount,
         "meeting_count_mismatch"
       );
@@ -331,11 +425,64 @@ export async function auditAttractionScope(
         localTaskCount,
         missingReasons
       };
-    })
+    });
+  const extraRows = extraCurrentScopeDealIds.map<AuditAttractionScopeRow>(
+    (dealId) => {
+      const deal = localDealsById.get(dealId);
+      const observed = observedExtraDealsById.get(dealId);
+      const observedManagerId =
+        observed?.ASSIGNED_BY_ID === undefined ||
+        observed.ASSIGNED_BY_ID === null
+          ? null
+          : String(observed.ASSIGNED_BY_ID);
+      const missingReasons: AuditMissingReason[] = ["extra_local_deal"];
+      addMissingReason(
+        missingReasons,
+        Boolean(observed && String(observed.CATEGORY_ID ?? "") !== categoryId),
+        "category_mismatch"
+      );
+      addMissingReason(
+        missingReasons,
+        Boolean(
+          observed &&
+            (!observedManagerId || !managerIdSet.has(observedManagerId))
+        ),
+        "manager_mismatch"
+      );
+      addMissingReason(
+        missingReasons,
+        Boolean(dependencies.fetchDealsByIds && !observed),
+        "missing_in_bitrix"
+      );
+
+      return {
+        dealId,
+        managerId: observedManagerId ?? deal?.assignedById ?? null,
+        bitrixCallCount: 0,
+        bitrixMeetingCount: 0,
+        bitrixTaskCount: 0,
+        localCallCount: localCallCountsByDeal.get(dealId) ?? 0,
+        localMeetingCount: localMeetingCountsByDeal.get(dealId) ?? 0,
+        localTaskCount: localTaskCountsByDeal.get(dealId) ?? 0,
+        missingReasons
+      };
+    }
+  );
+  const rows = [...liveRows, ...extraRows]
     .sort((left, right) => Number(left.dealId) - Number(right.dealId));
+  const expectedScopeKey = buildCategoryScopeKey([categoryId], managerIds);
 
   return {
     filter,
+    currentScope: {
+      expectedScopeKey,
+      scopeKey: localSnapshots.currentScope.scopeKey,
+      reconciledAt: localSnapshots.currentScope.reconciledAt,
+      dealCount: localSnapshots.currentScope.dealIds.length,
+      comparedDealCount: comparedCurrentScopeDealIds.length,
+      matchesExpectedScope:
+        localSnapshots.currentScope.scopeKey === expectedScopeKey
+    },
     summary: summarizeAuditRows(rows),
     rows
   };
@@ -394,7 +541,7 @@ async function runCli() {
       : {})
   });
   const repository = createSqliteRepository({
-    databaseUrl: env.DATABASE_URL,
+    databaseUrl: env.attractionDatabaseUrl,
     defaultWonStageIds: env.reportWonStageIds
   });
 
@@ -410,6 +557,14 @@ async function runCli() {
       },
       {
         fetchScopeDeals: async ({ filter }) => client.listDealsForAudit({ filter }),
+        fetchDealsByIds: async (dealIds) =>
+          dealIds.length > 0
+            ? client.listDealsForAudit({
+                filter: {
+                  "@ID": dealIds
+                }
+              })
+            : [],
         listActivitiesByProvider: async ({ dealIds, providerId }) =>
           client.listActivities({
             ownerIds: dealIds,
@@ -421,7 +576,8 @@ async function runCli() {
         loadLocalSnapshots: async () => ({
           deals: await repository.getAllDeals(),
           activities: await repository.getAllActivities(),
-          calls: await repository.getAllCalls()
+          calls: await repository.getAllCalls(),
+          currentScope: await repository.getCurrentAttractionScope()
         })
       }
     );
@@ -431,6 +587,7 @@ async function runCli() {
       JSON.stringify(
         {
           filter: result.filter,
+          currentScope: result.currentScope,
           summary: result.summary,
           mismatches
         },
