@@ -75,6 +75,61 @@ function createEnrichmentBatch(
 }
 
 describe("createSqliteRepository", () => {
+  it("persists and updates Telegram manager registrations by private chat", async () => {
+    const repository = createTempRepository();
+
+    await repository.upsertTelegramManagerRegistration({
+      telegramChatId: "70001",
+      telegramUserId: "70001",
+      bitrixUserId: null,
+      telegramUsername: "olga_old",
+      telegramFirstName: "Ольга",
+      telegramLastName: null,
+      registeredAt: "2026-07-27T10:00:00.000Z",
+      lastSeenAt: "2026-07-27T10:00:00.000Z"
+    });
+    await expect(
+      repository.listActiveTelegramManagerRegistrations()
+    ).resolves.toEqual([]);
+
+    await repository.upsertTelegramManagerRegistration({
+      telegramChatId: "70001",
+      telegramUserId: "70001",
+      bitrixUserId: "11234",
+      telegramUsername: "olga_old",
+      telegramFirstName: "Ольга",
+      telegramLastName: null,
+      registeredAt: "2026-07-27T11:00:00.000Z",
+      lastSeenAt: "2026-07-27T11:00:00.000Z"
+    });
+    await repository.upsertTelegramManagerRegistration({
+      telegramChatId: "70001",
+      telegramUserId: "70001",
+      bitrixUserId: null,
+      telegramUsername: "olga",
+      telegramFirstName: "Ольга",
+      telegramLastName: "Ромашова",
+      registeredAt: "2026-07-27T12:00:00.000Z",
+      lastSeenAt: "2026-07-27T12:00:00.000Z"
+    });
+
+    await expect(
+      repository.listActiveTelegramManagerRegistrations()
+    ).resolves.toEqual([
+      {
+        telegramChatId: "70001",
+        telegramUserId: "70001",
+        bitrixUserId: "11234",
+        telegramUsername: "olga",
+        telegramFirstName: "Ольга",
+        telegramLastName: "Ромашова",
+        active: true,
+        registeredAt: "2026-07-27T10:00:00.000Z",
+        lastSeenAt: "2026-07-27T12:00:00.000Z"
+      }
+    ]);
+  });
+
   it("persists manager team assignments in whitelist settings", async () => {
     const directory = mkdtempSync(join(tmpdir(), "bitrix24-reporting-"));
     tempDirs.push(directory);

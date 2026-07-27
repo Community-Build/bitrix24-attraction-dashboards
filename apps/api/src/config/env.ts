@@ -277,6 +277,10 @@ const envSchema = z
     TELEGRAM_ENRICHMENT_BOT_TOKEN: optionalTrimmedString(),
     TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS: optionalTrimmedString(),
     TELEGRAM_ENRICHMENT_CALLBACK_SECRET: optionalTrimmedString(),
+    TELEGRAM_MANAGER_REGISTRATION_ENABLED: z
+      .enum(["true", "false"])
+      .default("false"),
+    TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET: optionalTrimmedString(),
     WEB_STATIC_DIR: optionalTrimmedString(),
     WEB_ORIGIN: z.string().default("http://localhost:5173")
   })
@@ -429,6 +433,41 @@ const envSchema = z
         });
       }
     }
+
+    if (value.TELEGRAM_MANAGER_REGISTRATION_ENABLED === "true") {
+      if (!value.TELEGRAM_ENRICHMENT_BOT_TOKEN) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TELEGRAM_ENRICHMENT_BOT_TOKEN"],
+          message:
+            "TELEGRAM_ENRICHMENT_BOT_TOKEN must be configured when Telegram manager registration is enabled."
+        });
+      }
+
+      if (
+        !value.TELEGRAM_ENRICHMENT_CALLBACK_SECRET ||
+        value.TELEGRAM_ENRICHMENT_CALLBACK_SECRET.length < 32
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TELEGRAM_ENRICHMENT_CALLBACK_SECRET"],
+          message:
+            "TELEGRAM_ENRICHMENT_CALLBACK_SECRET must be at least 32 characters when Telegram manager registration is enabled."
+        });
+      }
+
+      if (
+        !value.TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET ||
+        value.TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET.length < 32
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET"],
+          message:
+            "TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET must be at least 32 characters when Telegram manager registration is enabled."
+        });
+      }
+    }
   });
 
 export type AppEnv = z.infer<typeof envSchema> & {
@@ -459,6 +498,8 @@ export type AppEnv = z.infer<typeof envSchema> & {
   telegramEnrichmentEnabled: boolean;
   telegramEnrichmentManagerChatIds: Record<string, string[]>;
   telegramEnrichmentCallbackSecret?: string;
+  telegramManagerRegistrationEnabled: boolean;
+  telegramManagerRegistrationExportSecret?: string;
 };
 
 export function readEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
@@ -520,6 +561,8 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
     variableName: "TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS",
     keyName: "bitrixUserId"
   });
+  const telegramManagerRegistrationEnabled =
+    parsed.TELEGRAM_MANAGER_REGISTRATION_ENABLED === "true";
 
   return {
     ...parsed,
@@ -570,6 +613,13 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): AppEnv {
       ? {
           telegramEnrichmentCallbackSecret:
             parsed.TELEGRAM_ENRICHMENT_CALLBACK_SECRET
+        }
+      : {}),
+    telegramManagerRegistrationEnabled,
+    ...(parsed.TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET
+      ? {
+          telegramManagerRegistrationExportSecret:
+            parsed.TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET
         }
       : {})
   };

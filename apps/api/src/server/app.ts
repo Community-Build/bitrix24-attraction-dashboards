@@ -112,6 +112,7 @@ import type {
 } from "./paperclip-client.js";
 import type { TelegramMessageSender } from "./telegram-client.js";
 import type { TelegramEnrichmentApprovalService } from "./telegram-enrichment-approval.js";
+import type { TelegramManagerRegistrationService } from "./telegram-manager-registration.js";
 import {
   buildDailyActivityReportRange,
   buildTelegramActivityReportDeliveries,
@@ -330,6 +331,15 @@ interface AppConfig {
     enabled?: boolean;
     secret?: string;
     approvalService?: TelegramEnrichmentApprovalService;
+  };
+  telegramManagerRegistration?: {
+    enabled?: boolean;
+    exportSecret?: string;
+    service?: TelegramManagerRegistrationService;
+    repository?: Pick<
+      SqliteRepository,
+      "listActiveTelegramManagerRegistrations"
+    >;
   };
   callEnrichmentIntake?: {
     enabled?: boolean;
@@ -2324,7 +2334,8 @@ export function createApp(
         "Authorization",
         "X-API-Token",
         "X-CSRF-Token",
-        "X-Telegram-Bot-Api-Secret-Token"
+        "X-Telegram-Bot-Api-Secret-Token",
+        "X-Telegram-Registration-Secret"
       ]
     })
   );
@@ -2336,7 +2347,12 @@ export function createApp(
     })
   );
 
-  registerTelegramEnrichmentRoutes(app, config.telegramEnrichment ?? {});
+  registerTelegramEnrichmentRoutes(app, {
+    ...(config.telegramEnrichment ?? {}),
+    ...(config.telegramManagerRegistration
+      ? { registration: config.telegramManagerRegistration }
+      : {})
+  });
 
   if (config.agentMcp?.accessToken && config.agentMcp.gateway) {
     registerAttractionMcpHttpRoute(app, {

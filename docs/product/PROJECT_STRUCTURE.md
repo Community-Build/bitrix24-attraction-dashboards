@@ -25,14 +25,16 @@ Use this order when reconstructing how the project is built:
 5. `docs/modules/attraction/REPORT_REGISTRY.md` - attraction report bindings.
 6. `docs/adr/0002-manager-approved-call-enrichment-writeback.md` - destructive
    writeback exception and Telegram approval flow.
-7. `docs/architecture/web-runtime.md` - one supported web shell and browser data
+7. `docs/adr/0005-durable-telegram-manager-registration.md` - persistent
+   Telegram intake and manual one-time Bitrix matching used by deal routing.
+8. `docs/architecture/web-runtime.md` - one supported web shell and browser data
    access rule.
-8. `docs/architecture/module-capabilities.md` - manifest and agent-readable
+9. `docs/architecture/module-capabilities.md` - manifest and agent-readable
    report policy.
-9. `docs/architecture/agent-mcp.md` - read-only agent gateway.
-10. `docs/deploy-timeweb-vps.md` - production env and rollout controls.
-11. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
-12. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
+10. `docs/architecture/agent-mcp.md` - read-only agent gateway.
+11. `docs/deploy-timeweb-vps.md` - production env and rollout controls.
+12. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
+13. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
 
 ## Product Surfaces
 
@@ -61,6 +63,7 @@ external systems, data reads, and writes.
 | Analytics reports | attraction | `/api/dashboard`, `/api/reports/*`, report domain builders | none at render time | none |
 | Call analysis | attraction | `/api/calls/*`, call analysis service | Bitrix24 recordings, OpenRouter | local call analysis tables |
 | Call enrichment | attraction | webhook intake, enrichment orchestrator, approval service, expiry job | Bitrix24, Telegram, OpenRouter | local proposals; approved Bitrix field updates |
+| Telegram manager registration | attraction | Telegram webhook, private `/start`, manual match, protected registration export | Telegram, n8n | local Telegram identities and Telegram-to-Bitrix mappings |
 | Telegram activity summary | attraction | `startTelegramActivityReport` background job | Telegram | none |
 | Knowledge and MCP | platform | `/api/mcp`, stdio MCP, ontology/playbook readers | MCP clients | none |
 | Comments and Paperclip | platform | comment routes, Paperclip client | Paperclip API, GitHub when configured | local comments / Paperclip state |
@@ -73,6 +76,7 @@ external systems, data reads, and writes.
 Bitrix24 -> sync/import -> SQLite snapshot -> analytics reports -> web dashboard
 Bitrix24 -> call webhook -> call analysis -> local analysis -> call enrichment
 call enrichment -> Telegram approval -> approved narrow Bitrix writeback
+Telegram /start -> SQLite identity -> manual Bitrix match -> n8n notification recipient
 SQLite snapshot -> activity/call workload reports -> Telegram activity summary
 docs/modules/attraction -> ontology/playbook readers -> web knowledge surfaces
 docs/modules/attraction + reports -> MCP read-only agent gateway

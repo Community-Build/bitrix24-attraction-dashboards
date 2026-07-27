@@ -3,6 +3,7 @@ export type RuntimeModuleId =
   | "analytics-reports"
   | "call-analysis"
   | "call-enrichment"
+  | "telegram-manager-registration"
   | "telegram-activity-summary"
   | "knowledge-mcp"
   | "comments-paperclip"
@@ -104,6 +105,25 @@ export const attractionRuntimeModules = [
     sourceOfTruth: ["docs/adr/0002-manager-approved-call-enrichment-writeback.md"],
     notes:
       "The only current destructive CRM path. Approval, allowlist, reread-before-write, and audit behavior are mandatory."
+  },
+  {
+    id: "telegram-manager-registration",
+    label: "Telegram manager registration",
+    owner: "attraction",
+    kind: "webhook",
+    currentEntrypoints: [
+      "/api/telegram/enrichment/callback",
+      "/api/telegram/registrations",
+      "apps/api/src/server/telegram-manager-registration.ts"
+    ],
+    reads: ["private Telegram /start identity", "manual Bitrix manager match"],
+    writes: ["local Telegram identity and manager registration mapping"],
+    externalSystems: ["Telegram", "n8n deal routing"],
+    sourceOfTruth: [
+      "docs/adr/0005-durable-telegram-manager-registration.md"
+    ],
+    notes:
+      "The dashboard API remains the single webhook owner. Registration export is secret-protected and excluded from reporting and MCP."
   },
   {
     id: "telegram-activity-summary",
