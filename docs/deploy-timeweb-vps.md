@@ -78,6 +78,8 @@ BITRIX_CALL_EVENT_WEBHOOK_SECRET=<32+ random chars>
 TELEGRAM_ENRICHMENT_BOT_TOKEN=<telegram-bot-token>
 TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS=<bitrix-user-id>:<telegram-chat-id>
 TELEGRAM_ENRICHMENT_CALLBACK_SECRET=<32+ random chars>
+TELEGRAM_MANAGER_REGISTRATION_ENABLED=false
+TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET=<32+ random chars>
 
 BITRIX24_PORTAL_HOST=<portal>.bitrix24.ru
 BITRIX24_WEBHOOK_USER_ID=<user-id>
@@ -103,8 +105,15 @@ Use the existing Telegram enrichment bot. Set its webhook with the same
 curl -X POST "https://api.telegram.org/bot${TELEGRAM_ENRICHMENT_BOT_TOKEN}/setWebhook" \
   -d "url=${APP_PUBLIC_URL}/api/telegram/enrichment/callback" \
   -d "secret_token=${TELEGRAM_ENRICHMENT_CALLBACK_SECRET}" \
-  -d 'allowed_updates=["callback_query"]'
+  -d 'allowed_updates=["callback_query","message"]'
 ```
+
+When `TELEGRAM_MANAGER_REGISTRATION_ENABLED=true`, send managers the regular
+`https://t.me/<bot>` link and ask them to press Start. The API saves every
+private activation; an operator matches the saved Telegram account to a Bitrix
+user once. Configure n8n to read
+`GET /api/telegram/registrations` with
+`X-Telegram-Registration-Secret`.
 
 ### Call Enrichment Rollout
 

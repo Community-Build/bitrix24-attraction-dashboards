@@ -610,6 +610,7 @@ function createTestApp(
       };
     };
     telegramEnrichment?: AppConfig["telegramEnrichment"];
+    telegramManagerRegistration?: AppConfig["telegramManagerRegistration"];
     callEnrichmentExpiry?: AppConfig["callEnrichmentExpiry"];
     modules?: Record<string, Partial<Parameters<typeof createApp>[0]>>;
     moduleCapabilityManifests?: ModuleCapabilityManifest[];
@@ -1107,6 +1108,7 @@ function createTestApp(
           };
         };
         telegramEnrichment?: AppConfig["telegramEnrichment"];
+        telegramManagerRegistration?: AppConfig["telegramManagerRegistration"];
         callEnrichmentExpiry?: AppConfig["callEnrichmentExpiry"];
         modules?: Record<string, Partial<Parameters<typeof createApp>[0]>>;
         moduleCapabilityManifests?: ModuleCapabilityManifest[];
@@ -1555,6 +1557,129 @@ describe("createApp", () => {
       data: "ce:approve-token",
       chatId: "chat-78"
     });
+  });
+
+  it("passes Telegram start messages to manager registration", async () => {
+    const registrationService = {
+      handleMessage: vi.fn().mockResolvedValue("saved" as const)
+    };
+    const app = createTestApp(
+      {},
+      {
+        telegramEnrichment: {
+          enabled: false,
+          secret: "telegram-webhook-secret-with-32-characters"
+        },
+        telegramManagerRegistration: {
+          enabled: true,
+          exportSecret: "telegram-export-secret-with-32-characters",
+          service: registrationService,
+          repository: {
+            listActiveTelegramManagerRegistrations: vi
+              .fn()
+              .mockResolvedValue([])
+          }
+        }
+      }
+    );
+
+    await request(app)
+      .post("/api/telegram/enrichment/callback")
+      .set(
+        "X-Telegram-Bot-Api-Secret-Token",
+        "telegram-webhook-secret-with-32-characters"
+      )
+      .send({
+        update_id: 43,
+        message: {
+          message_id: 124,
+          text: "/start r1.11234.signature",
+          from: {
+            id: 70001,
+            username: "olga",
+            first_name: "Ольга",
+            last_name: "Ромашова"
+          },
+          chat: {
+            id: 70001,
+            type: "private"
+          }
+        }
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({ ok: true });
+      });
+
+    expect(registrationService.handleMessage).toHaveBeenCalledWith({
+      chatId: "70001",
+      chatType: "private",
+      userId: "70001",
+      username: "olga",
+      firstName: "Ольга",
+      lastName: "Ромашова",
+      text: "/start r1.11234.signature"
+    });
+  });
+
+  it("exports active Telegram registrations only with the configured secret", async () => {
+    const listActiveTelegramManagerRegistrations = vi.fn().mockResolvedValue([
+      {
+        telegramChatId: "70001",
+        telegramUserId: "70001",
+        bitrixUserId: "11234",
+        telegramUsername: "olga",
+        telegramFirstName: "Ольга",
+        telegramLastName: "Ромашова",
+        active: true,
+        registeredAt: "2026-07-27T10:00:00.000Z",
+        lastSeenAt: "2026-07-27T11:00:00.000Z"
+      }
+    ]);
+    const app = createTestApp(
+      {},
+      {
+        telegramEnrichment: {
+          enabled: false,
+          secret: "telegram-webhook-secret-with-32-characters"
+        },
+        telegramManagerRegistration: {
+          enabled: true,
+          exportSecret: "telegram-export-secret-with-32-characters",
+          service: {
+            handleMessage: vi.fn().mockResolvedValue("ignored" as const)
+          },
+          repository: {
+            listActiveTelegramManagerRegistrations
+          }
+        }
+      }
+    );
+
+    await request(app).get("/api/telegram/registrations").expect(401);
+
+    await request(app)
+      .get("/api/telegram/registrations")
+      .set(
+        "X-Telegram-Registration-Secret",
+        "telegram-export-secret-with-32-characters"
+      )
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          registrations: [
+            {
+              bitrix_user_id: "11234",
+              telegram_chat_id: "70001",
+              telegram_username: "olga",
+              active: true,
+              last_seen_at: "2026-07-27T11:00:00.000Z"
+            }
+          ]
+        });
+      });
+
+    expect(listActiveTelegramManagerRegistrations).toHaveBeenCalledTimes(1);
   });
 
   it("keeps Bitrix call event intake disabled by default", async () => {

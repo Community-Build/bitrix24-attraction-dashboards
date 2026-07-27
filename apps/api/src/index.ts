@@ -24,6 +24,7 @@ import type {
 import { createSqliteRepository } from "./server/sqlite-repository.js";
 import { createReportingService } from "./server/service.js";
 import { TelegramBotClient } from "./server/telegram-client.js";
+import { createTelegramManagerRegistrationService } from "./server/telegram-manager-registration.js";
 import { createAttractionCapabilityManifest } from "./server/module-capabilities.js";
 
 const env = readEnv();
@@ -183,8 +184,9 @@ const callEnrichmentExtractionProvider = env.OPENROUTER_API_KEY
       ...(env.OPENROUTER_APP_TITLE ? { appTitle: env.OPENROUTER_APP_TITLE } : {})
     })
   : undefined;
-const telegramEnrichmentSender =
-  env.telegramEnrichmentEnabled && env.TELEGRAM_ENRICHMENT_BOT_TOKEN
+const telegramBotSender =
+  (env.telegramEnrichmentEnabled || env.telegramManagerRegistrationEnabled) &&
+  env.TELEGRAM_ENRICHMENT_BOT_TOKEN
     ? new TelegramBotClient({
         botToken: env.TELEGRAM_ENRICHMENT_BOT_TOKEN
       })
@@ -202,14 +204,22 @@ const callEnrichmentWriteback = env.telegramEnrichmentEnabled
     })
   : undefined;
 const telegramEnrichmentApproval =
-  telegramEnrichmentSender &&
+  telegramBotSender &&
   callEnrichmentWriteback &&
   env.telegramEnrichmentEnabled
     ? createTelegramEnrichmentApprovalService({
         repository: attractionRepository,
-        sender: telegramEnrichmentSender,
+        sender: telegramBotSender,
         decisionService: callEnrichmentWriteback,
         managerChatIds: env.telegramEnrichmentManagerChatIds
+      })
+    : undefined;
+const telegramManagerRegistration =
+  telegramBotSender &&
+  env.telegramManagerRegistrationEnabled
+    ? createTelegramManagerRegistrationService({
+        repository: attractionRepository,
+        sender: telegramBotSender
       })
     : undefined;
 const callEnrichmentOrchestrator =
@@ -444,6 +454,16 @@ const app = createApp(service, {
     ...(telegramEnrichmentApproval
       ? { approvalService: telegramEnrichmentApproval }
       : {})
+  },
+  telegramManagerRegistration: {
+    enabled: env.telegramManagerRegistrationEnabled,
+    ...(env.telegramManagerRegistrationExportSecret
+      ? { exportSecret: env.telegramManagerRegistrationExportSecret }
+      : {}),
+    ...(telegramManagerRegistration
+      ? { service: telegramManagerRegistration }
+      : {}),
+    repository: attractionRepository
   },
   ...(env.WEB_STATIC_DIR ? { webStaticDir: env.WEB_STATIC_DIR } : {})
 });

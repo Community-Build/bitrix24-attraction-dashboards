@@ -35,7 +35,9 @@ describe("readEnv", () => {
       "TELEGRAM_ENRICHMENT_ENABLED",
       "TELEGRAM_ENRICHMENT_BOT_TOKEN",
       "TELEGRAM_ENRICHMENT_MANAGER_CHAT_IDS",
-      "TELEGRAM_ENRICHMENT_CALLBACK_SECRET"
+      "TELEGRAM_ENRICHMENT_CALLBACK_SECRET",
+      "TELEGRAM_MANAGER_REGISTRATION_ENABLED",
+      "TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET"
     ]) {
       expect(envExample).toContain(`${name}=`);
     }
@@ -467,6 +469,43 @@ describe("readEnv", () => {
       telegramEnrichmentManagerChatIds: {
         "13020": ["839402543", "1364600907"]
       }
+    });
+  });
+
+  it("validates and exposes durable Telegram manager registration config", () => {
+    expect(readEnv({})).toMatchObject({
+      telegramManagerRegistrationEnabled: false
+    });
+
+    expect(() =>
+      readEnv({
+        TELEGRAM_MANAGER_REGISTRATION_ENABLED: "true"
+      })
+    ).toThrow(/TELEGRAM_ENRICHMENT_BOT_TOKEN/i);
+
+    expect(() =>
+      readEnv({
+        TELEGRAM_MANAGER_REGISTRATION_ENABLED: "true",
+        TELEGRAM_ENRICHMENT_BOT_TOKEN: "telegram-token",
+        TELEGRAM_ENRICHMENT_CALLBACK_SECRET:
+          "telegram-webhook-secret-with-32-characters",
+        TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET: "short"
+      })
+    ).toThrow(/TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET/i);
+
+    expect(
+      readEnv({
+        TELEGRAM_MANAGER_REGISTRATION_ENABLED: "true",
+        TELEGRAM_ENRICHMENT_BOT_TOKEN: "telegram-token",
+        TELEGRAM_ENRICHMENT_CALLBACK_SECRET:
+          "telegram-webhook-secret-with-32-characters",
+        TELEGRAM_MANAGER_REGISTRATION_EXPORT_SECRET:
+          "telegram-export-secret-with-32-characters"
+      })
+    ).toMatchObject({
+      telegramManagerRegistrationEnabled: true,
+      telegramManagerRegistrationExportSecret:
+        "telegram-export-secret-with-32-characters"
     });
   });
 

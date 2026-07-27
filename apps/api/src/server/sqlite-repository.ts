@@ -51,6 +51,7 @@ import { sanitizeRefusalReasonDetail } from "../domain/refusal-detail.js";
 import { createCallAnalysisRepositoryMethods } from "./sqlite/call-analysis.js";
 import { createCommentRepositoryMethods } from "./sqlite/comments.js";
 import { createEnrichmentProposalRepositoryMethods } from "./sqlite/enrichment-proposals.js";
+import { createTelegramManagerRegistrationRepositoryMethods } from "./sqlite/telegram-manager-registrations.js";
 
 export interface LastSyncSummary {
   finishedAt: string;
@@ -533,6 +534,22 @@ export interface ExpirePendingEnrichmentProposalsInput {
   expiredAt: string;
 }
 
+export interface TelegramManagerRegistrationInput {
+  telegramChatId: string;
+  telegramUserId: string;
+  bitrixUserId: string | null;
+  telegramUsername: string | null;
+  telegramFirstName: string | null;
+  telegramLastName: string | null;
+  registeredAt: string;
+  lastSeenAt: string;
+}
+
+export interface TelegramManagerRegistrationRecord
+  extends TelegramManagerRegistrationInput {
+  active: boolean;
+}
+
 export interface SqliteRepository {
   getLatestSuccessCursor(
     categoryIds?: string[],
@@ -632,6 +649,12 @@ export interface SqliteRepository {
   expirePendingEnrichmentProposals(
     input: ExpirePendingEnrichmentProposalsInput
   ): Promise<void>;
+  upsertTelegramManagerRegistration(
+    input: TelegramManagerRegistrationInput
+  ): Promise<void>;
+  listActiveTelegramManagerRegistrations(): Promise<
+    TelegramManagerRegistrationRecord[]
+  >;
   getCallActivityIdsMissingActivities(
     limit?: number,
     callStartDateFrom?: string | null,
@@ -1562,6 +1585,18 @@ export function createSqliteRepository(
         ON DELETE CASCADE
     );
 
+    CREATE TABLE IF NOT EXISTS telegram_manager_registrations (
+      telegram_chat_id TEXT PRIMARY KEY,
+      telegram_user_id TEXT NOT NULL,
+      bitrix_user_id TEXT,
+      telegram_username TEXT,
+      telegram_first_name TEXT,
+      telegram_last_name TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      registered_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS manager_directory (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL
@@ -1746,6 +1781,8 @@ export function createSqliteRepository(
       ON enrichment_proposal_batches (call_id);
     CREATE INDEX IF NOT EXISTS idx_enrichment_batches_manager_status
       ON enrichment_proposal_batches (manager_id, status);
+    CREATE INDEX IF NOT EXISTS idx_telegram_manager_registrations_bitrix
+      ON telegram_manager_registrations (bitrix_user_id, active);
     CREATE INDEX IF NOT EXISTS idx_enrichment_batches_expires
       ON enrichment_proposal_batches (expires_at);
     CREATE INDEX IF NOT EXISTS idx_enrichment_proposals_batch_status
@@ -3307,6 +3344,8 @@ export function createSqliteRepository(
     createCallAnalysisRepositoryMethods(database);
   const enrichmentProposalRepositoryMethods =
     createEnrichmentProposalRepositoryMethods(database);
+  const telegramManagerRegistrationRepositoryMethods =
+    createTelegramManagerRegistrationRepositoryMethods(database);
   const commentRepositoryMethods = createCommentRepositoryMethods(database);
 
   const hydrateDealMeetingSlots = (deals: DealSnapshot[]): DealSnapshot[] => {
@@ -3898,6 +3937,7 @@ export function createSqliteRepository(
 
     ...callAnalysisRepositoryMethods,
     ...enrichmentProposalRepositoryMethods,
+    ...telegramManagerRegistrationRepositoryMethods,
 
     async getCallActivityIdsMissingActivities(
       limit = 20_000,
