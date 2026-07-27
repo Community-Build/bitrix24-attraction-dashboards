@@ -185,7 +185,12 @@ describe("audit-attraction-scope", () => {
         loadLocalSnapshots: async () => ({
           deals: localDeals,
           activities: localActivities,
-          calls: localCalls
+          calls: localCalls,
+          currentScope: {
+            scopeKey: null,
+            reconciledAt: null,
+            dealIds: ["D1", "D2"]
+          }
         })
       }
     );
@@ -266,12 +271,135 @@ describe("audit-attraction-scope", () => {
       dealsAudited: 2,
       mismatchedDeals: 2,
       dealsMissingLocally: 1,
+      dealsMissingFromCurrentScope: 0,
+      dealsExtraLocally: 0,
+      categoryMismatches: 0,
+      managerMismatches: 0,
+      dealsMissingInBitrix: 0,
       bitrixCallCount: 3,
       bitrixMeetingCount: 1,
       bitrixTaskCount: 3,
       localCallCount: 1,
       localMeetingCount: 1,
       localTaskCount: 1
+    });
+  });
+
+  it("classifies current-projection deals that moved out of scope or disappeared upstream", async () => {
+    const localDeals: DealSnapshot[] = [
+      {
+        id: "138542",
+        title: null,
+        leadId: null,
+        categoryId: "10",
+        stageId: "C10:PREPARATION",
+        stageSemanticId: "P",
+        opportunity: null,
+        assignedById: "78",
+        sourceId: null,
+        qualityValue: null,
+        businessClubValue: null,
+        targetGroupValue: null,
+        meetingTypeValue: null,
+        meetingDateValue: null,
+        tariffValue: null,
+        refusalReasonValue: null,
+        refusalReasonDetail: null,
+        dateCreate: "2025-05-10T10:00:00.000Z",
+        dateModify: "2025-05-10T10:00:00.000Z",
+        dateClosed: null,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
+        utmContent: null,
+        utmTerm: null
+      },
+      {
+        id: "139938",
+        title: null,
+        leadId: null,
+        categoryId: "10",
+        stageId: "C10:PREPARATION",
+        stageSemanticId: "P",
+        opportunity: null,
+        assignedById: "78",
+        sourceId: null,
+        qualityValue: null,
+        businessClubValue: null,
+        targetGroupValue: null,
+        meetingTypeValue: null,
+        meetingDateValue: null,
+        tariffValue: null,
+        refusalReasonValue: null,
+        refusalReasonDetail: null,
+        dateCreate: "2025-05-11T10:00:00.000Z",
+        dateModify: "2025-05-11T10:00:00.000Z",
+        dateClosed: null,
+        utmSource: null,
+        utmMedium: null,
+        utmCampaign: null,
+        utmContent: null,
+        utmTerm: null
+      }
+    ];
+
+    const result = await auditAttractionScope(
+      {
+        categoryId: "10",
+        managerIds: ["78"],
+        from: "2025-05-01T00:00:00.000Z",
+        to: "2026-04-30T23:59:59.999Z"
+      },
+      {
+        fetchScopeDeals: async () => [],
+        fetchDealsByIds: async () => [
+          {
+            ID: "138542",
+            ASSIGNED_BY_ID: "78",
+            DATE_CREATE: "2025-05-10T10:00:00.000Z",
+            CATEGORY_ID: "12"
+          }
+        ],
+        listActivitiesByProvider: async () => [],
+        listCallsByActivityIds: async () => [],
+        loadLocalSnapshots: async () => ({
+          deals: localDeals,
+          activities: [],
+          calls: [],
+          currentScope: {
+            scopeKey: "category:10:assigned:78",
+            reconciledAt: "2026-07-27T07:00:00.000Z",
+            dealIds: ["138542", "139938"]
+          }
+        })
+      }
+    );
+
+    expect(result.rows).toEqual([
+      expect.objectContaining({
+        dealId: "138542",
+        missingReasons: ["extra_local_deal", "category_mismatch"]
+      }),
+      expect.objectContaining({
+        dealId: "139938",
+        missingReasons: ["extra_local_deal", "missing_in_bitrix"]
+      })
+    ]);
+    expect(result.summary).toMatchObject({
+      dealsAudited: 2,
+      mismatchedDeals: 2,
+      dealsExtraLocally: 2,
+      categoryMismatches: 1,
+      managerMismatches: 0,
+      dealsMissingInBitrix: 1
+    });
+    expect(result.currentScope).toEqual({
+      expectedScopeKey: "category:10:assigned:78",
+      scopeKey: "category:10:assigned:78",
+      reconciledAt: "2026-07-27T07:00:00.000Z",
+      dealCount: 2,
+      comparedDealCount: 2,
+      matchesExpectedScope: true
     });
   });
 });

@@ -7,6 +7,7 @@ import type {
 } from "@bitrix24-reporting/contracts";
 import { ATTRACTION_MANAGER_CATALOG } from "../src/domain/attraction-managers";
 import { DEFAULT_PRICING_RULES } from "../src/domain/deal-economics";
+import { buildCategoryScopeKey } from "../src/domain/sync";
 import type { ReportingRepository } from "../src/server/repository-roles";
 import {
   createReportingService,
@@ -54,6 +55,11 @@ function withReportingRepositoryDefaults(
     getDealIdsByCategoryIds: async () => [],
     getOpenDealIdsByCategoryIds: async () => [],
     getDealsByIds: async () => [],
+    getCurrentAttractionScope: async () => ({
+      scopeKey: null,
+      reconciledAt: null,
+      dealIds: []
+    }),
     getActivitiesByIds: async () => [],
     getCallActivityIdsMissingActivities: async () => [],
     getCallActivityIdsMissingCallStats: async () => [],
@@ -252,6 +258,12 @@ describe("createReportingService", () => {
       },
       now: "2026-06-10T12:00:00.000Z",
       wonStageIds: ["C10:WON"],
+      currentDealIds: new Set([
+        "OPEN_OLD",
+        "CREATED_IN_RANGE",
+        "WON_BY_CURRENT_STATE",
+        "WON_BY_HISTORY"
+      ]),
       deals: [
         createDeal({ id: "OPEN_OLD" }),
         createDeal({
@@ -331,10 +343,89 @@ describe("createReportingService", () => {
       "CREATED_IN_RANGE",
       "MEETING_TODAY",
       "OPEN_OLD",
-      "TASK_TOMORROW",
       "WON_BY_CURRENT_STATE",
       "WON_BY_HISTORY"
     ]);
+  });
+
+  it("uses the reconciled current deal set for operational WIP and risks", async () => {
+    const createDeal = (id: string): DealSnapshot => ({
+      id,
+      title: null,
+      leadId: null,
+      categoryId: "10",
+      stageId: "C10:NEW",
+      stageSemanticId: "P",
+      opportunity: 0,
+      assignedById: "78",
+      sourceId: "WEB",
+      qualityValue: null,
+      businessClubValue: null,
+      targetGroupValue: null,
+      meetingTypeValue: null,
+      meetingDateValue: null,
+      tariffValue: null,
+      conversionEventValue: null,
+      refusalReasonValue: null,
+      refusalReasonDetail: null,
+      dateCreate: "2026-01-01T09:00:00.000Z",
+      dateModify: "2026-06-10T09:00:00.000Z",
+      dateClosed: null,
+      utmSource: null,
+      utmMedium: null,
+      utmCampaign: null,
+      utmContent: null,
+      utmTerm: null
+    });
+    const service = createReportingService({
+      dealCategoryIds: ["10"],
+      qualityFieldName: "UF_CRM_TEST",
+      repository: withReportingRepositoryDefaults({
+        getAllDeals: async () => [
+          createDeal("CURRENT"),
+          createDeal("MOVED_TO_WARMUP")
+        ],
+        getStageCatalog: async () => [
+          {
+            entityType: "deal" as const,
+            categoryId: "10",
+            statusId: "C10:NEW",
+            name: "База входящая",
+            semanticId: "P",
+            sortOrder: 10
+          }
+        ],
+        getWonStageIds: async () => ["C10:WON"],
+        getCurrentAttractionScope: async () => ({
+          scopeKey: buildCategoryScopeKey(
+            ["10"],
+            ATTRACTION_MANAGER_CATALOG.map((manager) => manager.id)
+          ),
+          reconciledAt: "2026-06-10T11:30:00.000Z",
+          dealIds: ["CURRENT"]
+        })
+      }),
+      client: {
+        fetchUsers: async () => []
+      } as never,
+      defaultPeriodDays: 30,
+      now: () => new Date("2026-06-10T12:00:00.000Z")
+    });
+
+    const report = await service.getOperationalDashboardReport({
+      range: {
+        from: "2026-06-01T00:00:00.000Z",
+        to: "2026-06-30T23:59:59.999Z"
+      }
+    });
+
+    expect(report.currentScope).toEqual({
+      status: "ready",
+      reconciledAt: "2026-06-10T11:30:00.000Z",
+      dealCount: 1
+    });
+    expect(report.openDeals).toBe(1);
+    expect(report.risks.map((risk) => risk.dealId)).toEqual(["CURRENT"]);
   });
 
   it("preserves catalog call attribution policy in manager whitelist options", async () => {
@@ -1654,6 +1745,14 @@ describe("createReportingService", () => {
         mode: "delta" as const
       }),
       recoverStaleSyncRuns: async () => 0,
+      getCurrentAttractionScope: async () => ({
+        scopeKey: buildCategoryScopeKey(
+          ["10"],
+          ATTRACTION_MANAGER_CATALOG.map((manager) => manager.id)
+        ),
+        reconciledAt: "2026-04-26T11:30:00.000Z",
+        dealIds: []
+      }),
       hasSyncCoverage: async (input: { requiredSyncedAt?: string | null }) => {
         requiredSyncedAtValues.push(input.requiredSyncedAt);
         return true;
@@ -1672,12 +1771,19 @@ describe("createReportingService", () => {
       now: () => new Date("2026-04-26T12:00:00.000Z")
     });
 
-    const meta = await service.getMeta();
+    const meta = await service.getMeta({
+      filters: {
+        managerIds: ["78"]
+      }
+    });
 
     expect(requiredSyncedAtValues.every((value) => value == null)).toBe(true);
     expect(meta.syncHealth.issues).not.toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ code: "MISSING_COVERAGE" })
+        expect.objectContaining({ code: "MISSING_COVERAGE" }),
+        expect.objectContaining({ code: "CURRENT_SCOPE_UNINITIALIZED" }),
+        expect.objectContaining({ code: "CURRENT_SCOPE_MISMATCH" }),
+        expect.objectContaining({ code: "CURRENT_SCOPE_STALE" })
       ])
     );
   });

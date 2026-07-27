@@ -881,6 +881,20 @@ function formatFilterDate(value: string) {
   return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
+function formatOperationalScopeTimestamp(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return date.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function formatNumber(value: number) {
   return new Intl.NumberFormat('ru-RU').format(value)
 }
@@ -6427,6 +6441,22 @@ export function OperationsScene({ filters }: SceneComponentProps) {
       count: countOperationalRisksByRule(scopedRisks, rule),
     })),
   ]
+  const currentScopeMessage =
+    report.currentScope.status === 'stale'
+      ? `Текущий состав воронки устарел. Последняя полная сверка: ${
+          report.currentScope.reconciledAt
+            ? formatOperationalScopeTimestamp(report.currentScope.reconciledAt)
+            : 'время неизвестно'
+        }.`
+      : report.currentScope.status === 'scope_mismatch'
+        ? 'Текущий состав рассчитан для другого набора менеджеров. Текущие риски и WIP скрыты до новой синхронизации.'
+        : report.currentScope.status === 'uninitialized'
+          ? 'Текущий состав воронки еще не подтвержден. Текущие риски и WIP скрыты до полной синхронизации.'
+          : null
+  const hasUsableCurrentScope =
+    report.currentScope.status === 'ready' ||
+    report.currentScope.status === 'stale'
+  const currentScopeUnavailableNote = 'текущий состав недоступен'
 
   return (
     <div className="grid min-w-0 gap-6">
@@ -6446,6 +6476,20 @@ export function OperationsScene({ filters }: SceneComponentProps) {
         </div>
       ) : null}
 
+      {currentScopeMessage ? (
+        <div
+          role="alert"
+          className={cn(
+            'rounded-xl border px-4 py-3 text-sm font-medium',
+            report.currentScope.status === 'stale'
+              ? 'border-amber-200 bg-amber-50 text-amber-900'
+              : 'border-rose-200 bg-rose-50 text-rose-900',
+          )}
+        >
+          {currentScopeMessage}
+        </div>
+      ) : null}
+
       <section
         className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-6"
         data-comment-block-id="attraction-operations-summary"
@@ -6460,11 +6504,17 @@ export function OperationsScene({ filters }: SceneComponentProps) {
           ],
           ['Продажи', formatInteger(report.sales.total), 'по клубам ниже'],
           ['Проиграно', formatInteger(report.lostDeals), 'за период'],
-          ['В работе', formatInteger(report.openDeals), 'открытых сделок'],
+          [
+            'В работе',
+            hasUsableCurrentScope ? formatInteger(report.openDeals) : '—',
+            hasUsableCurrentScope ? 'открытых сделок' : currentScopeUnavailableNote,
+          ],
           [
             'Рисков',
-            formatInteger(report.riskSummary.total),
-            `${formatInteger(report.riskSummary.critical)} критично · ${formatInteger(report.riskSummary.risk)} риск`,
+            hasUsableCurrentScope ? formatInteger(report.riskSummary.total) : '—',
+            hasUsableCurrentScope
+              ? `${formatInteger(report.riskSummary.critical)} критично · ${formatInteger(report.riskSummary.risk)} риск`
+              : currentScopeUnavailableNote,
           ],
         ].map(([label, value, note]) => {
           const isRisk = label === 'Рисков'
@@ -6568,26 +6618,30 @@ export function OperationsScene({ filters }: SceneComponentProps) {
 
             <div className="panel min-w-0 p-5">
               <PanelHeading title="Запланировано" hint={operationalCalculationHints.planned} />
-              <div className="grid gap-1">
-                <OperationListRow
-                  label="Сегодня: встречи"
-                  value={formatInteger(sumOperationalSlots(report.planned.meetingsToday))}
-                  note={`· ${formatOperationalSlotSummary(report.planned.meetingsToday)}`}
-                />
-                <OperationListRow
-                  label="Сегодня: дела"
-                  value={formatInteger(report.planned.tasksToday)}
-                />
-                <OperationListRow
-                  label="Завтра: встречи"
-                  value={formatInteger(sumOperationalSlots(report.planned.meetingsTomorrow))}
-                  note={`· ${formatOperationalSlotSummary(report.planned.meetingsTomorrow)}`}
-                />
-                <OperationListRow
-                  label="Завтра: дела"
-                  value={formatInteger(report.planned.tasksTomorrow)}
-                />
-              </div>
+              {hasUsableCurrentScope ? (
+                <div className="grid gap-1">
+                  <OperationListRow
+                    label="Сегодня: встречи"
+                    value={formatInteger(sumOperationalSlots(report.planned.meetingsToday))}
+                    note={`· ${formatOperationalSlotSummary(report.planned.meetingsToday)}`}
+                  />
+                  <OperationListRow
+                    label="Сегодня: дела"
+                    value={formatInteger(report.planned.tasksToday)}
+                  />
+                  <OperationListRow
+                    label="Завтра: встречи"
+                    value={formatInteger(sumOperationalSlots(report.planned.meetingsTomorrow))}
+                    note={`· ${formatOperationalSlotSummary(report.planned.meetingsTomorrow)}`}
+                  />
+                  <OperationListRow
+                    label="Завтра: дела"
+                    value={formatInteger(report.planned.tasksTomorrow)}
+                  />
+                </div>
+              ) : (
+                <OperationListRow label="Текущий состав недоступен" value="—" />
+              )}
             </div>
           </section>
 
@@ -6599,10 +6653,18 @@ export function OperationsScene({ filters }: SceneComponentProps) {
             <PanelHeading
               title="В работе по этапам"
               hint={operationalCalculationHints.stages}
-              right={<span className="badge-chip badge-neutral">{formatInteger(report.openDeals)} открыто</span>}
+              right={
+                <span className="badge-chip badge-neutral">
+                  {hasUsableCurrentScope
+                    ? `${formatInteger(report.openDeals)} открыто`
+                    : '—'}
+                </span>
+              }
             />
             <div className="grid gap-1">
-              {report.stageWip.length > 0 ? (
+              {!hasUsableCurrentScope ? (
+                <OperationListRow label="Текущий состав недоступен" value="—" />
+              ) : report.stageWip.length > 0 ? (
                 report.stageWip.map((stage) => {
                   const hasCritical = (criticalRisksByStage.get(stage.stageId) ?? 0) > 0
                   return (
@@ -6664,28 +6726,36 @@ export function OperationsScene({ filters }: SceneComponentProps) {
           >
           <PanelHeading
             title="Лента рисков"
-              description={riskDescription}
+              description={
+                hasUsableCurrentScope
+                  ? riskDescription
+                  : 'Текущие риски недоступны до полной сверки состава воронки.'
+              }
               hint={operationalCalculationHints.risks}
               right={
                 <span className="badge-chip badge-neutral">
-                  {formatInteger(filteredRisks.length)} сделок
+                  {hasUsableCurrentScope
+                    ? `${formatInteger(filteredRisks.length)} сделок`
+                    : '—'}
                 </span>
               }
             />
-          <div className="mb-3 flex min-w-0 flex-wrap gap-2">
-            {riskFilterButtons.map((chip) => (
-              <OperationalRiskChip
-                key={chip.key}
-                active={ruleFilter === chip.key}
-                onClick={() => setRuleFilter(chip.key)}
-                tooltip={operationalRiskFilterHints[chip.key]}
-              >
-                {chip.label} · {formatInteger(chip.count)}
-              </OperationalRiskChip>
-            ))}
-          </div>
+          {hasUsableCurrentScope ? (
+            <div className="mb-3 flex min-w-0 flex-wrap gap-2">
+              {riskFilterButtons.map((chip) => (
+                <OperationalRiskChip
+                  key={chip.key}
+                  active={ruleFilter === chip.key}
+                  onClick={() => setRuleFilter(chip.key)}
+                  tooltip={operationalRiskFilterHints[chip.key]}
+                >
+                  {chip.label} · {formatInteger(chip.count)}
+                </OperationalRiskChip>
+              ))}
+            </div>
+          ) : null}
 
-          {activeStageLabel || activeManagerLabel ? (
+          {hasUsableCurrentScope && (activeStageLabel || activeManagerLabel) ? (
             <div className="mb-3 flex min-w-0 flex-wrap gap-2">
               {activeStageLabel ? (
                 <button
@@ -6709,7 +6779,11 @@ export function OperationsScene({ filters }: SceneComponentProps) {
           ) : null}
 
           <div className="grid max-h-[44rem] gap-2 overflow-y-auto pr-1">
-            {visibleRisks.length > 0 ? (
+            {!hasUsableCurrentScope ? (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-800">
+                Текущий состав воронки недоступен. Лента рисков не рассчитана.
+              </div>
+            ) : visibleRisks.length > 0 ? (
               visibleRisks.map((risk) => {
                 const rowTone = getOperationalRiskRowTone(risk.severity)
                 return (
@@ -6837,7 +6911,9 @@ export function OperationsScene({ filters }: SceneComponentProps) {
                     <td className="py-2.5 pr-3 text-right text-slate-700">
                       {formatInteger(manager.slaLateCount)} / {formatInteger(manager.slaNoTouchCount)}
                     </td>
-                    <td className="py-2.5 pr-3 text-right text-slate-700">{formatInteger(manager.openDeals)}</td>
+                    <td className="py-2.5 pr-3 text-right text-slate-700">
+                      {hasUsableCurrentScope ? formatInteger(manager.openDeals) : '—'}
+                    </td>
                     <td
                         className={cn(
                           'py-2.5 text-right font-bold',
@@ -6846,7 +6922,7 @@ export function OperationsScene({ filters }: SceneComponentProps) {
                             : 'text-slate-500',
                         )}
                     >
-                      {formatInteger(manager.riskDeals)}
+                      {hasUsableCurrentScope ? formatInteger(manager.riskDeals) : '—'}
                     </td>
                   </tr>
                 ))

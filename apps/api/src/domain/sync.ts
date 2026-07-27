@@ -161,6 +161,12 @@ export interface SuccessfulSyncScope {
   assignedByIds: string[];
 }
 
+export interface CurrentAttractionScopeSnapshot {
+  scopeKey: string | null;
+  reconciledAt: string | null;
+  dealIds: string[];
+}
+
 export interface SyncRepository {
   getLatestSuccessCursor(
     categoryIds?: string[],
@@ -214,6 +220,12 @@ export interface SyncRepository {
     assignedByIds?: string[]
   ): Promise<string[]>;
   getDealsByIds?(dealIds: string[]): Promise<DealSnapshot[]>;
+  getCurrentAttractionScope?(): Promise<CurrentAttractionScopeSnapshot>;
+  replaceCurrentAttractionScope?(input: {
+    scopeKey: string;
+    dealIds: string[];
+    reconciledAt: string;
+  }): Promise<void>;
   getActivitiesByIds(activityIds: string[]): Promise<ActivitySnapshot[]>;
   getCallActivityIdsMissingActivities?(
     limit?: number,
@@ -725,6 +737,23 @@ function mapDealRow(
 
 function isOpenDealSnapshot(deal: DealSnapshot) {
   return deal.stageSemanticId === "P";
+}
+
+function hasCurrentScopeDealDrift(
+  row: DealRow,
+  snapshot: DealSnapshot | undefined
+) {
+  if (!snapshot) {
+    return true;
+  }
+
+  return (
+    row.DATE_MODIFY !== snapshot.dateModify ||
+    row.CATEGORY_ID !== snapshot.categoryId ||
+    row.STAGE_ID !== snapshot.stageId ||
+    row.STAGE_SEMANTIC_ID !== snapshot.stageSemanticId ||
+    row.ASSIGNED_BY_ID !== snapshot.assignedById
+  );
 }
 
 const DEAL_SNAPSHOT_CHANGE_FIELDS: Array<keyof DealSnapshot> = [
@@ -1421,9 +1450,11 @@ export async function performManualSync(
 ): Promise<ManualSyncSummary> {
   const assignedByIds = input.assignedByIds ?? ATTRACTION_MANAGER_IDS;
   const hasAttractionScope = assignedByIds.length > 0;
-  const scopeKey = hasAttractionScope
-    ? buildCategoryScopeKey(input.categoryIds, assignedByIds)
-    : `${buildCategoryScopeKey(input.categoryIds)}:assigned:`;
+  const scopeKey = buildCategoryScopeKey(input.categoryIds, assignedByIds);
+  const canReconcileCurrentScope = Boolean(
+    input.repository.getCurrentAttractionScope &&
+      input.repository.replaceCurrentAttractionScope
+  );
 
   if (!hasAttractionScope) {
     const startedAt = input.now();
@@ -1449,7 +1480,8 @@ export async function performManualSync(
     };
     const diagnostics = [
       "attractionSkipped=empty-scope",
-      `attractionManagers=${assignedByIds.length}`
+      `attractionManagers=${assignedByIds.length}`,
+      ...(canReconcileCurrentScope ? ["currentScopeDeals=0"] : [])
     ];
     const syncRunId = await input.repository.createSyncRun({
       startedAt,
@@ -1458,6 +1490,15 @@ export async function performManualSync(
       scopeKey
     });
     const finishedAt = input.now();
+    if (canReconcileCurrentScope) {
+      runSnapshotTransaction(input.repository, () => {
+        void input.repository.replaceCurrentAttractionScope?.({
+          scopeKey,
+          dealIds: [],
+          reconciledAt: finishedAt
+        });
+      });
+    }
     await input.repository.finishSyncRun({
       syncRunId,
       finishedAt,
@@ -1492,13 +1533,21 @@ export async function performManualSync(
     operationalHistoryBootstrappedAt,
     callHistoryBootstrappedAt,
     activitySnapshotCount,
-    snapshotBefore
+    snapshotBefore,
+    currentScopeBefore
   ] = await Promise.all([
     input.repository.getLatestSuccessCursor(input.categoryIds, assignedByIds),
     input.repository.getOperationalHistoryBootstrappedAt(),
     input.repository.getCallHistoryBootstrappedAt(),
     input.repository.getActivitySnapshotCount(),
-    getSnapshotStats(input.repository, snapshotScope)
+    getSnapshotStats(input.repository, snapshotScope),
+    canReconcileCurrentScope
+      ? input.repository.getCurrentAttractionScope!()
+      : Promise.resolve<CurrentAttractionScopeSnapshot>({
+          scopeKey: null,
+          reconciledAt: null,
+          dealIds: []
+        })
   ]);
   const compatibleScope =
     exactModifiedAfter === null && input.repository.getLatestSuccessfulScope
@@ -1853,21 +1902,34 @@ export async function performManualSync(
       ATTRACTION_RETURN_REASON_FIELD_NAME,
       ATTRACTION_BASKET_REASON_FIELD_NAME
     ];
+    const deltaDealRowsPromise = input.client.listDeals({
+      modifiedAfter: dealModifiedAfter,
+      categoryIds: input.categoryIds,
+      assignedByIds,
+      qualityFieldName: input.qualityFieldName,
+      customFieldNames: dealCustomFieldNames
+    });
+    const currentScopeDealRowsPromise = canReconcileCurrentScope
+      ? dealModifiedAfter === null
+        ? deltaDealRowsPromise
+        : input.client.listDeals({
+            modifiedAfter: null,
+            categoryIds: input.categoryIds,
+            assignedByIds,
+            qualityFieldName: input.qualityFieldName,
+            customFieldNames: dealCustomFieldNames
+          })
+      : Promise.resolve<DealRow[] | null>(null);
     const [
       dealStages,
       sourceCatalog,
       deltaDealRows,
-      scopeExpansionDealRows
+      scopeExpansionDealRows,
+      currentScopeDealRows
     ] = await Promise.all([
       fetchDealStages,
       fetchSourceCatalog,
-      input.client.listDeals({
-        modifiedAfter: dealModifiedAfter,
-        categoryIds: input.categoryIds,
-        assignedByIds,
-        qualityFieldName: input.qualityFieldName,
-        customFieldNames: dealCustomFieldNames
-      }),
+      deltaDealRowsPromise,
       scopeExpansionAssignedByIds.length > 0
         ? input.client.listDeals({
             modifiedAfter: bootstrapModifiedAfter,
@@ -1876,14 +1938,37 @@ export async function performManualSync(
             qualityFieldName: input.qualityFieldName,
             customFieldNames: dealCustomFieldNames
           })
-        : Promise.resolve([])
+        : Promise.resolve([]),
+      currentScopeDealRowsPromise
     ]);
+    const currentScopeDealIds = Array.from(
+      new Set((currentScopeDealRows ?? []).map((row) => String(row.ID)))
+    ).sort((left, right) => left.localeCompare(right));
+    const currentScopeDealIdSet = new Set(currentScopeDealIds);
+    const previousCurrentScopeDealIdSet = new Set(currentScopeBefore.dealIds);
+    const persistedCurrentScopeDeals =
+      currentScopeDealRows &&
+      currentScopeDealIds.length > 0 &&
+      input.repository.getDealsByIds
+        ? await input.repository.getDealsByIds(currentScopeDealIds)
+        : [];
+    const persistedCurrentScopeDealsById = new Map(
+      persistedCurrentScopeDeals.map((deal) => [deal.id, deal])
+    );
+    const currentScopeRowsNeedingRefresh = (currentScopeDealRows ?? []).filter(
+      (row) =>
+        hasCurrentScopeDealDrift(
+          row,
+          persistedCurrentScopeDealsById.get(String(row.ID))
+        )
+    );
     const rawDealRows = Array.from(
       new Map(
-        [...deltaDealRows, ...scopeExpansionDealRows].map((row) => [
-          String(row.ID),
-          row
-        ])
+        [
+          ...deltaDealRows,
+          ...scopeExpansionDealRows,
+          ...currentScopeRowsNeedingRefresh
+        ].map((row) => [String(row.ID), row])
       ).values()
     );
     const assignedByIdSet = new Set(assignedByIds);
@@ -2091,12 +2176,21 @@ export async function performManualSync(
       input.categoryIds,
       assignedByIds
     );
-    const existingOpenOwnerIds = input.repository.getOpenDealIdsByCategoryIds
+    const existingOpenOwnerIdsBeforeCurrentScope =
+      input.repository.getOpenDealIdsByCategoryIds
       ? await input.repository.getOpenDealIdsByCategoryIds(
           input.categoryIds,
           assignedByIds
         )
       : allExistingScopedOwnerIds;
+    const currentScopedOwnerIds = currentScopeDealRows
+      ? currentScopeDealIds
+      : allExistingScopedOwnerIds;
+    const existingOpenOwnerIds = currentScopeDealRows
+      ? existingOpenOwnerIdsBeforeCurrentScope.filter((id) =>
+          currentScopeDealIdSet.has(id)
+        )
+      : existingOpenOwnerIdsBeforeCurrentScope;
     const closedDeltaDealIds = new Set(
       deals.filter((deal) => !isOpenDealSnapshot(deal)).map((deal) => deal.id)
     );
@@ -2110,7 +2204,7 @@ export async function performManualSync(
       new Set([...existingOpenOwnerIds, ...deals.map((deal) => deal.id)])
     );
     const callStatsOwnerIds = Array.from(
-      new Set([...allExistingScopedOwnerIds, ...deals.map((deal) => deal.id)])
+      new Set([...currentScopedOwnerIds, ...deals.map((deal) => deal.id)])
     );
     const historicalActivityOwnerIds = callStatsOwnerIds;
     const callStatsOwnerIdSet = new Set(callStatsOwnerIds);
@@ -2689,6 +2783,18 @@ export async function performManualSync(
       `activityCursor=${nextActivityCursor ?? "not-updated"}`,
       `callStatsCursor=${nextCallStatsCursor ?? "not-updated"}`,
       `callStatsOwners=${callStatsOwnerIds.length}`,
+      ...(currentScopeDealRows
+        ? [
+            `currentScopeDeals=${currentScopeDealIds.length}`,
+            `currentScopeAdded=${currentScopeDealIds.filter(
+              (dealId) => !previousCurrentScopeDealIdSet.has(dealId)
+            ).length}`,
+            `currentScopeRemoved=${currentScopeBefore.dealIds.filter(
+              (dealId) => !currentScopeDealIdSet.has(dealId)
+            ).length}`,
+            `currentScopeRefreshed=${currentScopeRowsNeedingRefresh.length}`
+          ]
+        : []),
       `scopeExpansionManagers=${scopeExpansionAssignedByIds.length}`,
       `scopeExpansionDeals=${scopeExpansionDealIds.length}`,
       `conversionEventVisits=${conversionEventVisits.length}`,
@@ -2754,6 +2860,13 @@ export async function performManualSync(
     runSnapshotTransaction(input.repository, () => {
       void input.repository.replaceStageCatalog([...dealStages, ...sourceCatalog]);
       void input.repository.upsertDeals(dealsToPersist);
+      if (currentScopeDealRows) {
+        void input.repository.replaceCurrentAttractionScope?.({
+          scopeKey,
+          dealIds: currentScopedOwnerIds,
+          reconciledAt: persistedAt
+        });
+      }
 
       if (!callHistoryBootstrappedAt) {
         if (callDiagnostics.length === 0) {

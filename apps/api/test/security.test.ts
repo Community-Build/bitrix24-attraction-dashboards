@@ -162,6 +162,11 @@ function createEmptyOperationalDashboardReport(): OperationalDashboardReport {
       to: "2026-04-30T23:59:59.999Z"
     },
     generatedAt: "2026-04-30T12:00:00.000Z",
+    currentScope: {
+      status: "ready",
+      reconciledAt: "2026-04-30T12:00:00.000Z",
+      dealCount: 0
+    },
     createdDeals: 0,
     meetingsHeld: {
       total: 0,

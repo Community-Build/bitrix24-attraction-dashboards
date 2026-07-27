@@ -24,6 +24,33 @@ Stable dashboard anchors used by ontology report bindings:
 
 ## activities-calls
 
+## operational-dashboard
+
+- Module: `attraction`.
+- Report scene: `operations` / `Операционный`.
+- Backend route: `/api/reports/operational-dashboard`.
+- Backend contract: `OperationalDashboardReport`.
+- Current membership source: the atomically replaced
+  `attraction_current_deal_ids` projection for category 10 and the active
+  attraction manager whitelist. Page rendering reads this local projection and
+  never calls Bitrix directly.
+- Current metrics: `openDeals`, `stageWip`, `riskSummary`, `risks`, planned
+  meetings/tasks, and the corresponding current manager workload fields must
+  intersect retained deal snapshots with the reconciled current-ID set.
+- Historical period metrics: `createdDeals`, held meetings, won sales, lost
+  deals, and their historical manager totals continue to use retained
+  snapshots and facts selected by the report range.
+- A deal moved to another category, reassigned outside the manager whitelist,
+  or deleted upstream remains available to historical reports but cannot
+  appear as current WIP, planned work, or a current operational risk.
+- `currentScope.status` is `ready`, `stale`, `uninitialized`, or
+  `scope_mismatch`. Uninitialized or mismatched state hides current metrics;
+  stale state shows the last atomically reconciled set with an explicit UI
+  warning. Sync health treats all three non-ready states as blocking.
+- Reconciliation is complete-set based, not delta based. The set and freshness
+  marker advance only after a complete Bitrix inventory and snapshot refresh
+  commit successfully. See [ADR 0004](../../adr/0004-current-attraction-scope-projection.md).
+
 ## source-cohort-conversion
 
 - Module: `attraction`.

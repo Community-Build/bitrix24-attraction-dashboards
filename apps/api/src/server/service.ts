@@ -31,6 +31,7 @@ import type {
   ManagerWhitelistSettingsData,
   ManagerWhitelistSettingsInput,
   ManualSyncSummary,
+  OperationalCurrentScope,
   OperationalDashboardReport,
   OperationalThresholdSettings,
   OperationalThresholdSettingsInput,
@@ -468,6 +469,7 @@ function isOperationalOpenDeal(deal: DealSnapshot, wonStageIds: Set<string>) {
 
 export function selectOperationalDashboardDealIds(input: {
   deals: DealSnapshot[];
+  currentDealIds?: ReadonlySet<string>;
   stageHistory: StageHistorySnapshot[];
   activities: ActivitySnapshot[];
   range: ReportRange;
@@ -481,11 +483,12 @@ export function selectOperationalDashboardDealIds(input: {
   const tomorrowKey = addDaysToDateKey(todayKey, 1);
   const wonStageIds = new Set(input.wonStageIds);
   const scopedDealIds = new Set(input.deals.map((deal) => deal.id));
+  const currentDealIds = input.currentDealIds ?? scopedDealIds;
   const selectedDealIds = new Set<string>();
 
   for (const deal of input.deals) {
     if (
-      isOperationalOpenDeal(deal, wonStageIds) ||
+      (currentDealIds.has(deal.id) && isOperationalOpenDeal(deal, wonStageIds)) ||
       isInTimestampRange(deal.dateCreate, fromMs, toMs) ||
       (isOperationalClosedStage(deal.stageId, deal.stageSemanticId, wonStageIds) &&
         isInTimestampRange(deal.dateClosed ?? deal.dateModify, fromMs, toMs))
@@ -507,7 +510,10 @@ export function selectOperationalDashboardDealIds(input: {
       }
 
       const slotDateKey = toMoscowDateKey(slot.dateValue);
-      if (slotDateKey === todayKey || slotDateKey === tomorrowKey) {
+      if (
+        currentDealIds.has(deal.id) &&
+        (slotDateKey === todayKey || slotDateKey === tomorrowKey)
+      ) {
         selectedDealIds.add(deal.id);
         break;
       }
@@ -528,7 +534,8 @@ export function selectOperationalDashboardDealIds(input: {
     if (
       activity.completed ||
       !isDealOwnerType(activity.ownerTypeId) ||
-      !scopedDealIds.has(activity.ownerId)
+      !scopedDealIds.has(activity.ownerId) ||
+      !currentDealIds.has(activity.ownerId)
     ) {
       continue;
     }
@@ -721,6 +728,7 @@ const MANAGER_ACTION_REQUIRED_ACTIVITY_PROVIDERS = [
 ];
 const SYNC_HEALTH_STALE_RUN_HOURS = 2;
 const SYNC_HEALTH_STALE_SUCCESS_HOURS = 24;
+const CURRENT_SCOPE_STALE_HOURS = 2;
 type DealStageFacts = Awaited<ReturnType<ReportingRepository["getAllDealStageFacts"]>>;
 type DealTouchpointFacts = Awaited<
   ReturnType<ReportingRepository["getAllDealTouchpointFacts"]>
@@ -739,10 +747,31 @@ function addDays(date: Date, days: number) {
   return copy;
 }
 
+function resolveOperationalCurrentScopeStatus(input: {
+  scopeKey: string | null;
+  reconciledAt: string | null;
+  expectedScopeKey: string;
+  now: Date;
+}): OperationalCurrentScope["status"] {
+  if (!input.scopeKey || !input.reconciledAt) {
+    return "uninitialized";
+  }
+  if (input.scopeKey !== input.expectedScopeKey) {
+    return "scope_mismatch";
+  }
+
+  const reconciledAtMs = Date.parse(input.reconciledAt);
+  return !Number.isFinite(reconciledAtMs) ||
+    reconciledAtMs < addHours(input.now, -CURRENT_SCOPE_STALE_HOURS).getTime()
+    ? "stale"
+    : "ready";
+}
+
 async function buildSyncHealth(input: {
   repository: ReportingRepository;
   categoryIds: string[];
   assignedByIds: string[];
+  currentScopeAssignedByIds?: string[];
   lastSync: {
     finishedAt: string;
     leadsSynced: number;
@@ -793,6 +822,38 @@ async function buildSyncHealth(input: {
         message: "Последняя успешная синхронизация устарела."
       });
     }
+  }
+
+  const expectedScopeKey = buildCategoryScopeKey(
+    input.categoryIds,
+    input.currentScopeAssignedByIds ?? input.assignedByIds
+  );
+  const currentScope = await input.repository.getCurrentAttractionScope();
+  const currentScopeStatus = resolveOperationalCurrentScopeStatus({
+    ...currentScope,
+    expectedScopeKey,
+    now: input.now
+  });
+  if (currentScopeStatus === "uninitialized") {
+    issues.push({
+      code: "CURRENT_SCOPE_UNINITIALIZED",
+      severity: "blocking",
+      message:
+        "Текущий состав воронки еще не подтвержден полной сверкой Bitrix."
+    });
+  } else if (currentScopeStatus === "scope_mismatch") {
+    issues.push({
+      code: "CURRENT_SCOPE_MISMATCH",
+      severity: "blocking",
+      message:
+        "Текущий состав воронки рассчитан для другого набора категорий или менеджеров."
+    });
+  } else if (currentScopeStatus === "stale") {
+    issues.push({
+      code: "CURRENT_SCOPE_STALE",
+      severity: "blocking",
+      message: "Полная сверка текущего состава воронки устарела."
+    });
   }
 
   const requiredFrom = addDays(
@@ -2785,7 +2846,8 @@ export function createReportingService(
     },
 
     async getOperationalDashboardReport({ periodDays, range, filters }) {
-      const scopedFilters = await normalizeAttractionReportFilters(filters);
+      const managerScope = await getAttractionManagerScope();
+      const scopedFilters = normalizeAttractionManagerFilters(filters, managerScope);
       const now = nowFactory();
       const [
         deals,
@@ -2794,7 +2856,8 @@ export function createReportingService(
         activities,
         calls,
         wonStageIds,
-        operationalThresholdSettings
+        operationalThresholdSettings,
+        currentScopeSnapshot
       ] = await Promise.all([
         input.repository.getAllDeals(),
         getScopedStageCatalog(true),
@@ -2802,8 +2865,28 @@ export function createReportingService(
         input.repository.getAllActivities(),
         input.repository.getAllCalls(),
         input.repository.getWonStageIds(),
-        input.repository.getOperationalThresholdSettings()
+        input.repository.getOperationalThresholdSettings(),
+        input.repository.getCurrentAttractionScope()
       ]);
+      const expectedScopeKey = buildCategoryScopeKey(
+        input.dealCategoryIds,
+        managerScope
+      );
+      const currentScopeStatus = resolveOperationalCurrentScopeStatus({
+        ...currentScopeSnapshot,
+        expectedScopeKey,
+        now
+      });
+      const currentScope: OperationalCurrentScope = {
+        status: currentScopeStatus,
+        reconciledAt: currentScopeSnapshot.reconciledAt,
+        dealCount: currentScopeSnapshot.dealIds.length
+      };
+      const currentScopeDealIds =
+        currentScopeStatus === "uninitialized" ||
+        currentScopeStatus === "scope_mismatch"
+          ? new Set<string>()
+          : new Set(currentScopeSnapshot.dealIds);
       const canonical = await loadCanonicalReportInputs({
         stageHistory,
         activities,
@@ -2827,6 +2910,7 @@ export function createReportingService(
       );
       const relevantDealIds = selectOperationalDashboardDealIds({
         deals: allScopedDeals,
+        currentDealIds: currentScopeDealIds,
         stageHistory: allScopedStageHistory,
         activities: reportActivities,
         range: resolvedRange,
@@ -2875,6 +2959,8 @@ export function createReportingService(
         range: resolvedRange,
         now: now.toISOString(),
         deals: scopedDeals,
+        currentDealIds: currentScopeDealIds,
+        currentScope,
         stageCatalog,
         stageHistory: scopedStageHistory,
         activities: scopedActivities,
@@ -3836,7 +3922,9 @@ export function createReportingService(
     },
 
     async getMeta(metaInput = {}) {
-      const managerScope = metaInput.filters?.managerIds ?? await getAttractionManagerScope();
+      const configuredManagerScope = await getAttractionManagerScope();
+      const managerScope =
+        metaInput.filters?.managerIds ?? configuredManagerScope;
       const scopeKey = buildCategoryScopeKey(input.dealCategoryIds, managerScope);
       const [deals, stageCatalog, wonStageIds, lastSync, snapshotStats] =
         await Promise.all([
@@ -3860,6 +3948,7 @@ export function createReportingService(
         repository: input.repository,
         categoryIds: input.dealCategoryIds,
         assignedByIds: managerScope,
+        currentScopeAssignedByIds: configuredManagerScope,
         lastSync,
         now: nowFactory(),
         bootstrapLookbackDays: input.bootstrapLookbackDays ?? 365,

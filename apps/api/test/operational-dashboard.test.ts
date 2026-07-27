@@ -186,6 +186,7 @@ function createCall(dealId: string, input: Partial<CallSnapshot> = {}): CallSnap
 
 function buildReport(input: {
   deals: DealSnapshot[];
+  currentDealIds?: string[];
   stageHistory?: StageHistorySnapshot[];
   activities?: ActivitySnapshot[];
   calls?: CallSnapshot[];
@@ -195,6 +196,9 @@ function buildReport(input: {
     range,
     now,
     deals: input.deals,
+    ...(input.currentDealIds
+      ? { currentDealIds: new Set(input.currentDealIds) }
+      : {}),
     stageCatalog,
     stageHistory: input.stageHistory ?? [],
     activities: input.activities ?? [],
@@ -536,6 +540,43 @@ describe("buildOperationalDashboardReport", () => {
     expect(report.planned.tasksToday).toBe(1);
     expect(report.stageWip.map((stage) => stage.stageId)).toEqual([
       "C10:PREPARATION"
+    ]);
+  });
+
+  it("keeps retained snapshots in historical totals but excludes non-current deals from WIP, plans and risks", () => {
+    const currentDeal = createDeal({ id: "CURRENT" });
+    const movedDeal = createDeal({ id: "MOVED_TO_WARMUP" });
+    const report = buildReport({
+      deals: [currentDeal, movedDeal],
+      currentDealIds: ["CURRENT"],
+      activities: [
+        createActivity("CURRENT", {
+          id: "TASK_CURRENT",
+          deadline: "2026-06-10T16:00:00.000+03:00"
+        }),
+        createActivity("MOVED_TO_WARMUP", {
+          id: "TASK_MOVED",
+          deadline: "2026-06-10T16:00:00.000+03:00"
+        })
+      ]
+    });
+
+    expect(report.createdDeals).toBe(2);
+    expect(report.openDeals).toBe(1);
+    expect(report.planned.tasksToday).toBe(1);
+    expect(report.currentScope).toEqual({
+      status: "ready",
+      reconciledAt: null,
+      dealCount: 1
+    });
+    expect(report.risks.map((risk) => risk.dealId)).not.toContain(
+      "MOVED_TO_WARMUP"
+    );
+    expect(report.stageWip).toEqual([
+      expect.objectContaining({
+        stageId: "C10:PREPARATION",
+        openDeals: 1
+      })
     ]);
   });
 

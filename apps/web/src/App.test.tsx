@@ -770,6 +770,11 @@ vi.mock('@/lib/api-client', () => ({
     getOperationalDashboardReport: vi.fn(async () => ({
       range: { from: '2026-05-01T00:00:00.000Z', to: '2026-05-31T23:59:59.999Z' },
       generatedAt: '2026-06-01T09:00:00.000Z',
+      currentScope: {
+        status: 'ready' as const,
+        reconciledAt: '2026-06-01T08:55:00.000Z',
+        dealCount: 215,
+      },
       createdDeals: 37,
       meetingsHeld: {
         total: 54,
@@ -2163,6 +2168,45 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: /Без дел · 1/i }))
     expect(screen.queryByText(/Сделка #48213/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Сделка #48544/i)).toBeInTheDocument()
+  })
+
+  it('fails closed when the current attraction scope is unavailable', async () => {
+    const readyReport = await apiClient.getOperationalDashboardReport({ preset: 30 })
+    vi.mocked(apiClient.getOperationalDashboardReport).mockClear()
+    vi.mocked(apiClient.getOperationalDashboardReport).mockResolvedValueOnce({
+      ...readyReport,
+      currentScope: {
+        status: 'uninitialized',
+        reconciledAt: null,
+        dealCount: 0,
+      },
+    })
+
+    render(<App />)
+    await waitForDashboardShell()
+
+    fireEvent.click(await screen.findByRole('button', { name: /операционный/i }))
+
+    const scopeAlert = await screen.findByText(
+      /текущий состав воронки еще не подтвержден/i,
+    )
+    expect(scopeAlert).toHaveAttribute('role', 'alert')
+    const riskSection = document.querySelector(
+      '[data-comment-block-id="attraction-operations-risks"]',
+    )
+    const summarySection = document.querySelector(
+      '[data-comment-block-id="attraction-operations-summary"]',
+    )
+
+    expect(riskSection).toBeInTheDocument()
+    expect(summarySection).toBeInTheDocument()
+    expect(
+      within(riskSection as HTMLElement).getByText(/лента рисков не рассчитана/i),
+    ).toBeInTheDocument()
+    expect(
+      within(summarySection as HTMLElement).getAllByText('—').length,
+    ).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByRole('button', { name: /Без дел ·/i })).not.toBeInTheDocument()
   })
 
   it('renders the source cohort conversion tab with month selector and manager breakdown', async () => {
