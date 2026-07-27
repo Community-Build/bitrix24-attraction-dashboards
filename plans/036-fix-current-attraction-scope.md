@@ -3,7 +3,7 @@
 ## Status
 
 - **Priority**: P0
-- **State**: IN PROGRESS
+- **State**: DONE
 - **Effort**: L
 - **Risk**: HIGH
 - **Depends on**: 027
@@ -89,6 +89,28 @@ scope while retaining historical attraction snapshots and facts.
 - Production reconciliation would require replacing the SQLite database.
 - Existing user changes appear in an owned file and cannot be separated.
 - Bitrix inventory requires new PII or broader webhook permissions.
+
+## Release Evidence
+
+- PR [#140](https://github.com/Community-Build/bitrix24-attraction-dashboards/pull/140)
+  merged as `6eb834bbb9c8c5b1a47b5ee38056c62cd0e0fbc2`.
+- GitHub Actions
+  [Deploy Production run 30251188774](https://github.com/Community-Build/bitrix24-attraction-dashboards/actions/runs/30251188774)
+  completed successfully.
+- A consistent pre-migration SQLite backup was created at
+  `/opt/bitrix24-reporting/data/backups/production-ops/bitrix24-attraction-pre-current-scope-20260727T084542Z.db`;
+  its `integrity_check` returned `ok`.
+- Production sync run `1305` completed successfully at
+  `2026-07-27T08:52:46.749Z`. It reconciled `3,619` current IDs and refreshed
+  `13` changed snapshots.
+- A fresh paginated Bitrix inventory and the SQLite projection both contained
+  `3,619` IDs. Bitrix-only and projection-only differences were both `0`.
+- In the Olga Romashova slice, current risks changed from `89` to `45` and
+  `Без дел` from `14` to `0`; none of the screenshot deal IDs remained in the
+  current risk feed.
+- The seven investigated rows remain in retained snapshots but not in the
+  current projection. Database counts remained `4,228` deals, `68,835`
+  activities, and `17,917` calls, with `integrity_check=ok`.
 
 ## Done Criteria
 
