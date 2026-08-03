@@ -88,6 +88,7 @@ import { createCommentRouteHandlers } from "./routes/comment-handlers.js";
 import { registerCommentRoutes } from "./routes/comment-routes.js";
 import { registerLeadgenRoutes } from "./routes/leadgen-routes.js";
 import { registerModuleAdminRoutes } from "./routes/module-admin-routes.js";
+import { registerMessengerMessageRoutes } from "./routes/messenger-message-routes.js";
 import {
   registerPlatformPublicRoutes,
   registerPlatformRoutes
@@ -113,6 +114,11 @@ import type {
 import type { TelegramMessageSender } from "./telegram-client.js";
 import type { TelegramEnrichmentApprovalService } from "./telegram-enrichment-approval.js";
 import type { TelegramManagerRegistrationService } from "./telegram-manager-registration.js";
+import { MessengerMessageCollectionError } from "./messenger-message-collection.js";
+import type {
+  MessengerMessageCollectionInput,
+  MessengerMessageSummary
+} from "./messenger-message-collection.js";
 import {
   buildDailyActivityReportRange,
   buildTelegramActivityReportDeliveries,
@@ -316,6 +322,14 @@ interface AppConfig {
     enabled?: boolean;
     intervalMs?: number;
     initialDelayMs?: number;
+  };
+  messengerMessages?: {
+    enabled?: boolean;
+    service?: {
+      getManagerMessageSummary(
+        input: MessengerMessageCollectionInput
+      ): Promise<MessengerMessageSummary>;
+    };
   };
   telegramActivityReport?: {
     enabled?: boolean;
@@ -798,6 +812,14 @@ const managerWhitelistSettingsBodySchema = z.object({
     )
     .optional()
 });
+
+const messengerMessageCollectionBodySchema = z
+  .object({
+    managerId: z.string().trim().min(1).max(64),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true })
+  })
+  .strict();
 
 const callAnalysisQueueQuerySchema = z.object({
   stageIds: z
@@ -2741,6 +2763,28 @@ export function createApp(
     })
   );
 
+  registerMessengerMessageRoutes(app, {
+    collect: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (!messengerMessages?.enabled || !messengerMessages.service) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerMessageCollectionBodySchema.parse(request.body);
+        response.set("Cache-Control", "no-store");
+        response.json({
+          summary: await messengerMessages.service.getManagerMessageSummary(payload)
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+  });
+
   async function deliverCommentToPaperclip(
     comment: DashboardCommentRecord,
     module: AuthenticatedModule
@@ -3582,6 +3626,11 @@ export function createApp(
         response
           .status(400)
           .json(createErrorResponse("VALIDATION_ERROR", error.flatten()));
+        return;
+      }
+
+      if (error instanceof MessengerMessageCollectionError) {
+        response.status(400).json(createErrorResponse(error.code));
         return;
       }
 

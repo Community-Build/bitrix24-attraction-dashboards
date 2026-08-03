@@ -2,6 +2,7 @@ export type RuntimeModuleId =
   | "sync-snapshot"
   | "analytics-reports"
   | "call-analysis"
+  | "messenger-message-analysis"
   | "call-enrichment"
   | "telegram-manager-registration"
   | "telegram-activity-summary"
@@ -87,6 +88,29 @@ export const attractionRuntimeModules = [
     sourceOfTruth: ["docs/adr/0002-manager-approved-call-enrichment-writeback.md"],
     notes:
       "Covers manual queue analysis and automatic webhook intake. LLM output is advisory."
+  },
+  {
+    id: "messenger-message-analysis",
+    label: "Transient messenger-message analysis input",
+    owner: "attraction",
+    kind: "http",
+    currentEntrypoints: [
+      "/api/messenger-messages/collect",
+      "apps/api/src/server/messenger-message-collection.ts"
+    ],
+    reads: [
+      "current attraction deal scope",
+      "manager whitelist",
+      "Bitrix24 Open Lines session history"
+    ],
+    writes: [],
+    externalSystems: ["Bitrix24"],
+    sourceOfTruth: [
+      "docs/modules/attraction/MESSAGE_METRICS_RESEARCH.md",
+      "plans/037-transient-messenger-message-collection.md"
+    ],
+    notes:
+      "Leader-only on-demand collection. Complete message text is process-memory-only and may be supplied to a server-side analyzer; HTTP returns safe aggregates only."
   },
   {
     id: "call-enrichment",

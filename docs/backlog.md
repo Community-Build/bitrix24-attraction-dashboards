@@ -25,6 +25,31 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
+### Transient messenger-message collection for manager analysis
+- Area: activities, api, data
+- Problem: attraction can count Open Lines activities, but it has no production
+  boundary that retrieves complete messenger-message text for analysis without
+  persisting or exposing raw customer conversations.
+- Expected behavior: an authenticated leader can trigger a bounded per-manager
+  collection; Bitrix Open Lines message text is held only in process memory and
+  supplied to a server-side analyzer, while the API returns safe counts and
+  coverage metadata.
+- Acceptance criteria:
+  - The manager must be enabled in the attraction whitelist and messages must
+    belong to current attraction deals assigned to that manager.
+  - System events are excluded and attachment-only messages are counted
+    separately.
+  - Complete `text` is available to the server-side analysis boundary but is
+    never stored in SQLite, logged, or returned by the HTTP response.
+  - Direction and personal authorship remain `unknown` for connector messages.
+  - The collection range is bounded and covered by focused API/client tests.
+- Data dependencies:
+  - Bitrix methods `crm.activity.list` and
+    `imopenlines.session.history.get` with the existing production webhook.
+- Verification plan:
+  - Focused Vitest suites for Bitrix response parsing, manager scoping,
+    privacy-safe output, and HTTP authorization.
+
 ### Telegram activity summaries by attraction team
 - Area: activities, api
 - Problem: the scheduled Telegram report sends one combined summary even though attraction managers are already assigned to teams.

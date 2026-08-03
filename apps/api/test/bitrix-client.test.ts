@@ -1889,3 +1889,152 @@ describe("BitrixClient pagination", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe("BitrixClient Open Lines", () => {
+  it("lists Open Lines activities with the session origin for scoped deals", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createResponse({
+        result: [
+          {
+            ID: "301",
+            OWNER_TYPE_ID: "2",
+            OWNER_ID: "1001",
+            PROVIDER_ID: "IMOPENLINES_SESSION",
+            RESPONSIBLE_ID: "78",
+            LAST_UPDATED: "2026-08-03T10:20:00+03:00",
+            ORIGIN_ID: "IMOL_441"
+          }
+        ]
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new BitrixClient({
+      portalHost: "example.bitrix24.ru",
+      userId: "1",
+      webhookToken: "token",
+      timeoutMs: 1_000,
+      requestIntervalMs: 0,
+      dealCategoryIds: ["10"]
+    });
+
+    await expect(
+      client.listOpenLineActivities({
+        ownerIds: ["1001"],
+        modifiedAfter: "2026-08-01T00:00:00+03:00"
+      })
+    ).resolves.toEqual([
+      {
+        ID: "301",
+        OWNER_TYPE_ID: "2",
+        OWNER_ID: "1001",
+        PROVIDER_ID: "IMOPENLINES_SESSION",
+        RESPONSIBLE_ID: "78",
+        LAST_UPDATED: "2026-08-03T10:20:00+03:00",
+        ORIGIN_ID: "IMOL_441"
+      }
+    ]);
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      order: {
+        ID: "ASC"
+      },
+      filter: {
+        OWNER_TYPE_ID: 2,
+        OWNER_ID: "1001",
+        ">ID": "0",
+        PROVIDER_ID: "IMOPENLINES_SESSION",
+        ">=LAST_UPDATED": "2026-08-01T00:00:00+03:00"
+      },
+      select: [
+        "ID",
+        "OWNER_TYPE_ID",
+        "OWNER_ID",
+        "PROVIDER_ID",
+        "RESPONSIBLE_ID",
+        "LAST_UPDATED",
+        "ORIGIN_ID"
+      ],
+      start: -1
+    });
+  });
+
+  it("normalizes complete message text from an Open Lines session history", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createResponse({
+        result: {
+          chat: {
+            "701": {
+              id: 701,
+              name: "Открытая линия",
+              entityId: "wz_telegram_42",
+              entityType: "LINES"
+            }
+          },
+          message: {
+            "501": {
+              id: 501,
+              chatid: 701,
+              senderid: 9001,
+              date: "2026-08-03T10:15:00+03:00",
+              text: "Полный текст сообщения",
+              textlegacy: "Полный текст сообщения",
+              params: {
+                FILE_ID: ["77"]
+              }
+            }
+          },
+          users: {
+            "9001": {
+              id: 9001,
+              name: "WAZZUP",
+              connector: true
+            }
+          }
+        }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new BitrixClient({
+      portalHost: "example.bitrix24.ru",
+      userId: "1",
+      webhookToken: "token",
+      timeoutMs: 1_000,
+      requestIntervalMs: 0,
+      dealCategoryIds: ["10"]
+    });
+
+    await expect(client.getOpenLineSessionHistory("441")).resolves.toEqual({
+      sessionId: "441",
+      chat: {
+        id: "701",
+        entityId: "wz_telegram_42",
+        entityType: "LINES"
+      },
+      messages: [
+        {
+          id: "501",
+          chatId: "701",
+          senderId: "9001",
+          date: "2026-08-03T10:15:00+03:00",
+          text: "Полный текст сообщения",
+          hasAttachment: true
+        }
+      ],
+      users: [
+        {
+          id: "9001",
+          connector: true
+        }
+      ]
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/imopenlines.session.history.get"
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      SESSION_ID: "441"
+    });
+  });
+});

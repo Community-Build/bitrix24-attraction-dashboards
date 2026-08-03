@@ -607,6 +607,7 @@ describe("Bitrix transport security", () => {
       "crm.stagehistory.list",
       "crm.activity.list",
       "crm.activity.binding.list",
+      "imopenlines.session.history.get",
       "disk.file.get",
       "voximplant.statistic.get",
       "user.get"

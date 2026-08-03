@@ -2,6 +2,8 @@
 
 Date: `2026-05-24`
 
+Implementation update: `2026-08-03`
+
 This note records the current Bitrix24 / Open Lines findings for future message
 metric implementation in the attraction module.
 
@@ -133,3 +135,56 @@ By Open Lines activity responsible, the same period yielded:
 - If `im` scope is later added, `im.dialog.messages.get` can be tested as an
   alternate message-history source, but it should follow the same privacy rule:
   count metadata only, never persist message text.
+
+## Implemented Transient Collection Boundary
+
+- `POST /api/messenger-messages/collect` is an on-demand attraction runtime
+  operation, not a dashboard report. With password auth enabled it is available
+  only to attraction leaders; production auth remains mandatory.
+- One request selects one enabled manager and no more than 31 days. Deal scope
+  comes from `attraction_current_deal_ids`, and attribution uses the current
+  attraction deal `ASSIGNED_BY_ID`.
+- `crm.activity.list` locates `IMOPENLINES_SESSION` activities and
+  `imopenlines.session.history.get` returns the session body. Complete `text`
+  exists only inside the collection call and may be passed to an injected
+  server-side analyzer.
+- The HTTP response contains only message/session/deal counts, text coverage,
+  attachment-only count, channels, and sender-kind totals. It never returns raw
+  text, `textlegacy`, attachments, user names, contact data, or raw payloads.
+- The collector does not write SQLite and does not log response bodies.
+- Connector messages keep `direction = unknown`; the safe response explicitly
+  reports that direction and personal author are unavailable.
+- No semantic scoring rubric or model provider is selected in this change. The
+  implemented boundary supplies safe input for that next decision.
+
+## Read-Only Production Coverage Audit
+
+Period checked: `2026-07-04T00:00:00+03:00` through
+`2026-08-03T23:59:59+03:00`. The audit used the eight currently enabled
+attraction managers and `3,562` current Bitrix attraction deals. Raw message
+text was held only in process memory and was not printed or persisted.
+
+Across all managers, the collector found `613` non-system messages in `112`
+Open Lines sessions. Complete text was available for `603` messages; the other
+`10` were attachment-only. Another `426` Bitrix system events were excluded.
+
+| Manager | Sessions | Messages | With text | Attachment only | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `78` / Егоров Андрей | 17 | 74 | 74 | 0 | analyzable |
+| `11234` / Ромашова Ольга | 46 | 356 | 349 | 7 | analyzable |
+| `6994` / Кузнецова Анастасия | 19 | 25 | 25 | 0 | analyzable |
+| `2236` / Потапова Мария | 1 | 4 | 4 | 0 | analyzable |
+| `2764` / Каньков Вячеслав | 1 | 2 | 2 | 0 | analyzable |
+| `13020` / Какулия Илья | 24 | 90 | 89 | 1 | analyzable |
+| `7538` / Мария Саличева | 4 | 62 | 60 | 2 | analyzable |
+| `118` / Аделия Космасова | 0 | 0 | 0 | 0 | no messages in period |
+
+The zero row for Аделия Космасова is not an API-access failure: the manager has
+current attraction deals, but no matching Open Lines sessions were found in the
+selected period. Content analysis is therefore possible for seven managers in
+this window and has no material to process for the eighth.
+
+Production also confirmed that `chat`, `message`, and `users` are ID-indexed
+objects rather than arrays. The adapter regression test now covers that response
+shape. Channel mapping resolved Umnico Telegram, WAZZUP Telegram/Max, and OLChat
+Telegram/WhatsApp without exposing conversation content.
