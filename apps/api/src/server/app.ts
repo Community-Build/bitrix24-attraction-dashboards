@@ -117,6 +117,8 @@ import type { TelegramManagerRegistrationService } from "./telegram-manager-regi
 import { MessengerMessageCollectionError } from "./messenger-message-collection.js";
 import type {
   MessengerMessageCollectionInput,
+  MessengerMessageAttachment,
+  MessengerMessageAttachmentInput,
   MessengerMessageDetails,
   MessengerMessageDetailsInput,
   MessengerMessageSummary,
@@ -339,6 +341,9 @@ interface AppConfig {
       getManagerMessageDetails?(
         input: MessengerMessageDetailsInput
       ): Promise<MessengerMessageDetails>;
+      getManagerMessageAttachment?(
+        input: MessengerMessageAttachmentInput
+      ): Promise<MessengerMessageAttachment>;
     };
   };
   telegramActivityReport?: {
@@ -847,6 +852,45 @@ const messengerMessageReaderBodySchema = z
     limit: z.number().int().min(1).max(500).optional()
   })
   .strict();
+
+const messengerMessageAttachmentBodySchema = z
+  .object({
+    managerId: z.string().trim().min(1).max(64),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    sessionId: z.string().trim().min(1).max(64),
+    messageId: z.string().trim().min(1).max(128),
+    fileId: z.string().trim().min(1).max(128)
+  })
+  .strict();
+
+function sanitizeAttachmentFileName(fileName: string, fileId: string) {
+  const withoutControlCharacters = [...fileName]
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint > 31 && codePoint !== 127;
+    })
+    .join("");
+  const sanitized = withoutControlCharacters
+    .normalize("NFKC")
+    .replace(/[/\\"]/gu, "_")
+    .trim()
+    .slice(0, 180);
+  return sanitized || `attachment-${fileId}`;
+}
+
+function encodeContentDispositionValue(value: string) {
+  return encodeURIComponent(value).replace(/[!'()*]/gu, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+}
+
+function buildAttachmentContentDisposition(fileName: string, fileId: string) {
+  const safeFileName = sanitizeAttachmentFileName(fileName, fileId);
+  const asciiFallback =
+    safeFileName.replace(/[^\x20-\x7e]/gu, "_") || `attachment-${fileId}`;
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeContentDispositionValue(safeFileName)}`;
+}
 
 const callAnalysisQueueQuerySchema = z.object({
   stageIds: z
@@ -2860,6 +2904,37 @@ export function createApp(
       } catch (error) {
         next(error);
       }
+    },
+    attachment: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (
+        !messengerMessages?.enabled ||
+        !messengerMessages.service?.getManagerMessageAttachment
+      ) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerMessageAttachmentBodySchema.parse(request.body);
+        const attachment =
+          await messengerMessages.service.getManagerMessageAttachment(payload);
+        response.set("Cache-Control", "no-store");
+        response.set("Content-Type", "application/octet-stream");
+        response.set("X-Content-Type-Options", "nosniff");
+        response.set(
+          "Content-Disposition",
+          buildAttachmentContentDisposition(
+            attachment.fileName,
+            attachment.fileId
+          )
+        );
+        response.send(attachment.bytes);
+      } catch (error) {
+        next(error);
+      }
     }
   });
 
@@ -3708,7 +3783,7 @@ export function createApp(
       }
 
       if (error instanceof MessengerMessageCollectionError) {
-        response.status(400).json(createErrorResponse(error.code));
+        response.status(error.status).json(createErrorResponse(error.code));
         return;
       }
 

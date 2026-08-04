@@ -104,7 +104,10 @@ const leadgenClient = new BitrixClient({
 });
 const messengerMessages = createMessengerMessageCollectionService({
   repository: attractionRepository,
-  client
+  client,
+  ...(env.BITRIX24_PORTAL_HOST
+    ? { portalHost: env.BITRIX24_PORTAL_HOST }
+    : {})
 });
 const service = createReportingService({
   dealCategoryIds: env.bitrixDealCategoryIds,

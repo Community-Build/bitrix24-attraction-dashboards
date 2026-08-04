@@ -6,14 +6,18 @@ import { apiClient } from '@/lib/api-client'
 import type {
   MessengerMessageDetailItem,
   MessengerMessageDetails,
-  MessengerSenderKind,
 } from '@/lib/dashboard-types'
 import { formatInteger } from '@/lib/formatters'
 
-const SENDER_LABELS: Record<MessengerSenderKind, string> = {
-  connector: 'Коннектор',
-  operator: 'Оператор',
-  unknown: 'Источник не определён',
+const DIRECTION_LABELS = {
+  outgoing: 'Исходящее',
+  incoming: 'Входящее',
+  unknown: 'Направление не определено',
+}
+
+function messageDirectionLabel(message: MessengerMessageDetailItem) {
+  const direction = DIRECTION_LABELS[message.direction]
+  return message.authorLabel ? `${direction} · ${message.authorLabel}` : direction
 }
 
 function formatDateTime(value: string) {
@@ -56,6 +60,7 @@ function groupMessagesBySession(messages: MessengerMessageDetailItem[]) {
   return [...groups.entries()].map(([sessionId, items]) => ({
     sessionId,
     dealId: items[0]?.dealId ?? '',
+    dealUrl: items[0]?.dealUrl ?? null,
     channelLabel: items[0]?.channel.label ?? 'Неизвестный канал',
     messages: items,
   }))
@@ -83,6 +88,10 @@ export function MessengerMessageReader({
   const [data, setData] = useState<MessengerMessageDetails | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  const [downloadingAttachment, setDownloadingAttachment] = useState<string | null>(
+    null,
+  )
   const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
@@ -111,6 +120,8 @@ export function MessengerMessageReader({
         dialog.close()
         setData(null)
         setError(null)
+        setAttachmentError(null)
+        setDownloadingAttachment(null)
         setLoading(false)
         returnFocus?.focus()
         closeTimerRef.current = null
@@ -133,6 +144,7 @@ export function MessengerMessageReader({
       if (!current) return
       setLoading(true)
       setError(null)
+      setAttachmentError(null)
       setData(null)
 
       void apiClient
@@ -163,6 +175,50 @@ export function MessengerMessageReader({
     () => groupMessagesBySession(data?.messages ?? []),
     [data],
   )
+
+  async function downloadAttachment(
+    message: MessengerMessageDetailItem,
+    fileId: string,
+  ) {
+    if (!managerId) return
+    const attachmentKey = `${message.sessionId}:${message.id}:${fileId}`
+    setDownloadingAttachment(attachmentKey)
+    setAttachmentError(null)
+
+    try {
+      const attachment = await apiClient.downloadMessengerAttachment({
+        managerId,
+        from,
+        to,
+        sessionId: message.sessionId,
+        messageId: message.id,
+        fileId,
+      })
+      const objectUrl = URL.createObjectURL(attachment.blob)
+      try {
+        const anchor = document.createElement('a')
+        anchor.href = objectUrl
+        anchor.download = attachment.fileName
+        anchor.hidden = true
+        document.body.append(anchor)
+        try {
+          anchor.click()
+        } finally {
+          anchor.remove()
+        }
+      } finally {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+      }
+    } catch (downloadError) {
+      setAttachmentError(
+        downloadError instanceof Error
+          ? downloadError.message
+          : 'Не удалось скачать вложение.',
+      )
+    } finally {
+      setDownloadingAttachment(null)
+    }
+  }
 
   return (
     <dialog
@@ -210,10 +266,16 @@ export function MessengerMessageReader({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-            Битрикс24 не даёт надёжно определить направление для подключённых
-            коннекторов. Поэтому здесь показаны все несистемные сообщения без деления
-            на отправленные и входящие.
+            Для WAZZUP исходящие определяются по служебной пометке, а сообщения без
+            неё — как входящие. Для других коннекторов направление может оставаться
+            неопределённым.
           </div>
+
+          {attachmentError ? (
+            <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-900" role="alert">
+              {attachmentError}
+            </div>
+          ) : null}
 
           {loading ? (
             <div
@@ -280,7 +342,21 @@ export function MessengerMessageReader({
                             Диалог #{group.sessionId}
                           </p>
                           <p className="mt-0.5 text-xs text-slate-500">
-                            {group.channelLabel} · Сделка #{group.dealId}
+                            {group.channelLabel}
+                            {' · '}
+                            {group.dealUrl ? (
+                              <a
+                                href={group.dealUrl}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                aria-label={`Открыть сделку ${group.dealId}`}
+                                className="font-bold text-blue-700 underline decoration-blue-200 underline-offset-2 hover:decoration-blue-500 focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                              >
+                                Сделка #{group.dealId}
+                              </a>
+                            ) : (
+                              <>Сделка #{group.dealId}</>
+                            )}
                           </p>
                         </div>
                         <span className="badge-chip badge-neutral">
@@ -296,7 +372,7 @@ export function MessengerMessageReader({
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                               <span className="font-bold text-slate-600">
-                                {SENDER_LABELS[message.senderKind]}
+                                {messageDirectionLabel(message)}
                               </span>
                               <time
                                 dateTime={message.occurredAt}
@@ -316,9 +392,33 @@ export function MessengerMessageReader({
                                   : 'Сообщение без текста'}
                               </p>
                             )}
-                            {message.hasAttachment ? (
+                            {message.attachments.length > 0 ? (
+                              <div className="mt-3 flex flex-wrap gap-2">
+                                {message.attachments.map((attachment, index) => {
+                                  const attachmentKey = `${message.sessionId}:${message.id}:${attachment.id}`
+                                  const downloading =
+                                    downloadingAttachment === attachmentKey
+                                  return (
+                                    <button
+                                      key={attachment.id}
+                                      type="button"
+                                      disabled={downloadingAttachment !== null}
+                                      onClick={() =>
+                                        void downloadAttachment(message, attachment.id)
+                                      }
+                                      aria-label={`Скачать вложение ${index + 1}`}
+                                      className="inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-blue-700 outline-none transition-[border-color,background-color,box-shadow,transform] duration-150 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-[0.97] disabled:cursor-wait disabled:text-slate-400"
+                                    >
+                                      {downloading
+                                        ? 'Скачиваю…'
+                                        : `Скачать вложение ${index + 1}`}
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            ) : message.hasAttachment ? (
                               <span className="mt-2 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
-                                Есть вложение
+                                Вложение недоступно для скачивания
                               </span>
                             ) : null}
                           </article>

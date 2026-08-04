@@ -344,19 +344,22 @@ Privacy and module boundaries:
   `imopenlines.session.history.get` without persisting message text.
 - Activities exposes a manually triggered messenger section using the selected
   date and manager filters. It does not call Bitrix during normal report render.
-- `POST /api/messenger-messages/summary` returns total non-system messages,
-  messages with text, attachment-only messages, unique Open Lines sessions,
-  deals with messages, excluded system events, and per-manager/channel rows.
-  `Unique dialogs` is not presented as unique people.
+- `POST /api/messenger-messages/summary` returns outgoing messages, unique Open
+  Lines sessions and deals with outgoing messages, incoming messages, unknown
+  direction, total coverage, excluded system events, and per-manager/channel
+  rows. `Unique dialogs` is not presented as unique people.
 - `POST /api/messenger-messages/read` is a leader-only, one-manager reader for
   at most 500 newest messages in a maximum-31-day range. It is `no-store`, omits
-  names/contact data/raw payloads, and never writes text to SQLite, logs, MCP,
-  comments, or report state.
+  names/contact data/raw payloads, strips WAZZUP service headers, and never
+  writes text to SQLite, logs, MCP, comments, or report state. Its deal link is
+  built from the configured portal host and internal deal ID.
+- `POST /api/messenger-messages/attachment` is leader-only and validates the
+  exact scoped message/file relation before proxying a maximum-20-MiB binary
+  download. Credential-bearing Bitrix URLs never enter the response.
 - `POST /api/messenger-messages/collect` remains the server-side analysis input
   boundary and returns safe counts/coverage only.
-- Exact `sent` / `received` split is not confirmed from Bitrix-only data because
-  external Wazzup/OLChat messages may be recorded as `imconnector` messages even
-  when sent outside Bitrix.
+- WAZZUP `sent` / `received` uses its observed embedded outgoing marker;
+  unmarked WAZZUP rows are incoming. OLChat/Umnico remain unknown.
 
 ### Stage/loss-reason table
 

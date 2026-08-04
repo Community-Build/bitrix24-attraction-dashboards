@@ -8,9 +8,11 @@ export function registerMessengerMessageRoutes(
     collect: ApiRouteHandler;
     summary: ApiRouteHandler;
     read: ApiRouteHandler;
+    attachment: ApiRouteHandler;
   }
 ) {
   app.post("/api/messenger-messages/collect", handlers.collect);
   app.post("/api/messenger-messages/summary", handlers.summary);
   app.post("/api/messenger-messages/read", handlers.read);
+  app.post("/api/messenger-messages/attachment", handlers.attachment);
 }

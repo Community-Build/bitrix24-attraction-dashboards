@@ -1446,6 +1446,7 @@ export interface ActivitiesWorkloadReport extends ActivitiesWorkloadReportSnapsh
 }
 
 export type MessengerSenderKind = 'connector' | 'operator' | 'unknown'
+export type MessengerMessageDirection = 'outgoing' | 'incoming' | 'unknown'
 
 export interface MessengerChannelSummary {
   key: string
@@ -1463,19 +1464,29 @@ export interface MessengerManagerSummaryRow {
   uniqueDialogs: number
   dealsWithMessages: number
   messages: number
+  outgoingMessages: number
+  incomingMessages: number
+  unknownDirectionMessages: number
+  uniqueOutgoingDialogs: number
+  dealsWithOutgoingMessages: number
   messagesWithText: number
   attachmentOnlyMessages: number
   systemMessagesExcluded: number
   senderKinds: Record<MessengerSenderKind, number>
   channels: MessengerChannelSummary[]
   directionAvailable: false
-  personalAuthorAvailable: false
+  personalAuthorAvailable: boolean
 }
 
 export interface MessengerReportSummary {
   from: string
   to: string
   totalMessages: number
+  outgoingMessages: number
+  incomingMessages: number
+  unknownDirectionMessages: number
+  uniqueOutgoingDialogs: number
+  dealsWithOutgoingMessages: number
   messagesWithText: number
   attachmentOnlyMessages: number
   uniqueDialogs: number
@@ -1483,21 +1494,24 @@ export interface MessengerReportSummary {
   systemMessagesExcluded: number
   managerRows: MessengerManagerSummaryRow[]
   directionAvailable: false
-  personalAuthorAvailable: false
+  personalAuthorAvailable: boolean
 }
 
 export interface MessengerMessageDetailItem {
   id: string
   sessionId: string
   dealId: string
+  dealUrl: string | null
   occurredAt: string
   channel: {
     key: string
     label: string
   }
   senderKind: MessengerSenderKind
-  direction: 'unknown'
+  direction: MessengerMessageDirection
+  authorLabel: string | null
   text: string | null
+  attachments: Array<{ id: string }>
   hasAttachment: boolean
 }
 
@@ -1510,7 +1524,7 @@ export interface MessengerMessageDetails {
   returnedMessages: number
   truncated: boolean
   directionAvailable: false
-  personalAuthorAvailable: false
+  personalAuthorAvailable: boolean
   messages: MessengerMessageDetailItem[]
 }
 

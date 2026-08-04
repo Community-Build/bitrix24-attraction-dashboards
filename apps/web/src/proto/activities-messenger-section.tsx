@@ -75,7 +75,7 @@ export function ActivitiesMessengerSection({
     () =>
       [...(summary?.managerRows ?? [])].sort(
         (left, right) =>
-          right.messages - left.messages ||
+          right.outgoingMessages - left.outgoingMessages ||
           left.managerName.localeCompare(right.managerName, 'ru'),
       ),
     [summary],
@@ -122,8 +122,8 @@ export function ActivitiesMessengerSection({
               Сообщения в мессенджерах
             </h3>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              Считает все несистемные сообщения в открытых линиях по выбранным датам и
-              менеджерам. Уникальность считается по диалогам, а не по людям.
+              Считает исходящие сообщения менеджеров по выбранным датам. Уникальность
+              считается по диалогам открытых линий, а не по людям.
             </p>
           </div>
           <button
@@ -141,9 +141,9 @@ export function ActivitiesMessengerSection({
         </div>
 
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-          Направление сообщения для WAZZUP, OLChat и Umnico определяется ненадёжно.
-          Поэтому показатель не называется «отправлено менеджером» и включает обе
-          стороны диалога.
+          Для WAZZUP исходящие определяются по служебной пометке, сообщения без неё —
+          как входящие. Направление OLChat и Umnico пока остаётся неопределённым и не
+          входит в показатель отправленных.
         </div>
 
         {rangeTooLong ? (
@@ -162,41 +162,43 @@ export function ActivitiesMessengerSection({
           <>
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               {metricCard(
-                'Всего сообщений',
-                summary.totalMessages,
-                'messenger-total-messages',
-                'Все несистемные сообщения',
+                'Отправлено сообщений',
+                summary.outgoingMessages,
+                'messenger-outgoing-messages',
+                'Исходящие менеджеров',
               )}
               {metricCard(
                 'Уникальных диалогов',
-                summary.uniqueDialogs,
-                'messenger-unique-dialogs',
-                'Сессии открытых линий',
+                summary.uniqueOutgoingDialogs,
+                'messenger-unique-outgoing-dialogs',
+                'Диалоги хотя бы с одним исходящим',
               )}
               {metricCard(
-                'Сделок с сообщениями',
-                summary.dealsWithMessages,
-                'messenger-deals-with-messages',
+                'Сделок с исходящими',
+                summary.dealsWithOutgoingMessages,
+                'messenger-deals-with-outgoing-messages',
                 'Уникальные ID сделок',
               )}
               {metricCard(
-                'Сообщений с текстом',
-                summary.messagesWithText,
-                'messenger-text-messages',
-                `${formatInteger(summary.attachmentOnlyMessages)} только с вложением`,
+                'Входящих сообщений',
+                summary.incomingMessages,
+                'messenger-incoming-messages',
+                `${formatInteger(summary.unknownDirectionMessages)} с неопределённым направлением`,
               )}
             </div>
 
             <div className="mt-5 w-full max-w-full overflow-x-auto">
-              <table className="min-w-[860px] text-sm">
+              <table className="min-w-[940px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.1em] text-slate-500">
                     <th className="px-3 py-3">Менеджер</th>
-                    <th className="px-3 py-3 text-right">Сообщения</th>
+                    <th className="px-3 py-3 text-right">Исходящие</th>
                     <th className="px-3 py-3 text-right">Диалоги</th>
                     <th className="px-3 py-3 text-right">Сделки</th>
+                    <th className="px-3 py-3 text-right">Входящие</th>
+                    <th className="px-3 py-3 text-right">Не определено</th>
                     <th className="px-3 py-3">Каналы</th>
-                    <th className="px-3 py-3 text-right">Текст</th>
+                    <th className="px-3 py-3 text-right">Просмотр</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -209,13 +211,22 @@ export function ActivitiesMessengerSection({
                         {row.managerName}
                       </td>
                       <td className="px-3 py-3 text-right font-bold tabular-nums text-slate-900">
-                        {formatInteger(row.messages)}
+                        {formatInteger(row.outgoingMessages)}
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums text-slate-700">
-                        {formatInteger(row.uniqueDialogs)}
+                        {formatInteger(row.uniqueOutgoingDialogs)}
                       </td>
                       <td className="px-3 py-3 text-right tabular-nums text-slate-700">
-                        {formatInteger(row.dealsWithMessages)}
+                        {formatInteger(row.dealsWithOutgoingMessages)}
+                      </td>
+                      <td className="px-3 py-3 text-right tabular-nums text-slate-700">
+                        {formatInteger(row.incomingMessages)}
+                      </td>
+                      <td
+                        className="px-3 py-3 text-right tabular-nums text-slate-700"
+                        data-testid={`messenger-unknown-${row.managerId}`}
+                      >
+                        {formatInteger(row.unknownDirectionMessages)}
                       </td>
                       <td className="max-w-[320px] px-3 py-3 text-xs leading-5 text-slate-600">
                         {channelLabels(row)}

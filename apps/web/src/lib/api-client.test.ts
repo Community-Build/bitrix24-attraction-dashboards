@@ -3551,6 +3551,11 @@ describe('apiClient', () => {
           attachmentOnlyMessages: 1,
           uniqueDialogs: 4,
           dealsWithMessages: 3,
+          outgoingMessages: 6,
+          incomingMessages: 2,
+          unknownDirectionMessages: 1,
+          uniqueOutgoingDialogs: 3,
+          dealsWithOutgoingMessages: 3,
           systemMessagesExcluded: 2,
           managerRows: [
             {
@@ -3562,6 +3567,11 @@ describe('apiClient', () => {
               sessions: 5,
               uniqueDialogs: 4,
               dealsWithMessages: 3,
+              outgoingMessages: 6,
+              incomingMessages: 2,
+              unknownDirectionMessages: 1,
+              uniqueOutgoingDialogs: 3,
+              dealsWithOutgoingMessages: 3,
               messages: 9,
               messagesWithText: 8,
               attachmentOnlyMessages: 1,
@@ -3599,12 +3609,18 @@ describe('apiClient', () => {
     })
     expect(summary).toMatchObject({
       totalMessages: 9,
+      outgoingMessages: 6,
+      incomingMessages: 2,
+      unknownDirectionMessages: 1,
+      uniqueOutgoingDialogs: 3,
+      dealsWithOutgoingMessages: 3,
       uniqueDialogs: 4,
       dealsWithMessages: 3,
       managerRows: [
         {
           managerId: '78',
           messages: 9,
+          outgoingMessages: 6,
           channels: [
             { key: 'wz_telegram', label: 'WAZZUP: Telegram', messages: 9 },
           ],
@@ -3632,12 +3648,15 @@ describe('apiClient', () => {
               id: '501',
               sessionId: '441',
               dealId: '1001',
+              dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
               occurredAt: '2026-08-03T10:15:00+03:00',
               channel: { key: 'wz_telegram', label: 'WAZZUP: Telegram' },
               senderKind: 'connector',
-              direction: 'unknown',
+              direction: 'outgoing',
+              authorLabel: 'Битрикс24 (Егоров Андрей)',
               text: '<b>Полный текст как данные</b>',
-              hasAttachment: false,
+              attachments: [{ id: '77' }],
+              hasAttachment: true,
             },
           ],
         },
@@ -3672,8 +3691,51 @@ describe('apiClient', () => {
           id: '501',
           text: '<b>Полный текст как данные</b>',
           senderKind: 'connector',
+          direction: 'outgoing',
+          authorLabel: 'Битрикс24 (Егоров Андрей)',
+          attachments: [{ id: '77' }],
         },
       ],
     })
+  })
+
+  it('posts a scoped attachment request and returns a safe filename with the blob', async () => {
+    const blob = new Blob(['safe attachment'], {
+      type: 'application/octet-stream',
+    })
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers({
+        'Content-Disposition':
+          "attachment; filename=attachment.docx; filename*=UTF-8''%D0%94%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80.docx",
+      }),
+      blob: async () => blob,
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await apiClient.downloadMessengerAttachment({
+      managerId: '78',
+      from: '2026-08-01T00:00:00+03:00',
+      to: '2026-08-03T23:59:59+03:00',
+      sessionId: '441',
+      messageId: '501',
+      fileId: '77',
+    })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(new URL(url, window.location.origin).pathname).toBe(
+      '/api/messenger-messages/attachment',
+    )
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({
+      managerId: '78',
+      from: '2026-08-01T00:00:00+03:00',
+      to: '2026-08-03T23:59:59+03:00',
+      sessionId: '441',
+      messageId: '501',
+      fileId: '77',
+    })
+    expect(result).toEqual({ blob, fileName: 'Договор.docx' })
   })
 })

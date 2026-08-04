@@ -98,22 +98,25 @@ export const attractionRuntimeModules = [
       "/api/messenger-messages/collect",
       "/api/messenger-messages/summary",
       "/api/messenger-messages/read",
+      "/api/messenger-messages/attachment",
       "apps/api/src/server/messenger-message-collection.ts"
     ],
     reads: [
       "current attraction deal scope",
       "manager whitelist",
-      "Bitrix24 Open Lines session history"
+      "Bitrix24 Open Lines session history",
+      "Bitrix24 Disk file metadata and bounded downloads"
     ],
     writes: [],
     externalSystems: ["Bitrix24"],
     sourceOfTruth: [
       "docs/modules/attraction/MESSAGE_METRICS_RESEARCH.md",
       "plans/037-transient-messenger-message-collection.md",
-      "plans/038-activities-messenger-summary-and-reader.md"
+      "plans/038-activities-messenger-summary-and-reader.md",
+      "plans/039-messenger-direction-links-and-attachments.md"
     ],
     notes:
-      "Leader-only on-demand collection. Summary HTTP is aggregate-only; the bounded no-store reader returns transient text for one manager and never persists it."
+      "Leader-only on-demand collection. Summary HTTP is aggregate-only; the bounded no-store reader returns transient text and validated attachment downloads for one manager and never persists either."
   },
   {
     id: "call-enrichment",

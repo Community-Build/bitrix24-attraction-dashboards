@@ -2019,6 +2019,7 @@ describe("BitrixClient Open Lines", () => {
           senderId: "9001",
           date: "2026-08-03T10:15:00+03:00",
           text: "Полный текст сообщения",
+          attachmentFileIds: ["77"],
           hasAttachment: true
         }
       ],
@@ -2036,5 +2037,113 @@ describe("BitrixClient Open Lines", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
       SESSION_ID: "441"
     });
+  });
+
+  it("downloads a bounded Bitrix disk file without returning its credentialed URL", async () => {
+    const fileBytes = new TextEncoder().encode("safe file");
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        createResponse({
+          result: {
+            ID: "77",
+            NAME: "Договор.docx",
+            SIZE: String(fileBytes.byteLength),
+            DOWNLOAD_URL:
+              "https://example.bitrix24.ru/rest/1/token/download/?token=signed"
+          }
+        })
+      )
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        headers: new Headers({
+          "content-length": String(fileBytes.byteLength)
+        }),
+        body: null,
+        arrayBuffer: async () => fileBytes.buffer
+      });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new BitrixClient({
+      portalHost: "example.bitrix24.ru",
+      userId: "1",
+      webhookToken: "token",
+      timeoutMs: 1_000,
+      requestIntervalMs: 0,
+      dealCategoryIds: ["10"]
+    });
+
+    const download = await client.downloadDiskFile("77", {
+      maxBytes: 1_024
+    });
+
+    expect(download).toEqual({
+      fileId: "77",
+      fileName: "Договор.docx",
+      bytes: Buffer.from(fileBytes)
+    });
+    expect(JSON.stringify(download)).not.toContain("download/?token=");
+    expect(String(fetchMock.mock.calls[1]?.[0])).toBe(
+      "https://example.bitrix24.ru/rest/1/token/download/?token=signed"
+    );
+  });
+
+  it("rejects a disk download URL outside the configured Bitrix portal", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createResponse({
+        result: {
+          ID: "77",
+          NAME: "Договор.docx",
+          SIZE: "9",
+          DOWNLOAD_URL: "https://files.example.test/download/77"
+        }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new BitrixClient({
+      portalHost: "example.bitrix24.ru",
+      userId: "1",
+      webhookToken: "token",
+      timeoutMs: 1_000,
+      requestIntervalMs: 0,
+      dealCategoryIds: ["10"]
+    });
+
+    await expect(
+      client.downloadDiskFile("77", { maxBytes: 1_024 })
+    ).rejects.toMatchObject({ code: "DISK_FILE_UNSAFE_URL", status: 502 });
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a declared disk file larger than the attachment limit", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createResponse({
+        result: {
+          ID: "77",
+          NAME: "Большой файл.bin",
+          SIZE: "2048",
+          DOWNLOAD_URL:
+            "https://example.bitrix24.ru/rest/1/token/download/?token=signed"
+        }
+      })
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new BitrixClient({
+      portalHost: "example.bitrix24.ru",
+      userId: "1",
+      webhookToken: "token",
+      timeoutMs: 1_000,
+      requestIntervalMs: 0,
+      dealCategoryIds: ["10"]
+    });
+
+    await expect(
+      client.downloadDiskFile("77", { maxBytes: 1_024 })
+    ).rejects.toMatchObject({ code: "DISK_FILE_TOO_LARGE", status: 413 });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });

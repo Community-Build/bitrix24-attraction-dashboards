@@ -15,12 +15,14 @@ import type { ProtoFilterState, ProtoRuntimeData } from '@/proto/types'
 const messengerApiMock = vi.hoisted(() => ({
   getSummary: vi.fn(),
   getDetails: vi.fn(),
+  downloadAttachment: vi.fn(),
 }))
 
 vi.mock('@/lib/api-client', () => ({
   apiClient: {
     getMessengerReportSummary: messengerApiMock.getSummary,
     getManagerMessageDetails: messengerApiMock.getDetails,
+    downloadMessengerAttachment: messengerApiMock.downloadAttachment,
   },
 }))
 
@@ -218,6 +220,7 @@ describe('ActivitiesScene', () => {
   beforeEach(() => {
     messengerApiMock.getSummary.mockReset()
     messengerApiMock.getDetails.mockReset()
+    messengerApiMock.downloadAttachment.mockReset()
   })
 
   it('expands manager heatmaps in the summary and meetings tables', async () => {
@@ -364,6 +367,11 @@ describe('ActivitiesScene', () => {
       attachmentOnlyMessages: 1,
       uniqueDialogs: 5,
       dealsWithMessages: 4,
+      outgoingMessages: 8,
+      incomingMessages: 3,
+      unknownDirectionMessages: 1,
+      uniqueOutgoingDialogs: 4,
+      dealsWithOutgoingMessages: 3,
       systemMessagesExcluded: 2,
       managerRows: [
         {
@@ -375,6 +383,11 @@ describe('ActivitiesScene', () => {
           sessions: 6,
           uniqueDialogs: 5,
           dealsWithMessages: 4,
+          outgoingMessages: 8,
+          incomingMessages: 3,
+          unknownDirectionMessages: 1,
+          uniqueOutgoingDialogs: 4,
+          dealsWithOutgoingMessages: 3,
           messages: 12,
           messagesWithText: 11,
           attachmentOnlyMessages: 1,
@@ -405,11 +418,14 @@ describe('ActivitiesScene', () => {
           id: '501',
           sessionId: '441',
           dealId: '1001',
+          dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
           occurredAt: '2026-04-12T10:15:00+03:00',
           channel: { key: 'wz_telegram', label: 'WAZZUP: Telegram' },
           senderKind: 'connector',
-          direction: 'unknown',
+          direction: 'outgoing',
+          authorLabel: 'Битрикс24 (Анна Петрова)',
           text: 'Полный текст сообщения в отдельном просмотрщике',
+          attachments: [],
           hasAttachment: false,
         },
       ],
@@ -440,13 +456,24 @@ describe('ActivitiesScene', () => {
         to: '2026-04-30T23:59:59.999+03:00',
       }),
     )
-    expect(await screen.findByTestId('messenger-total-messages')).toHaveTextContent(
-      '12',
+    expect(
+      await screen.findByTestId('messenger-outgoing-messages'),
+    ).toHaveTextContent(
+      '8',
     )
-    expect(screen.getByTestId('messenger-unique-dialogs')).toHaveTextContent('5')
-    expect(screen.getByTestId('messenger-deals-with-messages')).toHaveTextContent(
+    expect(screen.getByTestId('messenger-unique-outgoing-dialogs')).toHaveTextContent(
       '4',
     )
+    expect(
+      screen.getByTestId('messenger-deals-with-outgoing-messages'),
+    ).toHaveTextContent(
+      '3',
+    )
+    expect(screen.getByTestId('messenger-incoming-messages')).toHaveTextContent('3')
+    expect(screen.getByTestId('messenger-unknown-7')).toHaveTextContent('1')
+    expect(
+      screen.getByRole('columnheader', { name: 'Не определено' }),
+    ).toBeInTheDocument()
 
     await userEvent.click(
       screen.getByRole('button', {

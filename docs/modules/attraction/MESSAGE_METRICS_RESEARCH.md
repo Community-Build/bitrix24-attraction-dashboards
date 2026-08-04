@@ -128,11 +128,12 @@ By Open Lines activity responsible, the same period yielded:
 ## Implementation Implications
 
 - A Bitrix-only V1 can show "non-system Open Lines messages" by manager/source.
-- Do not label connector messages as definitive `received` until direction is
-  validated against a known conversation or Wazzup API.
-- Exact `sent` / `received` for Wazzup likely requires Wazzup API or webhooks,
-  because Wazzup exposes direction/status metadata that Bitrix Open Lines does
-  not reliably expose through the current webhook data.
+- Observed WAZZUP Open Lines histories carry a stable text marker for outgoing
+  messages: `=== Исходящее сообщение ... ===`. The reader removes this service
+  header and keeps its author label separately. An unmarked WAZZUP row is
+  treated as incoming; `=== SYSTEM WZ ===` is excluded.
+- This evidence does not generalize to OLChat or Umnico. Their connector rows
+  remain `unknown` until a provider-specific direction field is verified.
 - If `im` scope is later added, `im.dialog.messages.get` can be tested as an
   alternate message-history source, but it should follow the same privacy rule:
   count metadata only, never persist message text.
@@ -153,8 +154,9 @@ By Open Lines activity responsible, the same period yielded:
   attachment-only count, channels, and sender-kind totals. It never returns raw
   text, `textlegacy`, attachments, user names, contact data, or raw payloads.
 - The collector does not write SQLite and does not log response bodies.
-- Connector messages keep `direction = unknown`; the safe response explicitly
-  reports that direction and personal author are unavailable.
+- WAZZUP direction is parsed from its embedded marker. Unmarked WAZZUP rows are
+  incoming, operator-authored Bitrix rows are outgoing, and unsupported
+  connector families keep `direction = unknown`.
 - No semantic scoring rubric or model provider is selected in this change. The
   implemented boundary supplies safe input for that next decision.
 
@@ -164,21 +166,51 @@ By Open Lines activity responsible, the same period yielded:
   selected date and manager filters but performs no Bitrix read until the user
   explicitly starts the calculation.
 - `POST /api/messenger-messages/summary` collects all selected enabled managers
-  in one pass and returns no raw text. It reports total non-system messages,
-  unique Open Lines sessions, unique deal IDs with messages, text/attachment
-  coverage, channels, and manager rows.
+  in one pass and returns no raw text. Its primary metrics are outgoing
+  messages, unique Open Lines sessions with outgoing messages, unique deal IDs
+  with outgoing messages, and incoming messages. It also reports unknown
+  direction, total non-system coverage, channels, and manager rows.
 - `Unique dialogs` means distinct Open Lines session IDs with a retained message;
   `deals with messages` is separate. Neither metric is presented as unique real
   people because provider-level identity is not available reliably.
 - `POST /api/messenger-messages/read` accepts one enabled manager, no more than
   31 days, and at most 500 newest messages. It returns safe IDs, timestamp,
-  channel, sender-kind bucket, attachment flag, and full text with
-  `Cache-Control: no-store`.
+  channel, parsed direction/author, a configured-portal deal link, attachment
+  IDs, and cleaned full text with `Cache-Control: no-store`.
+- `POST /api/messenger-messages/attachment` re-collects that exact manager,
+  range, session, message, and file ID before proxying at most 20 MiB as
+  `application/octet-stream`. It never returns the credential-bearing Bitrix
+  download URL and does not persist the file.
 - The reader omits chat/contact/deal names, phones, emails, avatars, and raw
   Bitrix payloads. The web client renders text as a plain React text node and
   never interprets conversation content as HTML.
-- Both new routes require attraction leader access before any Bitrix call. Text
-  is not written to SQLite, logs, MCP, comments, or report state.
+- Summary, reader, and attachment routes require attraction leader access
+  before any Bitrix call. Text and files are not written to SQLite, logs, MCP,
+  comments, or report state.
+
+## Direction Coverage Validation
+
+Local read-only validation on `2026-08-04` used the range
+`2026-07-04T00:00:00+03:00` through `2026-08-03T23:59:59+03:00` and the current
+attraction scope. After excluding one embedded `SYSTEM WZ` row, `612`
+non-system messages remained: `295` outgoing, `208` incoming, and `109` with
+unsupported direction. No message body was printed or persisted.
+
+| Manager | Outgoing | Incoming | Unknown | Direction coverage |
+| --- | ---: | ---: | ---: | --- |
+| `78` / Егоров Андрей | 0 | 0 | 74 | unavailable: Umnico/OLChat only |
+| `11234` / Ромашова Ольга | 219 | 132 | 4 | WAZZUP covered; 4 OLChat rows unknown |
+| `6994` / Кузнецова Анастасия | 0 | 0 | 25 | unavailable: OLChat only |
+| `2236` / Потапова Мария | 0 | 0 | 4 | unavailable: OLChat only |
+| `2764` / Каньков Вячеслав | 0 | 0 | 2 | unavailable: OLChat only |
+| `13020` / Какулия Илья | 49 | 41 | 0 | covered: WAZZUP |
+| `7538` / Мария Саличева | 27 | 35 | 0 | covered: WAZZUP |
+| `118` / Аделия Космасова | 0 | 0 | 0 | no messages in range |
+
+This table describes direction coverage, not text availability. Unsupported
+OLChat/Umnico message text is still available to the transient reader and an
+in-process analyzer, but it must not be counted as manager-sent until provider
+direction evidence exists.
 
 ## Read-Only Production Coverage Audit
 

@@ -1163,6 +1163,11 @@ describe("createApp", () => {
                 uniqueDialogs: 2,
                 dealsWithMessages: 2,
                 messages: 5,
+                outgoingMessages: 3,
+                incomingMessages: 2,
+                unknownDirectionMessages: 0,
+                uniqueOutgoingDialogs: 2,
+                dealsWithOutgoingMessages: 2,
                 messagesWithText: 4,
                 attachmentOnlyMessages: 1,
                 systemMessagesExcluded: 3,
@@ -1230,6 +1235,11 @@ describe("createApp", () => {
                 from: input.from,
                 to: input.to,
                 totalMessages: 9,
+                outgoingMessages: 6,
+                incomingMessages: 2,
+                unknownDirectionMessages: 1,
+                uniqueOutgoingDialogs: 3,
+                dealsWithOutgoingMessages: 3,
                 messagesWithText: 8,
                 attachmentOnlyMessages: 1,
                 uniqueDialogs: 4,
@@ -1311,7 +1321,10 @@ describe("createApp", () => {
                     },
                     senderKind: "connector" as const,
                     direction: "unknown" as const,
+                    authorLabel: null,
                     text: "Полный текст сообщения",
+                    dealUrl: null,
+                    attachments: [],
                     hasAttachment: false
                   }
                 ]
@@ -1354,7 +1367,10 @@ describe("createApp", () => {
               },
               senderKind: "connector",
               direction: "unknown",
+              authorLabel: null,
               text: "Полный текст сообщения",
+              dealUrl: null,
+              attachments: [],
               hasAttachment: false
             }
           ]
@@ -1362,7 +1378,60 @@ describe("createApp", () => {
       });
   });
 
-  it("denies messenger report summary and reader to attraction employees", async () => {
+  it("proxies only a validated messenger attachment as a no-store download", async () => {
+    const fileBytes = Buffer.from("safe attachment");
+    const app = createTestApp(
+      {},
+      {
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async () => {
+              throw new Error("must not be called");
+            },
+            getManagerMessageAttachment: async (input) => {
+              expect(input).toEqual({
+                managerId: "78",
+                from: "2026-08-01T00:00:00+03:00",
+                to: "2026-08-03T23:59:59+03:00",
+                sessionId: "441",
+                messageId: "501",
+                fileId: "77"
+              });
+              return {
+                fileId: "77",
+                fileName: "Договор\r\nX-Leak: yes.docx",
+                bytes: fileBytes
+              };
+            }
+          }
+        }
+      }
+    );
+
+    const response = await request(app)
+      .post("/api/messenger-messages/attachment")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00",
+        sessionId: "441",
+        messageId: "501",
+        fileId: "77"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect("Content-Type", "application/octet-stream")
+      .expect("X-Content-Type-Options", "nosniff")
+      .expect(200);
+
+    expect(response.headers["content-disposition"]).toContain("attachment;");
+    expect(response.headers["content-disposition"]).toContain("filename*=");
+    expect(response.headers["x-leak"]).toBeUndefined();
+    expect(response.body).toEqual(fileBytes);
+    expect(JSON.stringify(response.headers)).not.toContain("bitrix24.ru/rest/");
+  });
+
+  it("denies messenger summary, reader, and attachments to attraction employees", async () => {
     let messageReads = 0;
     const auth = createStaticAuthService(
       createTestSession({
@@ -1386,6 +1455,10 @@ describe("createApp", () => {
               throw new Error("must not be called");
             },
             getManagerMessageDetails: async () => {
+              messageReads += 1;
+              throw new Error("must not be called");
+            },
+            getManagerMessageAttachment: async () => {
               messageReads += 1;
               throw new Error("must not be called");
             }
@@ -1413,6 +1486,17 @@ describe("createApp", () => {
         managerId: "78",
         from: "2026-08-01T00:00:00+03:00",
         to: "2026-08-03T23:59:59+03:00"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(403, { error: "FORBIDDEN", code: "FORBIDDEN" });
+    await authenticatedRequest("/api/messenger-messages/attachment")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00",
+        sessionId: "441",
+        messageId: "501",
+        fileId: "77"
       })
       .expect("Cache-Control", "no-store")
       .expect(403, { error: "FORBIDDEN", code: "FORBIDDEN" });

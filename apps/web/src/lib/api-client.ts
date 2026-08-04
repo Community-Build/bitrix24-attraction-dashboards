@@ -3370,6 +3370,10 @@ function normalizeMessengerSenderKind(value: unknown): MessengerSenderKind {
   return value === 'connector' || value === 'operator' ? value : 'unknown'
 }
 
+function normalizeMessengerMessageDirection(value: unknown) {
+  return value === 'outgoing' || value === 'incoming' ? value : 'unknown'
+}
+
 function normalizeMessengerManagerSummary(
   value: unknown,
 ): MessengerManagerSummaryRow {
@@ -3386,6 +3390,11 @@ function normalizeMessengerManagerSummary(
     uniqueDialogs: asNumber(data.uniqueDialogs),
     dealsWithMessages: asNumber(data.dealsWithMessages),
     messages: asNumber(data.messages),
+    outgoingMessages: asNumber(data.outgoingMessages),
+    incomingMessages: asNumber(data.incomingMessages),
+    unknownDirectionMessages: asNumber(data.unknownDirectionMessages),
+    uniqueOutgoingDialogs: asNumber(data.uniqueOutgoingDialogs),
+    dealsWithOutgoingMessages: asNumber(data.dealsWithOutgoingMessages),
     messagesWithText: asNumber(data.messagesWithText),
     attachmentOnlyMessages: asNumber(data.attachmentOnlyMessages),
     systemMessagesExcluded: asNumber(data.systemMessagesExcluded),
@@ -3403,7 +3412,7 @@ function normalizeMessengerManagerSummary(
       }
     }),
     directionAvailable: false,
-    personalAuthorAvailable: false,
+    personalAuthorAvailable: asBoolean(data.personalAuthorAvailable),
   }
 }
 
@@ -3417,6 +3426,11 @@ function normalizeMessengerReportSummaryResponse(
     from: asString(data.from),
     to: asString(data.to),
     totalMessages: asNumber(data.totalMessages),
+    outgoingMessages: asNumber(data.outgoingMessages),
+    incomingMessages: asNumber(data.incomingMessages),
+    unknownDirectionMessages: asNumber(data.unknownDirectionMessages),
+    uniqueOutgoingDialogs: asNumber(data.uniqueOutgoingDialogs),
+    dealsWithOutgoingMessages: asNumber(data.dealsWithOutgoingMessages),
     messagesWithText: asNumber(data.messagesWithText),
     attachmentOnlyMessages: asNumber(data.attachmentOnlyMessages),
     uniqueDialogs: asNumber(data.uniqueDialogs),
@@ -3424,7 +3438,7 @@ function normalizeMessengerReportSummaryResponse(
     systemMessagesExcluded: asNumber(data.systemMessagesExcluded),
     managerRows: asArray(data.managerRows, normalizeMessengerManagerSummary),
     directionAvailable: false,
-    personalAuthorAvailable: false,
+    personalAuthorAvailable: asBoolean(data.personalAuthorAvailable),
   }
 }
 
@@ -3443,7 +3457,7 @@ function normalizeMessengerMessageDetailsResponse(
     returnedMessages: asNumber(data.returnedMessages),
     truncated: asBoolean(data.truncated),
     directionAvailable: false,
-    personalAuthorAvailable: false,
+    personalAuthorAvailable: asBoolean(data.personalAuthorAvailable),
     messages: asArray(data.messages, (value) => {
       const message = isRecord(value) ? value : {}
       const channel = isRecord(message.channel) ? message.channel : {}
@@ -3451,14 +3465,20 @@ function normalizeMessengerMessageDetailsResponse(
         id: asString(message.id),
         sessionId: asString(message.sessionId),
         dealId: asString(message.dealId),
+        dealUrl: asNullableString(message.dealUrl),
         occurredAt: asString(message.occurredAt),
         channel: {
           key: asString(channel.key),
           label: asString(channel.label),
         },
         senderKind: normalizeMessengerSenderKind(message.senderKind),
-        direction: 'unknown',
+        direction: normalizeMessengerMessageDirection(message.direction),
+        authorLabel: asNullableString(message.authorLabel),
         text: asNullableString(message.text),
+        attachments: asArray(message.attachments, (value) => {
+          const attachment = isRecord(value) ? value : {}
+          return { id: asString(attachment.id) }
+        }).filter((attachment) => attachment.id),
         hasAttachment: asBoolean(message.hasAttachment),
       }
     }),
@@ -4734,6 +4754,63 @@ async function requestVoid(pathname: string, init: RequestInit) {
   }
 }
 
+function safeDownloadedFileName(value: string, fallback: string) {
+  const withoutControlCharacters = [...value]
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0
+      return codePoint > 31 && codePoint !== 127
+    })
+    .join('')
+  const fileName = withoutControlCharacters
+    .split(/[\\/]/u)
+    .pop()
+    ?.trim()
+    .slice(0, 180)
+  return fileName || fallback
+}
+
+function readAttachmentFileName(response: Response, fileId: string) {
+  const fallback = `attachment-${fileId}`
+  const disposition = response.headers.get('Content-Disposition') ?? ''
+  const encodedMatch = /filename\*=UTF-8''([^;]+)/iu.exec(disposition)
+  if (encodedMatch?.[1]) {
+    try {
+      return safeDownloadedFileName(
+        decodeURIComponent(encodedMatch[1].trim()),
+        fallback,
+      )
+    } catch {
+      // Fall back to the ASCII filename or the stable attachment ID.
+    }
+  }
+
+  const quotedMatch = /filename="([^"]+)"/iu.exec(disposition)
+  const plainMatch = /filename=([^;]+)/iu.exec(disposition)
+  return safeDownloadedFileName(
+    (quotedMatch?.[1] ?? plainMatch?.[1] ?? fallback).trim(),
+    fallback,
+  )
+}
+
+async function requestBlob(
+  pathname: string,
+  init: RequestInit,
+  fileId: string,
+) {
+  const response = await fetch(pathname, buildRequestInit(init))
+
+  if (!response.ok) {
+    const { message, payload } = await readErrorResponse(response)
+    if (response.status === 401) notifyUnauthorized()
+    throw new ApiClientError(message, response.status, payload)
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: readAttachmentFileName(response, fileId),
+  }
+}
+
 function parseSyncStreamBlock(block: string) {
   let event = 'message'
   const dataLines: string[] = []
@@ -5379,6 +5456,23 @@ export const apiClient = {
         body: JSON.stringify(input),
       },
       normalizeMessengerMessageDetailsResponse,
+    )
+  },
+  async downloadMessengerAttachment(input: {
+    managerId: string
+    from: string
+    to: string
+    sessionId: string
+    messageId: string
+    fileId: string
+  }) {
+    return requestBlob(
+      buildUrl('/api/messenger-messages/attachment'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      input.fileId,
     )
   },
   async getAcquisitionOutcomesReport(query: DashboardQuery) {

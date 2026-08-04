@@ -41,6 +41,7 @@ type MessengerMessageClient = {
       senderId: string;
       date: string;
       text: string | null;
+      attachmentFileIds?: string[];
       hasAttachment: boolean;
     }>;
     users: Array<{
@@ -48,9 +49,18 @@ type MessengerMessageClient = {
       connector: boolean | null;
     }>;
   }>;
+  downloadDiskFile?(
+    fileId: string,
+    options: { maxBytes: number }
+  ): Promise<{
+    fileId: string;
+    fileName: string;
+    bytes: Buffer;
+  } | null>;
 };
 
 export type MessengerSenderKind = "connector" | "operator" | "unknown";
+export type MessengerMessageDirection = "outgoing" | "incoming" | "unknown";
 
 export interface MessengerAnalysisMessage {
   id: string;
@@ -64,8 +74,10 @@ export interface MessengerAnalysisMessage {
     label: string;
   };
   senderKind: MessengerSenderKind;
-  direction: "unknown";
+  direction: MessengerMessageDirection;
+  authorLabel: string | null;
   text: string | null;
+  attachmentFileIds: string[];
   hasAttachment: boolean;
 }
 
@@ -87,6 +99,11 @@ export interface MessengerMessageSummary {
   uniqueDialogs: number;
   dealsWithMessages: number;
   messages: number;
+  outgoingMessages: number;
+  incomingMessages: number;
+  unknownDirectionMessages: number;
+  uniqueOutgoingDialogs: number;
+  dealsWithOutgoingMessages: number;
   messagesWithText: number;
   attachmentOnlyMessages: number;
   systemMessagesExcluded: number;
@@ -97,7 +114,7 @@ export interface MessengerMessageSummary {
     messages: number;
   }>;
   directionAvailable: false;
-  personalAuthorAvailable: false;
+  personalAuthorAvailable: boolean;
 }
 
 export interface MessengerMessageCollectionInput {
@@ -116,6 +133,11 @@ export interface MessengerReportSummary {
   from: string;
   to: string;
   totalMessages: number;
+  outgoingMessages: number;
+  incomingMessages: number;
+  unknownDirectionMessages: number;
+  uniqueOutgoingDialogs: number;
+  dealsWithOutgoingMessages: number;
   messagesWithText: number;
   attachmentOnlyMessages: number;
   uniqueDialogs: number;
@@ -123,12 +145,25 @@ export interface MessengerReportSummary {
   systemMessagesExcluded: number;
   managerRows: MessengerMessageSummary[];
   directionAvailable: false;
-  personalAuthorAvailable: false;
+  personalAuthorAvailable: boolean;
 }
 
 export interface MessengerMessageDetailsInput
   extends MessengerMessageCollectionInput {
   limit?: number;
+}
+
+export interface MessengerMessageAttachmentInput
+  extends MessengerMessageCollectionInput {
+  sessionId: string;
+  messageId: string;
+  fileId: string;
+}
+
+export interface MessengerMessageAttachment {
+  fileId: string;
+  fileName: string;
+  bytes: Buffer;
 }
 
 export interface MessengerMessageDetails {
@@ -140,7 +175,7 @@ export interface MessengerMessageDetails {
   returnedMessages: number;
   truncated: boolean;
   directionAvailable: false;
-  personalAuthorAvailable: false;
+  personalAuthorAvailable: boolean;
   messages: Array<{
     id: string;
     sessionId: string;
@@ -151,8 +186,11 @@ export interface MessengerMessageDetails {
       label: string;
     };
     senderKind: MessengerSenderKind;
-    direction: "unknown";
+    direction: MessengerMessageDirection;
+    authorLabel: string | null;
     text: string | null;
+    dealUrl: string | null;
+    attachments: Array<{ id: string }>;
     hasAttachment: boolean;
   }>;
 }
@@ -162,8 +200,12 @@ export class MessengerMessageCollectionError extends Error {
     readonly code:
       | "INVALID_RANGE"
       | "INVALID_LIMIT"
-      | "MANAGER_NOT_ENABLED",
-    message: string
+      | "MANAGER_NOT_ENABLED"
+      | "ATTACHMENT_NOT_FOUND"
+      | "ATTACHMENT_UNAVAILABLE"
+      | "ATTACHMENT_TOO_LARGE",
+    message: string,
+    readonly status = 400
   ) {
     super(message);
     this.name = "MessengerMessageCollectionError";
@@ -172,6 +214,10 @@ export class MessengerMessageCollectionError extends Error {
 
 const MAX_COLLECTION_RANGE_MS = 31 * 24 * 60 * 60 * 1_000;
 const MAX_DETAIL_MESSAGES = 500;
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const WAZZUP_OUTGOING_MARKER =
+  /^\s*===\s*Исходящее сообщение(?:,\s*автор:\s*(.+?))?\s*===\s*(?:\r?\n)?/iu;
+const WAZZUP_SYSTEM_MARKER = /^\s*===\s*SYSTEM\s+WZ\s*===/iu;
 
 function parseCollectionRange(input: { from: string; to: string }) {
   const from = Date.parse(input.from);
@@ -231,9 +277,99 @@ function isInsideRange(value: string, from: number, to: number) {
   return Number.isFinite(timestamp) && timestamp >= from && timestamp <= to;
 }
 
+function normalizeAttachmentFileIds(fileIds: string[] | undefined) {
+  return [
+    ...new Set(
+      (fileIds ?? []).flatMap((fileId) => {
+        const normalized = String(fileId).trim();
+        return normalized ? [normalized] : [];
+      })
+    )
+  ];
+}
+
+function classifyMessage(input: {
+  channelKey: string;
+  senderKind: MessengerSenderKind;
+  text: string | null;
+}) {
+  const text = input.text;
+  if (text && WAZZUP_SYSTEM_MARKER.test(text)) {
+    return {
+      system: true,
+      direction: "unknown" as const,
+      authorLabel: null,
+      text: null
+    };
+  }
+
+  if (text) {
+    const outgoingMatch = WAZZUP_OUTGOING_MARKER.exec(text);
+    if (outgoingMatch) {
+      const authorLabel = outgoingMatch[1]?.trim() || null;
+      const messageText = text.slice(outgoingMatch[0].length).trim() || null;
+      return {
+        system: false,
+        direction: "outgoing" as const,
+        authorLabel,
+        text: messageText
+      };
+    }
+  }
+
+  if (input.senderKind === "operator") {
+    return {
+      system: false,
+      direction: "outgoing" as const,
+      authorLabel: null,
+      text
+    };
+  }
+
+  if (input.channelKey.startsWith("wz_")) {
+    return {
+      system: false,
+      direction: "incoming" as const,
+      authorLabel: null,
+      text
+    };
+  }
+
+  return {
+    system: false,
+    direction: "unknown" as const,
+    authorLabel: null,
+    text
+  };
+}
+
+function buildDealUrl(portalHost: string | undefined, dealId: string) {
+  const normalizedHost = portalHost?.trim();
+  if (!normalizedHost) {
+    return null;
+  }
+
+  try {
+    const portalUrl = new URL(`https://${normalizedHost}`);
+    if (portalUrl.protocol !== "https:" || portalUrl.hostname !== normalizedHost) {
+      return null;
+    }
+    return `${portalUrl.origin}/crm/deal/details/${encodeURIComponent(dealId)}/`;
+  } catch {
+    return null;
+  }
+}
+
+function readErrorCode(error: unknown) {
+  return error && typeof error === "object" && "code" in error
+    ? String((error as { code?: unknown }).code ?? "")
+    : "";
+}
+
 export function createMessengerMessageCollectionService(input: {
   repository: MessengerMessageRepository;
   client: MessengerMessageClient;
+  portalHost?: string;
 }) {
   type EnabledManager = {
     managerId: string;
@@ -275,6 +411,9 @@ export function createMessengerMessageCollectionService(input: {
       channel.messages += 1;
       channelCounts.set(channel.key, channel);
     }
+    const outgoingMessages = messages.filter(
+      (message) => message.direction === "outgoing"
+    );
 
     return {
       managerId: manager.managerId,
@@ -287,6 +426,19 @@ export function createMessengerMessageCollectionService(input: {
       uniqueDialogs: new Set(messages.map((message) => message.sessionId)).size,
       dealsWithMessages: new Set(messages.map((message) => message.dealId)).size,
       messages: messages.length,
+      outgoingMessages: outgoingMessages.length,
+      incomingMessages: messages.filter(
+        (message) => message.direction === "incoming"
+      ).length,
+      unknownDirectionMessages: messages.filter(
+        (message) => message.direction === "unknown"
+      ).length,
+      uniqueOutgoingDialogs: new Set(
+        outgoingMessages.map((message) => message.sessionId)
+      ).size,
+      dealsWithOutgoingMessages: new Set(
+        outgoingMessages.map((message) => message.dealId)
+      ).size,
       messagesWithText: messages.filter(
         (message) => Boolean(message.text?.trim())
       ).length,
@@ -301,7 +453,7 @@ export function createMessengerMessageCollectionService(input: {
           right.messages - left.messages || left.label.localeCompare(right.label)
       ),
       directionAvailable: false,
-      personalAuthorAvailable: false
+      personalAuthorAvailable: messages.some((message) => message.authorLabel)
     };
   }
 
@@ -420,6 +572,21 @@ export function createMessengerMessageCollectionService(input: {
             : connector === false
               ? "operator"
               : "unknown";
+        const classification = classifyMessage({
+          channelKey: channel.key,
+          senderKind,
+          text: message.text
+        });
+        if (classification.system) {
+          systemMessagesExcludedByManager.set(
+            activity.managerId,
+            (systemMessagesExcludedByManager.get(activity.managerId) ?? 0) + 1
+          );
+          continue;
+        }
+        const attachmentFileIds = normalizeAttachmentFileIds(
+          message.attachmentFileIds
+        );
         messages.push({
           id: message.id,
           sessionId,
@@ -429,9 +596,11 @@ export function createMessengerMessageCollectionService(input: {
           occurredAt: message.date,
           channel,
           senderKind,
-          direction: "unknown",
-          text: message.text,
-          hasAttachment: message.hasAttachment
+          direction: classification.direction,
+          authorLabel: classification.authorLabel,
+          text: classification.text,
+          attachmentFileIds,
+          hasAttachment: message.hasAttachment || attachmentFileIds.length > 0
         });
       }
     }
@@ -492,10 +661,26 @@ export function createMessengerMessageCollectionService(input: {
       request: MessengerReportSummaryInput
     ): Promise<MessengerReportSummary> {
       const collected = await collectScope(request);
+      const outgoingMessages = collected.messages.filter(
+        (message) => message.direction === "outgoing"
+      );
       return {
         from: request.from,
         to: request.to,
         totalMessages: collected.messages.length,
+        outgoingMessages: outgoingMessages.length,
+        incomingMessages: collected.messages.filter(
+          (message) => message.direction === "incoming"
+        ).length,
+        unknownDirectionMessages: collected.messages.filter(
+          (message) => message.direction === "unknown"
+        ).length,
+        uniqueOutgoingDialogs: new Set(
+          outgoingMessages.map((message) => message.sessionId)
+        ).size,
+        dealsWithOutgoingMessages: new Set(
+          outgoingMessages.map((message) => message.dealId)
+        ).size,
         messagesWithText: collected.messages.filter((message) =>
           Boolean(message.text?.trim())
         ).length,
@@ -515,7 +700,9 @@ export function createMessengerMessageCollectionService(input: {
           buildManagerSummary(manager, request, collected)
         ),
         directionAvailable: false,
-        personalAuthorAvailable: false
+        personalAuthorAvailable: collected.messages.some(
+          (message) => message.authorLabel
+        )
       };
     },
     async getManagerMessageDetails(
@@ -544,7 +731,9 @@ export function createMessengerMessageCollectionService(input: {
         returnedMessages: selectedMessages.length,
         truncated: selectedMessages.length < batch.messages.length,
         directionAvailable: false,
-        personalAuthorAvailable: false,
+        personalAuthorAvailable: batch.messages.some(
+          (message) => message.authorLabel
+        ),
         messages: selectedMessages.map((message) => ({
           id: message.id,
           sessionId: message.sessionId,
@@ -553,10 +742,67 @@ export function createMessengerMessageCollectionService(input: {
           channel: message.channel,
           senderKind: message.senderKind,
           direction: message.direction,
+          authorLabel: message.authorLabel,
           text: message.text,
+          dealUrl: buildDealUrl(input.portalHost, message.dealId),
+          attachments: message.attachmentFileIds.map((id) => ({ id })),
           hasAttachment: message.hasAttachment
         }))
       };
+    },
+    async getManagerMessageAttachment(
+      request: MessengerMessageAttachmentInput
+    ): Promise<MessengerMessageAttachment> {
+      const { batch } = await collectBatch(request);
+      const message = batch.messages.find(
+        (candidate) =>
+          candidate.sessionId === request.sessionId &&
+          candidate.id === request.messageId
+      );
+      if (!message?.attachmentFileIds.includes(request.fileId)) {
+        throw new MessengerMessageCollectionError(
+          "ATTACHMENT_NOT_FOUND",
+          "Messenger attachment was not found in the requested message.",
+          404
+        );
+      }
+      if (!input.client.downloadDiskFile) {
+        throw new MessengerMessageCollectionError(
+          "ATTACHMENT_UNAVAILABLE",
+          "Messenger attachment download is unavailable.",
+          503
+        );
+      }
+
+      try {
+        const attachment = await input.client.downloadDiskFile(request.fileId, {
+          maxBytes: MAX_ATTACHMENT_BYTES
+        });
+        if (!attachment) {
+          throw new MessengerMessageCollectionError(
+            "ATTACHMENT_NOT_FOUND",
+            "Messenger attachment was not found.",
+            404
+          );
+        }
+        return attachment;
+      } catch (error) {
+        if (error instanceof MessengerMessageCollectionError) {
+          throw error;
+        }
+        if (readErrorCode(error) === "DISK_FILE_TOO_LARGE") {
+          throw new MessengerMessageCollectionError(
+            "ATTACHMENT_TOO_LARGE",
+            "Messenger attachment exceeds the download limit.",
+            413
+          );
+        }
+        throw new MessengerMessageCollectionError(
+          "ATTACHMENT_UNAVAILABLE",
+          "Messenger attachment download failed.",
+          502
+        );
+      }
     },
     async analyzeManagerMessages<T>(
       request: MessengerMessageCollectionInput,

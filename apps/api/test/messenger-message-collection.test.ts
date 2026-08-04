@@ -207,6 +207,243 @@ describe("messenger message collection", () => {
     expect(JSON.stringify(report)).not.toContain("Первый текст");
   });
 
+  it("parses WAZZUP direction markers, strips service headers, and excludes SYSTEM WZ rows", async () => {
+    const histories = new Map([
+      [
+        "441",
+        {
+          sessionId: "441",
+          chat: { id: "701", entityId: "wz_max_connector", entityType: "LINES" },
+          messages: [
+            {
+              id: "501",
+              chatId: "701",
+              senderId: "9001",
+              date: "2026-08-03T10:15:00+03:00",
+              text:
+                "=== Исходящее сообщение, автор: Битрикс24 (Ольга Ромашова) ===\nКлиент, добрый день.",
+              attachmentFileIds: [],
+              hasAttachment: false
+            },
+            {
+              id: "502",
+              chatId: "701",
+              senderId: "9001",
+              date: "2026-08-03T10:16:00+03:00",
+              text: "Спасибо за сообщение. Могу созвониться сейчас или завтра?",
+              attachmentFileIds: [],
+              hasAttachment: false
+            },
+            {
+              id: "503",
+              chatId: "701",
+              senderId: "9001",
+              date: "2026-08-03T10:17:00+03:00",
+              text: "=== SYSTEM WZ === Пропущенный звонок от клиента.",
+              attachmentFileIds: [],
+              hasAttachment: false
+            },
+            {
+              id: "504",
+              chatId: "701",
+              senderId: "9001",
+              date: "2026-08-03T10:18:00+03:00",
+              text: "=== Исходящее сообщение, автор: Ольга Ромашова ===",
+              attachmentFileIds: ["77"],
+              hasAttachment: true
+            }
+          ],
+          users: [{ id: "9001", connector: true }]
+        }
+      ],
+      [
+        "442",
+        {
+          sessionId: "442",
+          chat: { id: "702", entityId: "olchat_tg_connector", entityType: "LINES" },
+          messages: [
+            {
+              id: "505",
+              chatId: "702",
+              senderId: "9002",
+              date: "2026-08-03T10:19:00+03:00",
+              text: "Направление OLChat не подтверждено",
+              attachmentFileIds: [],
+              hasAttachment: false
+            }
+          ],
+          users: [{ id: "9002", connector: true }]
+        }
+      ],
+      [
+        "443",
+        {
+          sessionId: "443",
+          chat: { id: "703", entityId: "wz_telegram_connector", entityType: "LINES" },
+          messages: [
+            {
+              id: "506",
+              chatId: "703",
+              senderId: "78",
+              date: "2026-08-03T10:20:00+03:00",
+              text: "Сообщение оператора Битрикс24",
+              attachmentFileIds: [],
+              hasAttachment: false
+            }
+          ],
+          users: [{ id: "78", connector: false }]
+        }
+      ]
+    ]);
+    const service = createMessengerMessageCollectionService({
+      portalHost: "example.bitrix24.ru",
+      repository: {
+        getManagerWhitelistSettings: async () => [
+          { managerId: "78", managerName: "Егоров Андрей", enabled: true }
+        ],
+        getCurrentAttractionScope: async () => ({
+          dealIds: ["1001", "1002", "1003"]
+        }),
+        getDealsByIds: async () => [
+          { id: "1001", assignedById: "78" },
+          { id: "1002", assignedById: "78" },
+          { id: "1003", assignedById: "78" }
+        ]
+      },
+      client: {
+        listOpenLineActivities: async () => [
+          { ID: "301", OWNER_ID: "1001", ORIGIN_ID: "IMOL_441" },
+          { ID: "302", OWNER_ID: "1002", ORIGIN_ID: "IMOL_442" },
+          { ID: "303", OWNER_ID: "1003", ORIGIN_ID: "IMOL_443" }
+        ],
+        getOpenLineSessionHistory: async (sessionId) => {
+          const history = histories.get(sessionId);
+          if (!history) throw new Error(`Missing history ${sessionId}`);
+          return history;
+        }
+      }
+    });
+
+    const summary = await service.getMessengerReportSummary({
+      managerIds: ["78"],
+      from: "2026-08-01T00:00:00+03:00",
+      to: "2026-08-03T23:59:59+03:00"
+    });
+    const details = await service.getManagerMessageDetails({
+      managerId: "78",
+      from: "2026-08-01T00:00:00+03:00",
+      to: "2026-08-03T23:59:59+03:00"
+    });
+
+    expect(summary).toMatchObject({
+      totalMessages: 5,
+      outgoingMessages: 3,
+      incomingMessages: 1,
+      unknownDirectionMessages: 1,
+      uniqueOutgoingDialogs: 2,
+      dealsWithOutgoingMessages: 2,
+      systemMessagesExcluded: 1,
+      managerRows: [
+        {
+          managerId: "78",
+          outgoingMessages: 3,
+          incomingMessages: 1,
+          unknownDirectionMessages: 1,
+          uniqueOutgoingDialogs: 2,
+          dealsWithOutgoingMessages: 2
+        }
+      ]
+    });
+    expect(details.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "501",
+          direction: "outgoing",
+          authorLabel: "Битрикс24 (Ольга Ромашова)",
+          text: "Клиент, добрый день.",
+          dealUrl: "https://example.bitrix24.ru/crm/deal/details/1001/"
+        }),
+        expect.objectContaining({
+          id: "502",
+          direction: "incoming",
+          authorLabel: null
+        }),
+        expect.objectContaining({
+          id: "504",
+          direction: "outgoing",
+          authorLabel: "Ольга Ромашова",
+          text: null,
+          attachments: [{ id: "77" }]
+        }),
+        expect.objectContaining({ id: "505", direction: "unknown" }),
+        expect.objectContaining({ id: "506", direction: "outgoing" })
+      ])
+    );
+    expect(details.messages.some((message) => message.id === "503")).toBe(false);
+    expect(JSON.stringify(details)).not.toContain("=== Исходящее сообщение");
+    expect(JSON.stringify(details)).not.toContain("SYSTEM WZ");
+  });
+
+  it("downloads only an attachment belonging to the exact in-scope message", async () => {
+    let downloadedFileIds: string[] = [];
+    const service = createMessengerMessageCollectionService({
+      repository: {
+        getManagerWhitelistSettings: async () => [
+          { managerId: "78", managerName: "Егоров Андрей", enabled: true }
+        ],
+        getCurrentAttractionScope: async () => ({ dealIds: ["1001"] }),
+        getDealsByIds: async () => [{ id: "1001", assignedById: "78" }]
+      },
+      client: {
+        listOpenLineActivities: async () => [
+          { ID: "301", OWNER_ID: "1001", ORIGIN_ID: "IMOL_441" }
+        ],
+        getOpenLineSessionHistory: async () => ({
+          sessionId: "441",
+          chat: { id: "701", entityId: "wz_max_connector", entityType: "LINES" },
+          messages: [
+            {
+              id: "501",
+              chatId: "701",
+              senderId: "9001",
+              date: "2026-08-03T10:15:00+03:00",
+              text: "=== Исходящее сообщение, автор: Битрикс24 (Ольга) ===",
+              attachmentFileIds: ["77"],
+              hasAttachment: true
+            }
+          ],
+          users: [{ id: "9001", connector: true }]
+        }),
+        downloadDiskFile: async (fileId) => {
+          downloadedFileIds.push(String(fileId));
+          return {
+            fileId: String(fileId),
+            fileName: "Договор.docx",
+            bytes: Buffer.from("safe attachment")
+          };
+        }
+      }
+    });
+    const request = {
+      managerId: "78",
+      from: "2026-08-01T00:00:00+03:00",
+      to: "2026-08-03T23:59:59+03:00",
+      sessionId: "441",
+      messageId: "501"
+    };
+
+    await expect(
+      service.getManagerMessageAttachment({ ...request, fileId: "77" })
+    ).resolves.toMatchObject({
+      fileName: "Договор.docx",
+      bytes: Buffer.from("safe attachment")
+    });
+    await expect(
+      service.getManagerMessageAttachment({ ...request, fileId: "999" })
+    ).rejects.toMatchObject({ code: "ATTACHMENT_NOT_FOUND", status: 404 });
+    expect(downloadedFileIds).toEqual(["77"]);
+  });
+
   it("returns only the newest bounded message details and reports truncation", async () => {
     const service = createMessengerMessageCollectionService({
       repository: {
@@ -507,6 +744,11 @@ describe("messenger message collection", () => {
         uniqueDialogs: 1,
         dealsWithMessages: 1,
         messages: 2,
+        outgoingMessages: 0,
+        incomingMessages: 2,
+        unknownDirectionMessages: 0,
+        uniqueOutgoingDialogs: 0,
+        dealsWithOutgoingMessages: 0,
         messagesWithText: 1,
         attachmentOnlyMessages: 1,
         systemMessagesExcluded: 1,

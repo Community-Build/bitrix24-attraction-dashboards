@@ -494,6 +494,13 @@ cash-flow и готовность к handoff.
   включённого менеджера за период до 31 дня с `Cache-Control: no-store`.
   Текст не хранится в SQLite, логах, MCP, комментариях или состоянии отчёта, не
   становится объектом онтологии и отображается в браузере только как plain text.
+  Для WAZZUP направление определяется по встроенной служебной пометке:
+  помеченное сообщение — исходящее, непомеченное — входящее, `SYSTEM WZ`
+  исключается. Для OLChat/Umnico направление остаётся неизвестным.
+- Ссылка из reader ведёт только на сделку текущего scope через настроенный host
+  Bitrix24. Вложение выдаётся только leader через no-store proxy после проверки
+  manager/range/session/message/file ID; лимит 20 MiB, исходный Bitrix URL и
+  webhook credential не выдаются браузеру.
 - Дашборды должны читать cached local API/SQLite data, а не Bitrix напрямую.
 - Отчеты должны оставаться в attraction manager whitelist, если issue явно не
   меняет scope.

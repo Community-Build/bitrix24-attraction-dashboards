@@ -196,6 +196,7 @@ export interface OpenLineSessionHistory {
     senderId: string;
     date: string;
     text: string | null;
+    attachmentFileIds: string[];
     hasAttachment: boolean;
   }>;
   users: Array<{
@@ -237,6 +238,26 @@ export interface DiskFileRow {
   DOWNLOAD_URL: string | null;
   NAME?: string | null;
   SIZE?: string | number | null;
+}
+
+export interface DiskFileDownload {
+  fileId: string;
+  fileName: string;
+  bytes: Buffer;
+}
+
+export class DiskFileDownloadError extends Error {
+  constructor(
+    readonly code:
+      | "DISK_FILE_TOO_LARGE"
+      | "DISK_FILE_DOWNLOAD_FAILED"
+      | "DISK_FILE_UNSAFE_URL",
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "DiskFileDownloadError";
+  }
 }
 
 export interface CallRow {
@@ -480,15 +501,73 @@ function normalizeOptionalBoolean(value: unknown) {
   return null;
 }
 
-function hasOpenLineAttachment(params: Record<string, unknown> | null | undefined) {
+function normalizeOpenLineAttachmentIds(
+  params: Record<string, unknown> | null | undefined
+) {
   if (!params) {
-    return false;
+    return [];
   }
 
-  const fileId = params.FILE_ID ?? params.fileId;
-  return Array.isArray(fileId)
-    ? fileId.length > 0
-    : normalizeOptionalString(fileId) !== null;
+  const rawFileIds = params.FILE_ID ?? params.fileId;
+  const values = Array.isArray(rawFileIds) ? rawFileIds : [rawFileIds];
+  return [
+    ...new Set(
+      values.flatMap((value) => {
+        const normalized = normalizeOptionalString(value);
+        return normalized ? [normalized] : [];
+      })
+    )
+  ];
+}
+
+function parsePositiveByteCount(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function assertDiskFileSize(byteLength: number, maxBytes: number) {
+  if (byteLength > maxBytes) {
+    throw new DiskFileDownloadError(
+      "DISK_FILE_TOO_LARGE",
+      "Bitrix24 disk file is too large to download.",
+      413
+    );
+  }
+}
+
+async function readDiskFileResponseWithLimit(
+  response: Response,
+  maxBytes: number
+) {
+  if (!response.body) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assertDiskFileSize(bytes.byteLength, maxBytes);
+    return bytes;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        assertDiskFileSize(totalBytes, maxBytes);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks, totalBytes);
 }
 
 function normalizeOpenLineCollection<T>(
@@ -2052,6 +2131,7 @@ export class BitrixClient {
           return [];
         }
 
+        const attachmentFileIds = normalizeOpenLineAttachmentIds(message.params);
         return [
           {
             id,
@@ -2059,7 +2139,8 @@ export class BitrixClient {
             senderId,
             date,
             text: typeof message.text === "string" ? message.text : null,
-            hasAttachment: hasOpenLineAttachment(message.params)
+            attachmentFileIds,
+            hasAttachment: attachmentFileIds.length > 0
           }
         ];
       }),
@@ -2252,6 +2333,131 @@ export class BitrixClient {
     });
 
     return response.result ?? null;
+  }
+
+  async downloadDiskFile(
+    fileId: string | number,
+    options: { maxBytes: number }
+  ): Promise<DiskFileDownload | null> {
+    const normalizedFileId = String(fileId).trim();
+    if (!normalizedFileId) {
+      return null;
+    }
+    if (!Number.isFinite(options.maxBytes) || options.maxBytes < 1) {
+      throw new DiskFileDownloadError(
+        "DISK_FILE_DOWNLOAD_FAILED",
+        "Bitrix24 disk file download limit is invalid.",
+        502
+      );
+    }
+
+    const file = await this.getDiskFile(normalizedFileId);
+    const downloadUrl = normalizeOptionalString(file?.DOWNLOAD_URL);
+    if (!file || !downloadUrl) {
+      return null;
+    }
+
+    const declaredSize = parsePositiveByteCount(file.SIZE);
+    if (declaredSize !== null) {
+      assertDiskFileSize(declaredSize, options.maxBytes);
+    }
+
+    let parsedDownloadUrl: URL;
+    let portalOrigin: string;
+    try {
+      parsedDownloadUrl = new URL(downloadUrl);
+      portalOrigin = new URL(`https://${this.config.portalHost ?? ""}`).origin;
+    } catch {
+      throw new DiskFileDownloadError(
+        "DISK_FILE_UNSAFE_URL",
+        "Bitrix24 disk file download URL is invalid.",
+        502
+      );
+    }
+    if (
+      parsedDownloadUrl.protocol !== "https:" ||
+      parsedDownloadUrl.origin !== portalOrigin ||
+      parsedDownloadUrl.username ||
+      parsedDownloadUrl.password
+    ) {
+      throw new DiskFileDownloadError(
+        "DISK_FILE_UNSAFE_URL",
+        "Bitrix24 disk file download URL is not allowed.",
+        502
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(parsedDownloadUrl, {
+        method: "GET",
+        redirect: "error",
+        signal: controller.signal
+      });
+    } catch {
+      clearTimeout(timeout);
+      throw new DiskFileDownloadError(
+        "DISK_FILE_DOWNLOAD_FAILED",
+        "Bitrix24 disk file download failed.",
+        502
+      );
+    }
+
+    try {
+      if (!response.ok) {
+        throw new DiskFileDownloadError(
+          "DISK_FILE_DOWNLOAD_FAILED",
+          "Bitrix24 disk file download failed.",
+          502
+        );
+      }
+      const responseUrl = normalizeOptionalString(response.url);
+      if (responseUrl) {
+        try {
+          if (new URL(responseUrl).origin !== portalOrigin) {
+            throw new Error("unexpected origin");
+          }
+        } catch {
+          throw new DiskFileDownloadError(
+            "DISK_FILE_UNSAFE_URL",
+            "Bitrix24 disk file response URL is not allowed.",
+            502
+          );
+        }
+      }
+
+      const contentLength = parsePositiveByteCount(
+        response.headers.get("content-length")
+      );
+      if (contentLength !== null) {
+        assertDiskFileSize(contentLength, options.maxBytes);
+      }
+
+      let bytes: Buffer;
+      try {
+        bytes = await readDiskFileResponseWithLimit(response, options.maxBytes);
+      } catch (error) {
+        if (error instanceof DiskFileDownloadError) {
+          throw error;
+        }
+        throw new DiskFileDownloadError(
+          "DISK_FILE_DOWNLOAD_FAILED",
+          "Bitrix24 disk file download failed.",
+          502
+        );
+      }
+
+      return {
+        fileId: normalizeOptionalString(file.ID) ?? normalizedFileId,
+        fileName:
+          normalizeOptionalString(file.NAME) ?? `attachment-${normalizedFileId}`,
+        bytes
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async listCalls(input: {
