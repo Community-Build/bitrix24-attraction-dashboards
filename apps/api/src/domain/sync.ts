@@ -21,6 +21,7 @@ import type {
 } from "@bitrix24-reporting/contracts";
 
 import { ATTRACTION_MANAGER_IDS } from "./attraction-managers.js";
+import type { OpenLineSessionHistoryInput } from "./messenger-messages.js";
 import { sanitizeRefusalReasonDetail } from "./refusal-detail.js";
 
 export interface DealRow {
@@ -144,6 +145,20 @@ export interface SyncClient {
     modifiedAfter: string | null;
     providerId?: string;
   }): Promise<ActivityRow[]>;
+  listOpenLineActivities?(input: {
+    ownerIds: string[];
+    modifiedAfter: string | null;
+  }): Promise<
+    Array<{
+      ID: string;
+      OWNER_ID: string;
+      LAST_UPDATED: string;
+      ORIGIN_ID: string | null;
+    }>
+  >;
+  getOpenLineSessionHistory?(
+    sessionId: string
+  ): Promise<OpenLineSessionHistoryInput>;
   listActivitiesByIds?(activityIds: string[]): Promise<ActivityRow[]>;
   listActivityBindings?(activityIds: string[]): Promise<ActivityBindingRow[]>;
   listCalls(input: {

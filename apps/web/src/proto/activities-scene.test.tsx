@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type {
   ActivitiesWorkloadReport,
@@ -11,6 +11,20 @@ import type {
 import { mapActivitiesCallsSceneData } from '@/proto/live-reporting'
 import { ActivitiesScene } from '@/proto/scenes'
 import type { ProtoFilterState, ProtoRuntimeData } from '@/proto/types'
+
+const messengerApiMock = vi.hoisted(() => ({
+  getSummary: vi.fn(),
+  getDetails: vi.fn(),
+  downloadAttachment: vi.fn(),
+}))
+
+vi.mock('@/lib/api-client', () => ({
+  apiClient: {
+    getMessengerReportSummary: messengerApiMock.getSummary,
+    getManagerMessageDetails: messengerApiMock.getDetails,
+    downloadMessengerAttachment: messengerApiMock.downloadAttachment,
+  },
+}))
 
 const filters: ProtoFilterState = {
   rangeStart: '2026-04-01',
@@ -203,6 +217,12 @@ function createRuntimeData(): ProtoRuntimeData {
 }
 
 describe('ActivitiesScene', () => {
+  beforeEach(() => {
+    messengerApiMock.getSummary.mockReset()
+    messengerApiMock.getDetails.mockReset()
+    messengerApiMock.downloadAttachment.mockReset()
+  })
+
   it('expands manager heatmaps in the summary and meetings tables', async () => {
     render(
       <ActivitiesScene
@@ -215,6 +235,10 @@ describe('ActivitiesScene', () => {
     expect(screen.queryByText('Исходящие звонки по часам')).not.toBeInTheDocument()
     expect(screen.queryByText('Встречи по часам')).not.toBeInTheDocument()
     expect(screen.queryByText(/С1:/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Сообщения в мессенджерах' }),
+    ).not.toBeInTheDocument()
+    expect(messengerApiMock.getSummary).not.toHaveBeenCalled()
 
     await userEvent.click(
       screen.getByRole('button', {
@@ -332,5 +356,163 @@ describe('ActivitiesScene', () => {
     expect(
       screen.getByTestId('heatmap-segment-count-meetings-2-15-meeting_slot_3'),
     ).toHaveTextContent('1')
+  })
+
+  it('loads messenger totals automatically for the selected period and opens a separate reader', async () => {
+    messengerApiMock.getSummary.mockResolvedValue({
+      from: '2026-04-01T00:00:00.000+03:00',
+      to: '2026-04-30T23:59:59.999+03:00',
+      totalMessages: 12,
+      messagesWithText: 11,
+      attachmentOnlyMessages: 1,
+      uniqueDialogs: 5,
+      dealsWithMessages: 4,
+      outgoingMessages: 8,
+      outgoingUnknownAuthorMessages: 2,
+      incomingMessages: 3,
+      unknownDirectionMessages: 1,
+      uniqueOutgoingDialogs: 4,
+      dealsWithOutgoingMessages: 3,
+      systemMessagesExcluded: 2,
+      managerRows: [
+        {
+          managerId: '7',
+          managerName: 'Анна Петрова',
+          from: '2026-04-01T00:00:00.000+03:00',
+          to: '2026-04-30T23:59:59.999+03:00',
+          currentDeals: 8,
+          sessions: 6,
+          uniqueDialogs: 5,
+          dealsWithMessages: 4,
+          outgoingMessages: 8,
+          outgoingUnknownAuthorMessages: 2,
+          incomingMessages: 3,
+          unknownDirectionMessages: 1,
+          uniqueOutgoingDialogs: 4,
+          dealsWithOutgoingMessages: 3,
+          messages: 12,
+          messagesWithText: 11,
+          attachmentOnlyMessages: 1,
+          systemMessagesExcluded: 2,
+          senderKinds: { connector: 8, operator: 4, unknown: 0 },
+          channels: [
+            { key: 'wz_telegram', label: 'WAZZUP: Telegram', messages: 12 },
+          ],
+          directionAvailable: false,
+          personalAuthorAvailable: false,
+        },
+      ],
+      directionAvailable: false,
+      personalAuthorAvailable: false,
+    })
+    messengerApiMock.getDetails.mockResolvedValue({
+      managerId: '7',
+      managerName: 'Анна Петрова',
+      from: '2026-04-01T00:00:00.000+03:00',
+      to: '2026-04-30T23:59:59.999+03:00',
+      totalMessages: 1,
+      returnedMessages: 1,
+      truncated: false,
+      directionAvailable: false,
+      personalAuthorAvailable: false,
+      messages: [
+        {
+          id: '501',
+          sessionId: '441',
+          dealId: '1001',
+          dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
+          occurredAt: '2026-04-20T10:15:00+03:00',
+          channel: { key: 'wz_telegram', label: 'WAZZUP: Telegram' },
+          senderKind: 'connector',
+          direction: 'outgoing',
+          authorLabel: 'Битрикс24 (Анна Петрова)',
+          text: 'Полный текст сообщения в отдельном просмотрщике',
+          attachments: [],
+          hasAttachment: false,
+        },
+      ],
+    })
+
+    const { rerender } = render(
+      <ActivitiesScene
+        commentMode={false}
+        filters={{ ...filters, managers: ['7'] }}
+        runtimeData={createRuntimeData()}
+        canReadMessengerMessages
+      />,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Сообщения в мессенджерах' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /посчитать сообщения за период/i }),
+    ).not.toBeInTheDocument()
+
+    await waitFor(() =>
+      expect(messengerApiMock.getSummary).toHaveBeenCalledWith({
+        managerIds: ['7'],
+        from: '2026-04-01T00:00:00.000+03:00',
+        to: '2026-04-30T23:59:59.999+03:00',
+      }),
+    )
+    expect(
+      await screen.findByTestId('messenger-outgoing-messages'),
+    ).toHaveTextContent(
+      '10',
+    )
+    expect(screen.getByTestId('messenger-unique-outgoing-dialogs')).toHaveTextContent(
+      '4',
+    )
+    expect(
+      screen.getByTestId('messenger-deals-with-outgoing-messages'),
+    ).toHaveTextContent(
+      '3',
+    )
+    expect(screen.getByTestId('messenger-incoming-messages')).toHaveTextContent('3')
+    expect(screen.getByTestId('messenger-unknown-author-7')).toHaveTextContent('2')
+    expect(screen.getByTestId('messenger-unknown-7')).toHaveTextContent('1')
+    expect(
+      screen.getByRole('columnheader', { name: 'Автор подтверждён' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'Не определено' }),
+    ).toBeInTheDocument()
+
+    rerender(
+      <ActivitiesScene
+        commentMode={false}
+        filters={{
+          ...filters,
+          rangeStart: '2026-04-15',
+          managers: ['7'],
+        }}
+        runtimeData={createRuntimeData()}
+        canReadMessengerMessages
+      />,
+    )
+    await waitFor(() =>
+      expect(messengerApiMock.getSummary).toHaveBeenLastCalledWith({
+        managerIds: ['7'],
+        from: '2026-04-15T00:00:00.000+03:00',
+        to: '2026-04-30T23:59:59.999+03:00',
+      }),
+    )
+
+    await userEvent.click(
+      screen.getByRole('button', {
+        name: /читать сообщения анна петрова/i,
+      }),
+    )
+
+    expect(
+      await screen.findByText('Полный текст сообщения в отдельном просмотрщике'),
+    ).toBeInTheDocument()
+    expect(messengerApiMock.getDetails).toHaveBeenCalledWith({
+      managerId: '7',
+      from: '2026-04-15T00:00:00.000+03:00',
+      to: '2026-04-30T23:59:59.999+03:00',
+      limit: 500,
+    })
   })
 })

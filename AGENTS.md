@@ -101,7 +101,7 @@ If a named preset is unavailable in the current runtime, emulate it with the clo
 - Reports should use the local API and SQLite snapshot. Do not add direct Bitrix reads to page rendering.
 - Bitrix sync is a separate operation; dashboard screens should read cached local data.
 - Heavy reports should be loaded lazily by active screen or background prefetch, not block the initial UI render.
-- Never fetch or store deal names or contact personal data for reporting. Use deal/contact IDs only; if upstream Bitrix responses include names, phones, emails, or other personal fields, ignore or redact them before persistence and UI output.
+- Never fetch or store deal names or structured contact personal data for reporting. Use deal/contact IDs only; if upstream Bitrix responses include names, phones, emails, or other personal fields, ignore or redact them before persistence and UI output. The reviewed exception is messenger message body text in the dedicated attraction message tables defined by ADR 0006: it may be stored for leader-only communication analysis, but must never enter aggregate responses, logs, MCP, dashboard comments, notifications, or raw payload storage.
 
 ## Verification
 - Session currency: `pnpm session:preflight`.

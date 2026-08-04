@@ -136,6 +136,75 @@ export interface ActivityRow {
   COMPLETED_DATE?: string | null;
 }
 
+export interface OpenLineActivityRow {
+  ID: string;
+  OWNER_TYPE_ID: string;
+  OWNER_ID: string;
+  PROVIDER_ID: string;
+  RESPONSIBLE_ID: string | null;
+  LAST_UPDATED: string;
+  ORIGIN_ID: string | null;
+}
+
+interface OpenLineHistoryRawMessage {
+  id?: string | number;
+  chatid?: string | number;
+  senderid?: string | number;
+  date?: string;
+  text?: string | null;
+  params?: Record<string, unknown> | null;
+}
+
+interface OpenLineHistoryRawUser {
+  id?: string | number;
+  connector?: boolean | string | number | null;
+}
+
+interface OpenLineHistoryRawChat {
+  id?: string | number;
+  name?: string | null;
+  entityId?: string | null;
+  entityType?: string | null;
+}
+
+interface OpenLineHistoryRawResult {
+  chat?:
+    | OpenLineHistoryRawChat
+    | OpenLineHistoryRawChat[]
+    | Record<string, OpenLineHistoryRawChat>
+    | null;
+  message?:
+    | OpenLineHistoryRawMessage[]
+    | Record<string, OpenLineHistoryRawMessage>
+    | null;
+  users?:
+    | OpenLineHistoryRawUser[]
+    | Record<string, OpenLineHistoryRawUser>
+    | null;
+}
+
+export interface OpenLineSessionHistory {
+  sessionId: string;
+  chat: {
+    id: string | null;
+    entityId: string | null;
+    entityType: string | null;
+  };
+  messages: Array<{
+    id: string;
+    chatId: string | null;
+    senderId: string;
+    date: string;
+    text: string | null;
+    attachmentFileIds: string[];
+    hasAttachment: boolean;
+  }>;
+  users: Array<{
+    id: string;
+    connector: boolean | null;
+  }>;
+}
+
 interface ActivityBindingListRow {
   entityTypeId: string | number;
   entityId: string | number;
@@ -169,6 +238,26 @@ export interface DiskFileRow {
   DOWNLOAD_URL: string | null;
   NAME?: string | null;
   SIZE?: string | number | null;
+}
+
+export interface DiskFileDownload {
+  fileId: string;
+  fileName: string;
+  bytes: Buffer;
+}
+
+export class DiskFileDownloadError extends Error {
+  constructor(
+    readonly code:
+      | "DISK_FILE_TOO_LARGE"
+      | "DISK_FILE_DOWNLOAD_FAILED"
+      | "DISK_FILE_UNSAFE_URL",
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = "DiskFileDownloadError";
+  }
 }
 
 export interface CallRow {
@@ -394,6 +483,123 @@ function normalizeOptionalString(value: unknown) {
 
   const normalized = String(value).trim();
   return normalized.length > 0 ? normalized : null;
+}
+
+function normalizeOptionalBoolean(value: unknown) {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (value === 1 || value === "1" || value === "Y") {
+    return true;
+  }
+
+  if (value === 0 || value === "0" || value === "N") {
+    return false;
+  }
+
+  return null;
+}
+
+function normalizeOpenLineAttachmentIds(
+  params: Record<string, unknown> | null | undefined
+) {
+  if (!params) {
+    return [];
+  }
+
+  const rawFileIds = params.FILE_ID ?? params.fileId;
+  const values = Array.isArray(rawFileIds) ? rawFileIds : [rawFileIds];
+  return [
+    ...new Set(
+      values.flatMap((value) => {
+        const normalized = normalizeOptionalString(value);
+        return normalized ? [normalized] : [];
+      })
+    )
+  ];
+}
+
+function parsePositiveByteCount(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function assertDiskFileSize(byteLength: number, maxBytes: number) {
+  if (byteLength > maxBytes) {
+    throw new DiskFileDownloadError(
+      "DISK_FILE_TOO_LARGE",
+      "Bitrix24 disk file is too large to download.",
+      413
+    );
+  }
+}
+
+async function readDiskFileResponseWithLimit(
+  response: Response,
+  maxBytes: number
+) {
+  if (!response.body) {
+    const bytes = Buffer.from(await response.arrayBuffer());
+    assertDiskFileSize(bytes.byteLength, maxBytes);
+    return bytes;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        assertDiskFileSize(totalBytes, maxBytes);
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  return Buffer.concat(chunks, totalBytes);
+}
+
+function normalizeOpenLineCollection<T>(
+  value: T[] | Record<string, T> | null | undefined
+) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  return value && typeof value === "object" ? Object.values(value) : [];
+}
+
+function isOpenLineHistoryRawChat(
+  value: unknown
+): value is OpenLineHistoryRawChat {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  return ["id", "name", "entityId", "entityType"].some(
+    (field) => field in value
+  );
+}
+
+function normalizeOpenLineChat(
+  value: OpenLineHistoryRawResult["chat"]
+): OpenLineHistoryRawChat {
+  if (isOpenLineHistoryRawChat(value)) {
+    return value;
+  }
+
+  return normalizeOpenLineCollection(value).find(isOpenLineHistoryRawChat) ?? {};
 }
 
 function extractLinkedId(value: unknown): string | null {
@@ -1855,6 +2061,103 @@ export class BitrixClient {
     );
   }
 
+  async listOpenLineActivities(input: {
+    ownerIds: string[];
+    modifiedAfter: string | null;
+  }) {
+    if (input.ownerIds.length === 0) {
+      return [];
+    }
+
+    return this.collectChunked(
+      input.ownerIds,
+      (chunk) =>
+        this.collectByAscendingId<OpenLineActivityRow>(
+          "crm.activity.list",
+          (afterId) => ({
+            order: {
+              ID: "ASC" as const
+            },
+            filter: {
+              ...buildActivityOwnerFilter(chunk),
+              ">ID": afterId,
+              PROVIDER_ID: "IMOPENLINES_SESSION",
+              ...(input.modifiedAfter
+                ? {
+                    ">=LAST_UPDATED": input.modifiedAfter
+                  }
+                : {})
+            },
+            select: [
+              "ID",
+              "OWNER_TYPE_ID",
+              "OWNER_ID",
+              "PROVIDER_ID",
+              "RESPONSIBLE_ID",
+              "LAST_UPDATED",
+              "ORIGIN_ID"
+            ],
+            start: -1
+          })
+        ),
+      ACTIVITY_OWNER_CHUNK_SIZE
+    );
+  }
+
+  async getOpenLineSessionHistory(
+    sessionId: string
+  ): Promise<OpenLineSessionHistory> {
+    const response = await this.call<OpenLineHistoryRawResult>(
+      "imopenlines.session.history.get",
+      {
+        SESSION_ID: sessionId
+      }
+    );
+    const result = response.result ?? {};
+    const chat = normalizeOpenLineChat(result.chat);
+
+    return {
+      sessionId,
+      chat: {
+        id: normalizeOptionalString(chat.id),
+        entityId: normalizeOptionalString(chat.entityId),
+        entityType: normalizeOptionalString(chat.entityType)
+      },
+      messages: normalizeOpenLineCollection(result.message).flatMap((message) => {
+        const id = normalizeOptionalString(message.id);
+        const senderId = normalizeOptionalString(message.senderid);
+        const date = normalizeOptionalString(message.date);
+        if (!id || !senderId || !date) {
+          return [];
+        }
+
+        const attachmentFileIds = normalizeOpenLineAttachmentIds(message.params);
+        return [
+          {
+            id,
+            chatId: normalizeOptionalString(message.chatid),
+            senderId,
+            date,
+            text: typeof message.text === "string" ? message.text : null,
+            attachmentFileIds,
+            hasAttachment: attachmentFileIds.length > 0
+          }
+        ];
+      }),
+      users: normalizeOpenLineCollection(result.users).flatMap((user) => {
+        const id = normalizeOptionalString(user.id);
+        return id
+          ? [
+              {
+                id,
+                connector: normalizeOptionalBoolean(user.connector)
+              }
+            ]
+          : [];
+      })
+    };
+  }
+
   async listContacts(input: { ids: string[]; customFieldNames?: string[] }) {
     if (input.ids.length === 0) {
       return [];
@@ -2030,6 +2333,131 @@ export class BitrixClient {
     });
 
     return response.result ?? null;
+  }
+
+  async downloadDiskFile(
+    fileId: string | number,
+    options: { maxBytes: number }
+  ): Promise<DiskFileDownload | null> {
+    const normalizedFileId = String(fileId).trim();
+    if (!normalizedFileId) {
+      return null;
+    }
+    if (!Number.isFinite(options.maxBytes) || options.maxBytes < 1) {
+      throw new DiskFileDownloadError(
+        "DISK_FILE_DOWNLOAD_FAILED",
+        "Bitrix24 disk file download limit is invalid.",
+        502
+      );
+    }
+
+    const file = await this.getDiskFile(normalizedFileId);
+    const downloadUrl = normalizeOptionalString(file?.DOWNLOAD_URL);
+    if (!file || !downloadUrl) {
+      return null;
+    }
+
+    const declaredSize = parsePositiveByteCount(file.SIZE);
+    if (declaredSize !== null) {
+      assertDiskFileSize(declaredSize, options.maxBytes);
+    }
+
+    let parsedDownloadUrl: URL;
+    let portalOrigin: string;
+    try {
+      parsedDownloadUrl = new URL(downloadUrl);
+      portalOrigin = new URL(`https://${this.config.portalHost ?? ""}`).origin;
+    } catch {
+      throw new DiskFileDownloadError(
+        "DISK_FILE_UNSAFE_URL",
+        "Bitrix24 disk file download URL is invalid.",
+        502
+      );
+    }
+    if (
+      parsedDownloadUrl.protocol !== "https:" ||
+      parsedDownloadUrl.origin !== portalOrigin ||
+      parsedDownloadUrl.username ||
+      parsedDownloadUrl.password
+    ) {
+      throw new DiskFileDownloadError(
+        "DISK_FILE_UNSAFE_URL",
+        "Bitrix24 disk file download URL is not allowed.",
+        502
+      );
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+    let response: Response;
+    try {
+      response = await fetch(parsedDownloadUrl, {
+        method: "GET",
+        redirect: "error",
+        signal: controller.signal
+      });
+    } catch {
+      clearTimeout(timeout);
+      throw new DiskFileDownloadError(
+        "DISK_FILE_DOWNLOAD_FAILED",
+        "Bitrix24 disk file download failed.",
+        502
+      );
+    }
+
+    try {
+      if (!response.ok) {
+        throw new DiskFileDownloadError(
+          "DISK_FILE_DOWNLOAD_FAILED",
+          "Bitrix24 disk file download failed.",
+          502
+        );
+      }
+      const responseUrl = normalizeOptionalString(response.url);
+      if (responseUrl) {
+        try {
+          if (new URL(responseUrl).origin !== portalOrigin) {
+            throw new Error("unexpected origin");
+          }
+        } catch {
+          throw new DiskFileDownloadError(
+            "DISK_FILE_UNSAFE_URL",
+            "Bitrix24 disk file response URL is not allowed.",
+            502
+          );
+        }
+      }
+
+      const contentLength = parsePositiveByteCount(
+        response.headers.get("content-length")
+      );
+      if (contentLength !== null) {
+        assertDiskFileSize(contentLength, options.maxBytes);
+      }
+
+      let bytes: Buffer;
+      try {
+        bytes = await readDiskFileResponseWithLimit(response, options.maxBytes);
+      } catch (error) {
+        if (error instanceof DiskFileDownloadError) {
+          throw error;
+        }
+        throw new DiskFileDownloadError(
+          "DISK_FILE_DOWNLOAD_FAILED",
+          "Bitrix24 disk file download failed.",
+          502
+        );
+      }
+
+      return {
+        fileId: normalizeOptionalString(file.ID) ?? normalizedFileId,
+        fileName:
+          normalizeOptionalString(file.NAME) ?? `attachment-${normalizedFileId}`,
+        bytes
+      };
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async listCalls(input: {

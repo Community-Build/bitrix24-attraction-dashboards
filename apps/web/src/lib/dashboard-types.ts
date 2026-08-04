@@ -1445,6 +1445,91 @@ export interface ActivitiesWorkloadReport extends ActivitiesWorkloadReportSnapsh
   comparisons?: Array<ReportComparison<ActivitiesWorkloadReportSnapshot>>
 }
 
+export type MessengerSenderKind = 'connector' | 'operator' | 'unknown'
+export type MessengerMessageDirection = 'outgoing' | 'incoming' | 'unknown'
+
+export interface MessengerChannelSummary {
+  key: string
+  label: string
+  messages: number
+}
+
+export interface MessengerManagerSummaryRow {
+  managerId: string
+  managerName: string
+  from: string
+  to: string
+  currentDeals: number
+  sessions: number
+  uniqueDialogs: number
+  dealsWithMessages: number
+  messages: number
+  outgoingMessages: number
+  outgoingUnknownAuthorMessages: number
+  incomingMessages: number
+  unknownDirectionMessages: number
+  uniqueOutgoingDialogs: number
+  dealsWithOutgoingMessages: number
+  messagesWithText: number
+  attachmentOnlyMessages: number
+  systemMessagesExcluded: number
+  senderKinds: Record<MessengerSenderKind, number>
+  channels: MessengerChannelSummary[]
+  directionAvailable: false
+  personalAuthorAvailable: boolean
+}
+
+export interface MessengerReportSummary {
+  from: string
+  to: string
+  totalMessages: number
+  outgoingMessages: number
+  outgoingUnknownAuthorMessages: number
+  incomingMessages: number
+  unknownDirectionMessages: number
+  uniqueOutgoingDialogs: number
+  dealsWithOutgoingMessages: number
+  messagesWithText: number
+  attachmentOnlyMessages: number
+  uniqueDialogs: number
+  dealsWithMessages: number
+  systemMessagesExcluded: number
+  managerRows: MessengerManagerSummaryRow[]
+  directionAvailable: false
+  personalAuthorAvailable: boolean
+}
+
+export interface MessengerMessageDetailItem {
+  id: string
+  sessionId: string
+  dealId: string
+  dealUrl: string | null
+  occurredAt: string
+  channel: {
+    key: string
+    label: string
+  }
+  senderKind: MessengerSenderKind
+  direction: MessengerMessageDirection
+  authorLabel: string | null
+  text: string | null
+  attachments: Array<{ id: string }>
+  hasAttachment: boolean
+}
+
+export interface MessengerMessageDetails {
+  managerId: string
+  managerName: string
+  from: string
+  to: string
+  totalMessages: number
+  returnedMessages: number
+  truncated: boolean
+  directionAvailable: false
+  personalAuthorAvailable: boolean
+  messages: MessengerMessageDetailItem[]
+}
+
 export interface StageCallMetric {
   stageId: string
   stageName: string

@@ -88,6 +88,7 @@ import { createCommentRouteHandlers } from "./routes/comment-handlers.js";
 import { registerCommentRoutes } from "./routes/comment-routes.js";
 import { registerLeadgenRoutes } from "./routes/leadgen-routes.js";
 import { registerModuleAdminRoutes } from "./routes/module-admin-routes.js";
+import { registerMessengerMessageRoutes } from "./routes/messenger-message-routes.js";
 import {
   registerPlatformPublicRoutes,
   registerPlatformRoutes
@@ -113,6 +114,17 @@ import type {
 import type { TelegramMessageSender } from "./telegram-client.js";
 import type { TelegramEnrichmentApprovalService } from "./telegram-enrichment-approval.js";
 import type { TelegramManagerRegistrationService } from "./telegram-manager-registration.js";
+import { MessengerMessageCollectionError } from "./messenger-message-collection.js";
+import type {
+  MessengerMessageCollectionInput,
+  MessengerMessageAttachment,
+  MessengerMessageAttachmentInput,
+  MessengerMessageDetails,
+  MessengerMessageDetailsInput,
+  MessengerMessageSummary,
+  MessengerReportSummary,
+  MessengerReportSummaryInput
+} from "./messenger-message-collection.js";
 import {
   buildDailyActivityReportRange,
   buildTelegramActivityReportDeliveries,
@@ -316,6 +328,23 @@ interface AppConfig {
     enabled?: boolean;
     intervalMs?: number;
     initialDelayMs?: number;
+  };
+  messengerMessages?: {
+    enabled?: boolean;
+    service?: {
+      getManagerMessageSummary(
+        input: MessengerMessageCollectionInput
+      ): Promise<MessengerMessageSummary>;
+      getMessengerReportSummary?(
+        input: MessengerReportSummaryInput
+      ): Promise<MessengerReportSummary>;
+      getManagerMessageDetails?(
+        input: MessengerMessageDetailsInput
+      ): Promise<MessengerMessageDetails>;
+      getManagerMessageAttachment?(
+        input: MessengerMessageAttachmentInput
+      ): Promise<MessengerMessageAttachment>;
+    };
   };
   telegramActivityReport?: {
     enabled?: boolean;
@@ -798,6 +827,70 @@ const managerWhitelistSettingsBodySchema = z.object({
     )
     .optional()
 });
+
+const messengerMessageCollectionBodySchema = z
+  .object({
+    managerId: z.string().trim().min(1).max(64),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true })
+  })
+  .strict();
+
+const messengerReportSummaryBodySchema = z
+  .object({
+    managerIds: z.array(z.string().trim().min(1).max(64)).max(100).default([]),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true })
+  })
+  .strict();
+
+const messengerMessageReaderBodySchema = z
+  .object({
+    managerId: z.string().trim().min(1).max(64),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    limit: z.number().int().min(1).max(500).optional()
+  })
+  .strict();
+
+const messengerMessageAttachmentBodySchema = z
+  .object({
+    managerId: z.string().trim().min(1).max(64),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    sessionId: z.string().trim().min(1).max(64),
+    messageId: z.string().trim().min(1).max(128),
+    fileId: z.string().trim().min(1).max(128)
+  })
+  .strict();
+
+function sanitizeAttachmentFileName(fileName: string, fileId: string) {
+  const withoutControlCharacters = [...fileName]
+    .filter((character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return codePoint > 31 && codePoint !== 127;
+    })
+    .join("");
+  const sanitized = withoutControlCharacters
+    .normalize("NFKC")
+    .replace(/[/\\"]/gu, "_")
+    .trim()
+    .slice(0, 180);
+  return sanitized || `attachment-${fileId}`;
+}
+
+function encodeContentDispositionValue(value: string) {
+  return encodeURIComponent(value).replace(/[!'()*]/gu, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`
+  );
+}
+
+function buildAttachmentContentDisposition(fileName: string, fileId: string) {
+  const safeFileName = sanitizeAttachmentFileName(fileName, fileId);
+  const asciiFallback =
+    safeFileName.replace(/[^\x20-\x7e]/gu, "_") || `attachment-${fileId}`;
+  return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encodeContentDispositionValue(safeFileName)}`;
+}
 
 const callAnalysisQueueQuerySchema = z.object({
   stageIds: z
@@ -2741,6 +2834,110 @@ export function createApp(
     })
   );
 
+  registerMessengerMessageRoutes(app, {
+    collect: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (!messengerMessages?.enabled || !messengerMessages.service) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerMessageCollectionBodySchema.parse(request.body);
+        response.set("Cache-Control", "no-store");
+        response.json({
+          summary: await messengerMessages.service.getManagerMessageSummary(payload)
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+    summary: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (
+        !messengerMessages?.enabled ||
+        !messengerMessages.service?.getMessengerReportSummary
+      ) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerReportSummaryBodySchema.parse(request.body);
+        response.set("Cache-Control", "no-store");
+        response.json({
+          summary:
+            await messengerMessages.service.getMessengerReportSummary(payload)
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+    read: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (
+        !messengerMessages?.enabled ||
+        !messengerMessages.service?.getManagerMessageDetails
+      ) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerMessageReaderBodySchema.parse(request.body);
+        response.set("Cache-Control", "no-store");
+        response.json({
+          details:
+            await messengerMessages.service.getManagerMessageDetails({
+              managerId: payload.managerId,
+              from: payload.from,
+              to: payload.to,
+              ...(payload.limit === undefined ? {} : { limit: payload.limit })
+            })
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+    attachment: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (
+        !messengerMessages?.enabled ||
+        !messengerMessages.service?.getManagerMessageAttachment
+      ) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerMessageAttachmentBodySchema.parse(request.body);
+        const attachment =
+          await messengerMessages.service.getManagerMessageAttachment(payload);
+        response.set("Cache-Control", "no-store");
+        response.set("Content-Type", "application/octet-stream");
+        response.set("X-Content-Type-Options", "nosniff");
+        response.set(
+          "Content-Disposition",
+          buildAttachmentContentDisposition(
+            attachment.fileName,
+            attachment.fileId
+          )
+        );
+        response.send(attachment.bytes);
+      } catch (error) {
+        next(error);
+      }
+    }
+  });
+
   async function deliverCommentToPaperclip(
     comment: DashboardCommentRecord,
     module: AuthenticatedModule
@@ -3582,6 +3779,11 @@ export function createApp(
         response
           .status(400)
           .json(createErrorResponse("VALIDATION_ERROR", error.flatten()));
+        return;
+      }
+
+      if (error instanceof MessengerMessageCollectionError) {
+        response.status(error.status).json(createErrorResponse(error.code));
         return;
       }
 

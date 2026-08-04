@@ -50,6 +50,10 @@ architectural issue found in the deep review.
 | [034](./034-simplify-conversion-report.md) | Simplify the conversion report around decisions and event outcomes | P0 | L | 029, 030, 031, 032, 033 | DONE |
 | [035](./035-fix-conversion-event-correctness.md) | Fix conversion event correctness | P0 | S | 034 | DONE |
 | [036](./036-fix-current-attraction-scope.md) | Reconcile current attraction scope without losing history | P0 | L | 027 | DONE |
+| [037](./037-transient-messenger-message-collection.md) | Collect messenger texts transiently for manager analysis | P1 | M | - | DONE |
+| [038](./038-activities-messenger-summary-and-reader.md) | Add messenger totals and a transient reader to Activities | P1 | L | 037 | DONE |
+| [039](./039-messenger-direction-links-and-attachments.md) | Parse WAZZUP direction and add deal/attachment actions | P1 | L | 038 | DONE |
+| [040](./040-sqlite-messenger-reporting.md) | Persist messenger histories and auto-load Activities totals | P1 | L | 037, 038, 039 | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale - finding fixed independently or approach

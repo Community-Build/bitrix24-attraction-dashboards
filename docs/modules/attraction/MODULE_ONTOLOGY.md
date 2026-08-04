@@ -488,7 +488,25 @@ cash-flow и готовность к handoff.
 
 - Использовать `deal_id` и безопасные внутренние IDs для агрегации.
 - Не выводить deal names, contact names, phones, emails, raw payloads.
-- Дашборды должны читать cached local API/SQLite data, а не Bitrix напрямую.
+- Полный исходный и очищенный текст сообщений хранится в выделенных таблицах
+  attraction SQLite по ADR 0006. Он доступен только leader-only reader и
+  серверному анализатору; обычная сводка возвращает только агрегаты, reader —
+  не более 500 последних сообщений одного включённого менеджера за точный
+  период общего фильтра с `Cache-Control: no-store`. Текст не попадает в логи,
+  MCP, комментарии, уведомления, aggregate response или HTML-разметку.
+- Для WAZZUP направление определяется по встроенной служебной пометке:
+  помеченное сообщение — исходящее, непомеченное — входящее, `SYSTEM WZ` и
+  `senderid = 0` сохраняются как системные evidence, но исключаются из метрик.
+  Исходящее засчитывается менеджеру только при однозначном совпадении автора с
+  whitelist или sender ID; `Телефон` и другие неоднозначные авторы показываются
+  отдельно. Для OLChat/Umnico направление остаётся неизвестным.
+- Ссылка из reader ведёт только на сделку текущего scope через настроенный host
+  Bitrix24. Вложение выдаётся только leader через no-store proxy после проверки
+  manager/range/session/message/file ID; лимит 20 MiB, исходный Bitrix URL и
+  webhook credential не выдаются браузеру.
+- Дашборды, включая messenger summary/reader, должны читать cached local
+  API/SQLite data, а не Bitrix напрямую. Open Lines history обновляется только
+  отдельной штатной синхронизацией.
 - Отчеты должны оставаться в attraction manager whitelist, если issue явно не
   меняет scope.
 - Привязка Telegram chat ID к Bitrix user ID является операционным

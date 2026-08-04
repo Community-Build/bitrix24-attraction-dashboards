@@ -1,4 +1,5 @@
 import { BitrixClient } from "./bitrix/client.js";
+import { createMessengerMessageCollectionService } from "./server/messenger-message-collection.js";
 import { readEnv } from "./config/env.js";
 import { createAttractionAgentGateway } from "./agent/attraction-agent-gateway.js";
 import { createPlaybookReader } from "./agent/playbook-reader.js";
@@ -99,6 +100,13 @@ const leadgenClient = new BitrixClient({
     : {}),
   ...(env.BITRIX24_WEBHOOK_TOKEN
     ? { webhookToken: env.BITRIX24_WEBHOOK_TOKEN }
+    : {})
+});
+const messengerMessages = createMessengerMessageCollectionService({
+  repository: attractionRepository,
+  client,
+  ...(env.BITRIX24_PORTAL_HOST
+    ? { portalHost: env.BITRIX24_PORTAL_HOST }
     : {})
 });
 const service = createReportingService({
@@ -424,6 +432,10 @@ const app = createApp(service, {
   attractionAutoSync: {
     enabled: env.attractionAutoSyncEnabled && env.bitrixEnabled,
     intervalMs: env.attractionAutoSyncIntervalMs
+  },
+  messengerMessages: {
+    enabled: true,
+    service: messengerMessages
   },
   callEnrichmentIntake: {
     enabled: env.callEnrichmentAnalysisEnabled,

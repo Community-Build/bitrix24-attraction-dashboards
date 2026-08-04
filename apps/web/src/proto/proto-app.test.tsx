@@ -501,6 +501,29 @@ vi.mock('@/lib/api-client', () => ({
       managerRows: [],
       comparisons: [],
     })),
+    getMessengerReportSummary: vi.fn(async (input: {
+      managerIds: string[]
+      from: string
+      to: string
+    }) => ({
+      from: input.from,
+      to: input.to,
+      totalMessages: 0,
+      outgoingMessages: 0,
+      outgoingUnknownAuthorMessages: 0,
+      incomingMessages: 0,
+      unknownDirectionMessages: 0,
+      uniqueOutgoingDialogs: 0,
+      dealsWithOutgoingMessages: 0,
+      messagesWithText: 0,
+      attachmentOnlyMessages: 0,
+      uniqueDialogs: 0,
+      dealsWithMessages: 0,
+      systemMessagesExcluded: 0,
+      managerRows: [],
+      directionAvailable: false as const,
+      personalAuthorAvailable: false,
+    })),
     getLeadgenActivitiesWorkloadReport: vi.fn(async () => ({
       range: { from: '2026-04-01T00:00:00.000+03:00', to: '2026-04-30T23:59:59.999+03:00' },
       totalDealCount: 4,

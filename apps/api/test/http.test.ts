@@ -29,6 +29,7 @@ import { describe, expect, it, vi } from "vitest";
 import { NO_ATTRACTION_MANAGER_MATCH_ID } from "../src/domain/attraction-managers";
 import { SourceCohortConversionStageNotFoundError } from "../src/domain/source-cohort-conversion-stage-drilldown";
 import { createApp } from "../src/server/app";
+import { MessengerMessageCollectionError } from "../src/server/messenger-message-collection";
 import type { ModuleCapabilityAdapter } from "../src/server/module-capabilities";
 
 type AppConfig = NonNullable<Parameters<typeof createApp>[1]>;
@@ -618,6 +619,7 @@ function createTestApp(
     auth?: AppConfig["auth"];
     callAnalysis?: AppConfig["callAnalysis"];
     callEnrichmentIntake?: AppConfig["callEnrichmentIntake"];
+    messengerMessages?: AppConfig["messengerMessages"];
     protoComments?: {
       getProtoComments(): Promise<{
         comments: unknown[];
@@ -1129,12 +1131,453 @@ function createTestApp(
         };
         callAnalysis?: AppConfig["callAnalysis"];
         callEnrichmentIntake?: AppConfig["callEnrichmentIntake"];
+        messengerMessages?: AppConfig["messengerMessages"];
       }
     ) => ReturnType<typeof createApp>
   )(service, config);
 }
 
 describe("createApp", () => {
+  it("returns a no-store safe messenger summary without raw message text", async () => {
+    const rawMessageText = "Секретный полный текст сообщения";
+    const app = createTestApp(
+      {},
+      {
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async (input) => {
+              expect(input).toEqual({
+                managerId: "78",
+                from: "2026-08-01T00:00:00+03:00",
+                to: "2026-08-03T23:59:59+03:00"
+              });
+              void rawMessageText;
+              return {
+                managerId: "78",
+                managerName: "Егоров Андрей",
+                from: input.from,
+                to: input.to,
+                currentDeals: 10,
+                sessions: 2,
+                uniqueDialogs: 2,
+                dealsWithMessages: 2,
+                messages: 5,
+                outgoingMessages: 3,
+                outgoingUnknownAuthorMessages: 0,
+                incomingMessages: 2,
+                unknownDirectionMessages: 0,
+                uniqueOutgoingDialogs: 2,
+                dealsWithOutgoingMessages: 2,
+                messagesWithText: 4,
+                attachmentOnlyMessages: 1,
+                systemMessagesExcluded: 3,
+                senderKinds: {
+                  connector: 5,
+                  operator: 0,
+                  unknown: 0
+                },
+                channels: [
+                  {
+                    key: "wz_telegram",
+                    label: "WAZZUP: Telegram",
+                    messages: 5
+                  }
+                ],
+                directionAvailable: false as const,
+                personalAuthorAvailable: false as const
+              };
+            }
+          }
+        }
+      }
+    );
+
+    await request(app)
+      .post("/api/messenger-messages/collect")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          summary: expect.objectContaining({
+            managerId: "78",
+            messages: 5,
+            messagesWithText: 4
+          })
+        });
+        expect(JSON.stringify(body)).not.toContain(rawMessageText);
+      });
+  });
+
+  it("returns a no-store messenger report summary for the selected managers", async () => {
+    const rawMessageText = "Этот текст не должен попасть в итог";
+    const app = createTestApp(
+      {},
+      {
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async () => {
+              throw new Error("must not be called");
+            },
+            getMessengerReportSummary: async (input) => {
+              expect(input).toEqual({
+                managerIds: ["78", "11234"],
+                from: "2026-08-01T00:00:00+03:00",
+                to: "2026-08-03T23:59:59+03:00"
+              });
+              void rawMessageText;
+              return {
+                from: input.from,
+                to: input.to,
+                totalMessages: 9,
+                outgoingMessages: 6,
+                outgoingUnknownAuthorMessages: 1,
+                incomingMessages: 2,
+                unknownDirectionMessages: 1,
+                uniqueOutgoingDialogs: 3,
+                dealsWithOutgoingMessages: 3,
+                messagesWithText: 8,
+                attachmentOnlyMessages: 1,
+                uniqueDialogs: 4,
+                dealsWithMessages: 3,
+                systemMessagesExcluded: 2,
+                managerRows: [],
+                directionAvailable: false as const,
+                personalAuthorAvailable: false as const
+              };
+            },
+            getManagerMessageDetails: async () => {
+              throw new Error("must not be called");
+            }
+          }
+        }
+      }
+    );
+
+    await request(app)
+      .post("/api/messenger-messages/summary")
+      .send({
+        managerIds: ["78", "11234"],
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual({
+          summary: expect.objectContaining({
+            totalMessages: 9,
+            uniqueDialogs: 4,
+            dealsWithMessages: 3
+          })
+        });
+        expect(JSON.stringify(body)).not.toContain(rawMessageText);
+      });
+  });
+
+  it("returns bounded raw messenger details only through the no-store reader route", async () => {
+    const app = createTestApp(
+      {},
+      {
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async () => {
+              throw new Error("must not be called");
+            },
+            getMessengerReportSummary: async () => {
+              throw new Error("must not be called");
+            },
+            getManagerMessageDetails: async (input) => {
+              expect(input).toEqual({
+                managerId: "78",
+                from: "2026-08-01T00:00:00+03:00",
+                to: "2026-08-03T23:59:59+03:00",
+                limit: 250
+              });
+              return {
+                managerId: input.managerId,
+                managerName: "Егоров Андрей",
+                from: input.from,
+                to: input.to,
+                totalMessages: 1,
+                returnedMessages: 1,
+                truncated: false,
+                directionAvailable: false as const,
+                personalAuthorAvailable: false as const,
+                messages: [
+                  {
+                    id: "501",
+                    sessionId: "441",
+                    dealId: "1001",
+                    occurredAt: "2026-08-03T10:15:00+03:00",
+                    channel: {
+                      key: "wz_telegram",
+                      label: "WAZZUP: Telegram"
+                    },
+                    senderKind: "connector" as const,
+                    direction: "unknown" as const,
+                    authorLabel: null,
+                    text: "Полный текст сообщения",
+                    dealUrl: null,
+                    attachments: [],
+                    hasAttachment: false
+                  }
+                ]
+              };
+            }
+          }
+        }
+      }
+    );
+
+    await request(app)
+      .post("/api/messenger-messages/read")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00",
+        limit: 250
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(200, {
+        details: {
+          managerId: "78",
+          managerName: "Егоров Андрей",
+          from: "2026-08-01T00:00:00+03:00",
+          to: "2026-08-03T23:59:59+03:00",
+          totalMessages: 1,
+          returnedMessages: 1,
+          truncated: false,
+          directionAvailable: false,
+          personalAuthorAvailable: false,
+          messages: [
+            {
+              id: "501",
+              sessionId: "441",
+              dealId: "1001",
+              occurredAt: "2026-08-03T10:15:00+03:00",
+              channel: {
+                key: "wz_telegram",
+                label: "WAZZUP: Telegram"
+              },
+              senderKind: "connector",
+              direction: "unknown",
+              authorLabel: null,
+              text: "Полный текст сообщения",
+              dealUrl: null,
+              attachments: [],
+              hasAttachment: false
+            }
+          ]
+        }
+      });
+  });
+
+  it("proxies only a validated messenger attachment as a no-store download", async () => {
+    const fileBytes = Buffer.from("safe attachment");
+    const app = createTestApp(
+      {},
+      {
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async () => {
+              throw new Error("must not be called");
+            },
+            getManagerMessageAttachment: async (input) => {
+              expect(input).toEqual({
+                managerId: "78",
+                from: "2026-08-01T00:00:00+03:00",
+                to: "2026-08-03T23:59:59+03:00",
+                sessionId: "441",
+                messageId: "501",
+                fileId: "77"
+              });
+              return {
+                fileId: "77",
+                fileName: "Договор\r\nX-Leak: yes.docx",
+                bytes: fileBytes
+              };
+            }
+          }
+        }
+      }
+    );
+
+    const response = await request(app)
+      .post("/api/messenger-messages/attachment")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00",
+        sessionId: "441",
+        messageId: "501",
+        fileId: "77"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect("Content-Type", "application/octet-stream")
+      .expect("X-Content-Type-Options", "nosniff")
+      .expect(200);
+
+    expect(response.headers["content-disposition"]).toContain("attachment;");
+    expect(response.headers["content-disposition"]).toContain("filename*=");
+    expect(response.headers["x-leak"]).toBeUndefined();
+    expect(response.body).toEqual(fileBytes);
+    expect(JSON.stringify(response.headers)).not.toContain("bitrix24.ru/rest/");
+  });
+
+  it("denies messenger summary, reader, and attachments to attraction employees", async () => {
+    let messageReads = 0;
+    const auth = createStaticAuthService(
+      createTestSession({
+        modules: [
+          createAuthenticatedModule({ id: "attraction", name: "Привлечение" })
+        ]
+      })
+    );
+    const app = createTestApp(
+      {},
+      {
+        auth,
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async () => {
+              throw new Error("must not be called");
+            },
+            getMessengerReportSummary: async () => {
+              messageReads += 1;
+              throw new Error("must not be called");
+            },
+            getManagerMessageDetails: async () => {
+              messageReads += 1;
+              throw new Error("must not be called");
+            },
+            getManagerMessageAttachment: async () => {
+              messageReads += 1;
+              throw new Error("must not be called");
+            }
+          }
+        }
+      }
+    );
+
+    const authenticatedRequest = (path: string) =>
+      request(app)
+        .post(path)
+        .set("Cookie", "b24dash_session=valid-session")
+        .set("X-CSRF-Token", "csrf-token");
+
+    await authenticatedRequest("/api/messenger-messages/summary")
+      .send({
+        managerIds: ["78"],
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(403, { error: "FORBIDDEN", code: "FORBIDDEN" });
+    await authenticatedRequest("/api/messenger-messages/read")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(403, { error: "FORBIDDEN", code: "FORBIDDEN" });
+    await authenticatedRequest("/api/messenger-messages/attachment")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00",
+        sessionId: "441",
+        messageId: "501",
+        fileId: "77"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(403, { error: "FORBIDDEN", code: "FORBIDDEN" });
+    expect(messageReads).toBe(0);
+  });
+
+  it("denies messenger collection to attraction employees before reading messages", async () => {
+    let collectionCalls = 0;
+    const auth = createStaticAuthService(
+      createTestSession({
+        modules: [
+          createAuthenticatedModule({ id: "attraction", name: "Привлечение" })
+        ]
+      })
+    );
+    const app = createTestApp(
+      {},
+      {
+        auth,
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async () => {
+              collectionCalls += 1;
+              throw new Error("must not be called");
+            }
+          }
+        }
+      }
+    );
+
+    await request(app)
+      .post("/api/messenger-messages/collect")
+      .set("Cookie", "b24dash_session=valid-session")
+      .set("X-CSRF-Token", "csrf-token")
+      .send({
+        managerId: "78",
+        from: "2026-08-01T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00"
+      })
+      .expect("Cache-Control", "no-store")
+      .expect(403, {
+        error: "FORBIDDEN",
+        code: "FORBIDDEN"
+      });
+    expect(collectionCalls).toBe(0);
+  });
+
+  it("returns a stable validation error for an invalid messenger collection range", async () => {
+    const app = createTestApp(
+      {},
+      {
+        messengerMessages: {
+          enabled: true,
+          service: {
+            getManagerMessageSummary: async () => {
+              throw new MessengerMessageCollectionError(
+                "INVALID_RANGE",
+                "internal range detail"
+              );
+            }
+          }
+        }
+      }
+    );
+
+    await request(app)
+      .post("/api/messenger-messages/collect")
+      .send({
+        managerId: "78",
+        from: "2026-07-01T00:00:00+03:00",
+        to: "2026-08-02T00:00:00+03:00"
+      })
+      .expect(400, {
+        error: "INVALID_RANGE",
+        code: "INVALID_RANGE"
+      });
+  });
+
   it("returns metadata-only capability manifests for existing modules", async () => {
     const app = createTestApp();
 

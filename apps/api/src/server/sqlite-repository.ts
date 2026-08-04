@@ -47,10 +47,15 @@ import {
   DEFAULT_UNIT_ECONOMICS_COST_RULES
 } from "../domain/unit-economics.js";
 import { ATTRACTION_MANAGER_CATALOG } from "../domain/attraction-managers.js";
+import type {
+  MessengerMessageSnapshot,
+  MessengerSessionSnapshot
+} from "../domain/messenger-messages.js";
 import { sanitizeRefusalReasonDetail } from "../domain/refusal-detail.js";
 import { createCallAnalysisRepositoryMethods } from "./sqlite/call-analysis.js";
 import { createCommentRepositoryMethods } from "./sqlite/comments.js";
 import { createEnrichmentProposalRepositoryMethods } from "./sqlite/enrichment-proposals.js";
+import { createMessengerMessageRepositoryMethods } from "./sqlite/messenger-messages.js";
 import { createTelegramManagerRegistrationRepositoryMethods } from "./sqlite/telegram-manager-registrations.js";
 
 export interface LastSyncSummary {
@@ -70,6 +75,17 @@ export interface CurrentAttractionScopeSnapshot {
   scopeKey: string | null;
   reconciledAt: string | null;
   dealIds: string[];
+}
+
+export interface ReplaceMessengerSessionInput {
+  session: MessengerSessionSnapshot;
+  messages: MessengerMessageSnapshot[];
+}
+
+export interface MessengerMessageQuery {
+  from: string;
+  to: string;
+  managerIds?: string[];
 }
 
 const DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS: OperationalStageAgingThreshold[] = [
@@ -583,6 +599,19 @@ export interface SqliteRepository {
   ): Promise<string[]>;
   getDealsByIds(dealIds: string[]): Promise<DealSnapshot[]>;
   getCurrentAttractionScope(): Promise<CurrentAttractionScopeSnapshot>;
+  replaceMessengerSessions(
+    rows: ReplaceMessengerSessionInput[]
+  ): Promise<{ sessions: number; messages: number }>;
+  reconcileMessengerDealManagers(
+    rows: Array<{ dealId: string; managerId: string | null }>
+  ): Promise<{ sessions: number; messages: number }>;
+  listMessengerMessages(
+    query: MessengerMessageQuery
+  ): Promise<MessengerMessageSnapshot[]>;
+  getMessengerMessage(input: {
+    sessionId: string;
+    messageId: string;
+  }): Promise<MessengerMessageSnapshot | null>;
   replaceCurrentAttractionScope(input: {
     scopeKey: string;
     dealIds: string[];
@@ -1275,6 +1304,44 @@ export function createSqliteRepository(
       completed_time TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS messenger_session_snapshots (
+      session_id TEXT PRIMARY KEY,
+      activity_id TEXT NOT NULL,
+      deal_id TEXT NOT NULL,
+      deal_manager_id TEXT,
+      channel_key TEXT NOT NULL,
+      channel_label TEXT NOT NULL,
+      activity_updated_at TEXT NOT NULL,
+      synced_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS messenger_message_snapshots (
+      session_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      activity_id TEXT NOT NULL,
+      deal_id TEXT NOT NULL,
+      deal_manager_id TEXT,
+      occurred_at TEXT NOT NULL,
+      occurred_at_ms INTEGER NOT NULL,
+      channel_key TEXT NOT NULL,
+      channel_label TEXT NOT NULL,
+      sender_id TEXT NOT NULL,
+      sender_kind TEXT NOT NULL,
+      direction TEXT NOT NULL,
+      author_label TEXT,
+      author_manager_id TEXT,
+      message_text TEXT,
+      raw_text TEXT,
+      attachment_file_ids_json TEXT NOT NULL DEFAULT '[]',
+      has_attachment INTEGER NOT NULL DEFAULT 0,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      synced_at TEXT NOT NULL,
+      PRIMARY KEY (session_id, message_id),
+      FOREIGN KEY (session_id)
+        REFERENCES messenger_session_snapshots(session_id)
+        ON DELETE CASCADE
+    );
+
     CREATE TABLE IF NOT EXISTS activity_binding_snapshots (
       activity_id TEXT NOT NULL,
       owner_type_id TEXT NOT NULL,
@@ -1735,6 +1802,16 @@ export function createSqliteRepository(
       ON activity_snapshots (owner_id);
     CREATE INDEX IF NOT EXISTS idx_activity_provider_created
       ON activity_snapshots (provider_id, created_time);
+    CREATE INDEX IF NOT EXISTS idx_messenger_messages_occurred_at
+      ON messenger_message_snapshots (occurred_at_ms);
+    CREATE INDEX IF NOT EXISTS idx_messenger_messages_author_time
+      ON messenger_message_snapshots (author_manager_id, occurred_at_ms);
+    CREATE INDEX IF NOT EXISTS idx_messenger_messages_deal_manager_time
+      ON messenger_message_snapshots (deal_manager_id, occurred_at_ms);
+    CREATE INDEX IF NOT EXISTS idx_messenger_messages_deal_time
+      ON messenger_message_snapshots (deal_id, occurred_at_ms);
+    CREATE INDEX IF NOT EXISTS idx_messenger_messages_session_time
+      ON messenger_message_snapshots (session_id, occurred_at_ms);
     CREATE INDEX IF NOT EXISTS idx_activity_binding_owner
       ON activity_binding_snapshots (owner_type_id, owner_id);
     CREATE INDEX IF NOT EXISTS idx_deal_meeting_date_changes_deal_id
@@ -3346,6 +3423,8 @@ export function createSqliteRepository(
     createEnrichmentProposalRepositoryMethods(database);
   const telegramManagerRegistrationRepositoryMethods =
     createTelegramManagerRegistrationRepositoryMethods(database);
+  const messengerMessageRepositoryMethods =
+    createMessengerMessageRepositoryMethods(database);
   const commentRepositoryMethods = createCommentRepositoryMethods(database);
 
   const hydrateDealMeetingSlots = (deals: DealSnapshot[]): DealSnapshot[] => {
@@ -3938,6 +4017,7 @@ export function createSqliteRepository(
     ...callAnalysisRepositoryMethods,
     ...enrichmentProposalRepositoryMethods,
     ...telegramManagerRegistrationRepositoryMethods,
+    ...messengerMessageRepositoryMethods,
 
     async getCallActivityIdsMissingActivities(
       limit = 20_000,

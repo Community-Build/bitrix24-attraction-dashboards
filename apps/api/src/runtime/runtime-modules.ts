@@ -2,6 +2,7 @@ export type RuntimeModuleId =
   | "sync-snapshot"
   | "analytics-reports"
   | "call-analysis"
+  | "messenger-message-analysis"
   | "call-enrichment"
   | "telegram-manager-registration"
   | "telegram-activity-summary"
@@ -87,6 +88,39 @@ export const attractionRuntimeModules = [
     sourceOfTruth: ["docs/adr/0002-manager-approved-call-enrichment-writeback.md"],
     notes:
       "Covers manual queue analysis and automatic webhook intake. LLM output is advisory."
+  },
+  {
+    id: "messenger-message-analysis",
+    label: "SQLite-backed messenger-message analysis",
+    owner: "attraction",
+    kind: "http",
+    currentEntrypoints: [
+      "/api/messenger-messages/collect",
+      "/api/messenger-messages/summary",
+      "/api/messenger-messages/read",
+      "/api/messenger-messages/attachment",
+      "apps/api/src/server/messenger-message-collection.ts",
+      "apps/api/src/server/messenger-message-sync.ts",
+      "apps/api/src/server/sqlite/messenger-messages.ts"
+    ],
+    reads: [
+      "current attraction deal scope",
+      "manager whitelist",
+      "local SQLite messenger session/message snapshots",
+      "Bitrix24 Disk file metadata and bounded downloads"
+    ],
+    writes: ["local SQLite messenger session/message snapshots"],
+    externalSystems: ["Bitrix24"],
+    sourceOfTruth: [
+      "docs/modules/attraction/MESSAGE_METRICS_RESEARCH.md",
+      "docs/adr/0006-persist-messenger-messages-for-analysis.md",
+      "plans/037-transient-messenger-message-collection.md",
+      "plans/038-activities-messenger-summary-and-reader.md",
+      "plans/039-messenger-direction-links-and-attachments.md",
+      "plans/040-sqlite-messenger-reporting.md"
+    ],
+    notes:
+      "Normal attraction sync persists full message text with a dedicated cursor. Leader-only aggregate and reader routes use SQLite and follow the common report filters; attachment bytes stay transient."
   },
   {
     id: "call-enrichment",

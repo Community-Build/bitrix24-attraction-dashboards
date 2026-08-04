@@ -27,14 +27,16 @@ Use this order when reconstructing how the project is built:
    writeback exception and Telegram approval flow.
 7. `docs/adr/0005-durable-telegram-manager-registration.md` - persistent
    Telegram intake and manual one-time Bitrix matching used by deal routing.
-8. `docs/architecture/web-runtime.md` - one supported web shell and browser data
+8. `docs/adr/0006-persist-messenger-messages-for-analysis.md` - accepted
+   messenger storage, attribution, sync, and access boundary.
+9. `docs/architecture/web-runtime.md` - one supported web shell and browser data
    access rule.
-9. `docs/architecture/module-capabilities.md` - manifest and agent-readable
+10. `docs/architecture/module-capabilities.md` - manifest and agent-readable
    report policy.
-10. `docs/architecture/agent-mcp.md` - read-only agent gateway.
-11. `docs/deploy-timeweb-vps.md` - production env and rollout controls.
-12. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
-13. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
+11. `docs/architecture/agent-mcp.md` - read-only agent gateway.
+12. `docs/deploy-timeweb-vps.md` - production env and rollout controls.
+13. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
+14. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
 
 ## Product Surfaces
 
@@ -46,6 +48,7 @@ map that future refactors should preserve.
 | --- | --- | --- | --- | --- |
 | Analytics | attraction | `ProtoApp`, `scene-registry.ts`, `scenes.tsx`, `/api/reports/*` | SQLite snapshot, report builders, `REPORT_REGISTRY.md` | Operational, sales, plan, activities, cohorts, sources, revenue velocity, unit economics, funnel flow. |
 | Call analysis | attraction | `CallAnalysisWorkspace`, `/api/calls/*` | Bitrix call activities, local analysis storage, call analysis service | Covers manual queue analysis and automatic webhook intake. |
+| Messenger analysis and Activities reader | attraction | Activities messenger section, `/api/messenger-messages/summary`, `/read`, `/attachment`, `/collect`, message sync/collection services | Attraction SQLite messenger snapshots, current deal scope, manager whitelist | Leader-only; totals load automatically for the common date filter, aggregate responses omit text, and the bounded reader uses stored plain text. |
 | Ontology | attraction | `OntologyHubScene`, ontology API routes, MCP resources | `docs/modules/attraction/MODULE_ONTOLOGY.md`, ontology registry JSON | Business vocabulary and report bindings. |
 | KI playbook | attraction | `PlaybookScene`, `PlaybookReader`, MCP resources | `docs/modules/attraction/playbook/playbook-ki.html` | Operational knowledge surface, not a report. |
 | Comments and Paperclip | platform | dashboard comment mode, `/api/proto-comments`, Paperclip routes | comments SQLite tables, `ops/paperclip/*` | Product feedback and implementation loop. Not part of business ontology. |
@@ -62,6 +65,7 @@ external systems, data reads, and writes.
 | Sync and snapshot | attraction | sync routes, auto-sync startup, `performManualSync` | Bitrix24 | local SQLite snapshot |
 | Analytics reports | attraction | `/api/dashboard`, `/api/reports/*`, report domain builders | none at render time | none |
 | Call analysis | attraction | `/api/calls/*`, call analysis service | Bitrix24 recordings, OpenRouter | local call analysis tables |
+| Messenger message sync, analysis and reader | attraction | normal attraction sync, `/api/messenger-messages/summary`, `/read`, `/attachment`, `/collect` | Bitrix24 Open Lines and Disk | dedicated SQLite session/message snapshots including full text; attachment bytes stay transient |
 | Call enrichment | attraction | webhook intake, enrichment orchestrator, approval service, expiry job | Bitrix24, Telegram, OpenRouter | local proposals; approved Bitrix field updates |
 | Telegram manager registration | attraction | Telegram webhook, private `/start`, manual match, protected registration export | Telegram, n8n | local Telegram identities and Telegram-to-Bitrix mappings |
 | Telegram activity summary | attraction | `startTelegramActivityReport` background job | Telegram | none |
@@ -75,6 +79,7 @@ external systems, data reads, and writes.
 ```text
 Bitrix24 -> sync/import -> SQLite snapshot -> analytics reports -> web dashboard
 Bitrix24 -> call webhook -> call analysis -> local analysis -> call enrichment
+Bitrix24 Open Lines -> normal sync -> SQLite messenger snapshots -> automatic Activities summary / bounded reader / server-side analyzer
 call enrichment -> Telegram approval -> approved narrow Bitrix writeback
 Telegram /start -> SQLite identity -> manual Bitrix match -> n8n notification recipient
 SQLite snapshot -> activity/call workload reports -> Telegram activity summary
