@@ -3538,4 +3538,142 @@ describe('apiClient', () => {
       fetchMock.mock.calls.map(([url]) => new URL(String(url), window.location.origin).pathname),
     ).toEqual(['/api/modules/leadgen/sync'])
   })
+
+  it('posts the selected range and managers for a normalized messenger summary', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        summary: {
+          from: '2026-08-01T00:00:00+03:00',
+          to: '2026-08-03T23:59:59+03:00',
+          totalMessages: 9,
+          messagesWithText: 8,
+          attachmentOnlyMessages: 1,
+          uniqueDialogs: 4,
+          dealsWithMessages: 3,
+          systemMessagesExcluded: 2,
+          managerRows: [
+            {
+              managerId: '78',
+              managerName: 'Егоров Андрей',
+              from: '2026-08-01T00:00:00+03:00',
+              to: '2026-08-03T23:59:59+03:00',
+              currentDeals: 10,
+              sessions: 5,
+              uniqueDialogs: 4,
+              dealsWithMessages: 3,
+              messages: 9,
+              messagesWithText: 8,
+              attachmentOnlyMessages: 1,
+              systemMessagesExcluded: 2,
+              senderKinds: { connector: 6, operator: 3, unknown: 0 },
+              channels: [
+                { key: 'wz_telegram', label: 'WAZZUP: Telegram', messages: 9 },
+              ],
+              directionAvailable: false,
+              personalAuthorAvailable: false,
+            },
+          ],
+          directionAvailable: false,
+          personalAuthorAvailable: false,
+        },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const summary = await apiClient.getMessengerReportSummary({
+      managerIds: ['78', '11234'],
+      from: '2026-08-01T00:00:00+03:00',
+      to: '2026-08-03T23:59:59+03:00',
+    })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(new URL(url, window.location.origin).pathname).toBe(
+      '/api/messenger-messages/summary',
+    )
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({
+      managerIds: ['78', '11234'],
+      from: '2026-08-01T00:00:00+03:00',
+      to: '2026-08-03T23:59:59+03:00',
+    })
+    expect(summary).toMatchObject({
+      totalMessages: 9,
+      uniqueDialogs: 4,
+      dealsWithMessages: 3,
+      managerRows: [
+        {
+          managerId: '78',
+          messages: 9,
+          channels: [
+            { key: 'wz_telegram', label: 'WAZZUP: Telegram', messages: 9 },
+          ],
+        },
+      ],
+    })
+  })
+
+  it('posts a bounded messenger reader request and preserves plain message text', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        details: {
+          managerId: '78',
+          managerName: 'Егоров Андрей',
+          from: '2026-08-01T00:00:00+03:00',
+          to: '2026-08-03T23:59:59+03:00',
+          totalMessages: 2,
+          returnedMessages: 1,
+          truncated: true,
+          directionAvailable: false,
+          personalAuthorAvailable: false,
+          messages: [
+            {
+              id: '501',
+              sessionId: '441',
+              dealId: '1001',
+              occurredAt: '2026-08-03T10:15:00+03:00',
+              channel: { key: 'wz_telegram', label: 'WAZZUP: Telegram' },
+              senderKind: 'connector',
+              direction: 'unknown',
+              text: '<b>Полный текст как данные</b>',
+              hasAttachment: false,
+            },
+          ],
+        },
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const details = await apiClient.getManagerMessageDetails({
+      managerId: '78',
+      from: '2026-08-01T00:00:00+03:00',
+      to: '2026-08-03T23:59:59+03:00',
+      limit: 250,
+    })
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    expect(new URL(url, window.location.origin).pathname).toBe(
+      '/api/messenger-messages/read',
+    )
+    expect(init.method).toBe('POST')
+    expect(JSON.parse(String(init.body))).toEqual({
+      managerId: '78',
+      from: '2026-08-01T00:00:00+03:00',
+      to: '2026-08-03T23:59:59+03:00',
+      limit: 250,
+    })
+    expect(details).toMatchObject({
+      totalMessages: 2,
+      returnedMessages: 1,
+      truncated: true,
+      messages: [
+        {
+          id: '501',
+          text: '<b>Полный текст как данные</b>',
+          senderKind: 'connector',
+        },
+      ],
+    })
+  })
 })

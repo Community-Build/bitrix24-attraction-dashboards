@@ -342,10 +342,18 @@ Privacy and module boundaries:
 - Current research note: [MESSAGE_METRICS_RESEARCH.md](./MESSAGE_METRICS_RESEARCH.md).
 - Bitrix-only implementation can count non-system Open Lines messages through
   `imopenlines.session.history.get` without persisting message text.
-- Implemented backend boundary: `POST /api/messenger-messages/collect` performs
-  a leader-only, one-manager, maximum-31-day live collection and returns safe
-  counts/coverage only. Complete text is available only to the in-process
-  analysis callback and is never part of the report response or SQLite state.
+- Activities exposes a manually triggered messenger section using the selected
+  date and manager filters. It does not call Bitrix during normal report render.
+- `POST /api/messenger-messages/summary` returns total non-system messages,
+  messages with text, attachment-only messages, unique Open Lines sessions,
+  deals with messages, excluded system events, and per-manager/channel rows.
+  `Unique dialogs` is not presented as unique people.
+- `POST /api/messenger-messages/read` is a leader-only, one-manager reader for
+  at most 500 newest messages in a maximum-31-day range. It is `no-store`, omits
+  names/contact data/raw payloads, and never writes text to SQLite, logs, MCP,
+  comments, or report state.
+- `POST /api/messenger-messages/collect` remains the server-side analysis input
+  boundary and returns safe counts/coverage only.
 - Exact `sent` / `received` split is not confirmed from Bitrix-only data because
   external Wazzup/OLChat messages may be recorded as `imconnector` messages even
   when sent outside Bitrix.

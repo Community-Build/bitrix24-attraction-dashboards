@@ -1445,6 +1445,75 @@ export interface ActivitiesWorkloadReport extends ActivitiesWorkloadReportSnapsh
   comparisons?: Array<ReportComparison<ActivitiesWorkloadReportSnapshot>>
 }
 
+export type MessengerSenderKind = 'connector' | 'operator' | 'unknown'
+
+export interface MessengerChannelSummary {
+  key: string
+  label: string
+  messages: number
+}
+
+export interface MessengerManagerSummaryRow {
+  managerId: string
+  managerName: string
+  from: string
+  to: string
+  currentDeals: number
+  sessions: number
+  uniqueDialogs: number
+  dealsWithMessages: number
+  messages: number
+  messagesWithText: number
+  attachmentOnlyMessages: number
+  systemMessagesExcluded: number
+  senderKinds: Record<MessengerSenderKind, number>
+  channels: MessengerChannelSummary[]
+  directionAvailable: false
+  personalAuthorAvailable: false
+}
+
+export interface MessengerReportSummary {
+  from: string
+  to: string
+  totalMessages: number
+  messagesWithText: number
+  attachmentOnlyMessages: number
+  uniqueDialogs: number
+  dealsWithMessages: number
+  systemMessagesExcluded: number
+  managerRows: MessengerManagerSummaryRow[]
+  directionAvailable: false
+  personalAuthorAvailable: false
+}
+
+export interface MessengerMessageDetailItem {
+  id: string
+  sessionId: string
+  dealId: string
+  occurredAt: string
+  channel: {
+    key: string
+    label: string
+  }
+  senderKind: MessengerSenderKind
+  direction: 'unknown'
+  text: string | null
+  hasAttachment: boolean
+}
+
+export interface MessengerMessageDetails {
+  managerId: string
+  managerName: string
+  from: string
+  to: string
+  totalMessages: number
+  returnedMessages: number
+  truncated: boolean
+  directionAvailable: false
+  personalAuthorAvailable: false
+  messages: MessengerMessageDetailItem[]
+}
+
 export interface StageCallMetric {
   stageId: string
   stageName: string

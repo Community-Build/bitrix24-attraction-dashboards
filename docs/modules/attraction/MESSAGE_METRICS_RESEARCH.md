@@ -2,7 +2,7 @@
 
 Date: `2026-05-24`
 
-Implementation update: `2026-08-03`
+Implementation update: `2026-08-04`
 
 This note records the current Bitrix24 / Open Lines findings for future message
 metric implementation in the attraction module.
@@ -36,9 +36,10 @@ Safe message fields for local persistence:
 - direction bucket;
 - file/attachment presence as a boolean if needed.
 
-Do not persist or expose:
+Do not persist or expose through aggregate reports, MCP, logs, or comments:
 
-- message text or `textlegacy`;
+- message text or `textlegacy` (the explicit bounded leader reader described
+  below is the only HTTP exception and uses `no-store`);
 - raw attachments;
 - contact names, phones, emails, avatars, URLs, or raw Bitrix payloads.
 
@@ -156,6 +157,28 @@ By Open Lines activity responsible, the same period yielded:
   reports that direction and personal author are unavailable.
 - No semantic scoring rubric or model provider is selected in this change. The
   implemented boundary supplies safe input for that next decision.
+
+## Implemented Activities Summary And Reader
+
+- The Activities screen has a leader-only messenger section. It uses the
+  selected date and manager filters but performs no Bitrix read until the user
+  explicitly starts the calculation.
+- `POST /api/messenger-messages/summary` collects all selected enabled managers
+  in one pass and returns no raw text. It reports total non-system messages,
+  unique Open Lines sessions, unique deal IDs with messages, text/attachment
+  coverage, channels, and manager rows.
+- `Unique dialogs` means distinct Open Lines session IDs with a retained message;
+  `deals with messages` is separate. Neither metric is presented as unique real
+  people because provider-level identity is not available reliably.
+- `POST /api/messenger-messages/read` accepts one enabled manager, no more than
+  31 days, and at most 500 newest messages. It returns safe IDs, timestamp,
+  channel, sender-kind bucket, attachment flag, and full text with
+  `Cache-Control: no-store`.
+- The reader omits chat/contact/deal names, phones, emails, avatars, and raw
+  Bitrix payloads. The web client renders text as a plain React text node and
+  never interprets conversation content as HTML.
+- Both new routes require attraction leader access before any Bitrix call. Text
+  is not written to SQLite, logs, MCP, comments, or report state.
 
 ## Read-Only Production Coverage Audit
 

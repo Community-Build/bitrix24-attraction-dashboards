@@ -46,7 +46,7 @@ map that future refactors should preserve.
 | --- | --- | --- | --- | --- |
 | Analytics | attraction | `ProtoApp`, `scene-registry.ts`, `scenes.tsx`, `/api/reports/*` | SQLite snapshot, report builders, `REPORT_REGISTRY.md` | Operational, sales, plan, activities, cohorts, sources, revenue velocity, unit economics, funnel flow. |
 | Call analysis | attraction | `CallAnalysisWorkspace`, `/api/calls/*` | Bitrix call activities, local analysis storage, call analysis service | Covers manual queue analysis and automatic webhook intake. |
-| Messenger analysis input | attraction | `/api/messenger-messages/collect`, `messenger-message-collection.ts` | Current attraction deals, manager whitelist, Bitrix Open Lines | Leader-only on-demand collection; complete text is process-memory-only and HTTP returns aggregates. |
+| Messenger analysis and Activities reader | attraction | Activities messenger section, `/api/messenger-messages/summary`, `/read`, `/collect`, `messenger-message-collection.ts` | Current attraction deals, manager whitelist, Bitrix Open Lines | Leader-only manual collection; summary is aggregate-only, bounded reader text is transient and no-store. |
 | Ontology | attraction | `OntologyHubScene`, ontology API routes, MCP resources | `docs/modules/attraction/MODULE_ONTOLOGY.md`, ontology registry JSON | Business vocabulary and report bindings. |
 | KI playbook | attraction | `PlaybookScene`, `PlaybookReader`, MCP resources | `docs/modules/attraction/playbook/playbook-ki.html` | Operational knowledge surface, not a report. |
 | Comments and Paperclip | platform | dashboard comment mode, `/api/proto-comments`, Paperclip routes | comments SQLite tables, `ops/paperclip/*` | Product feedback and implementation loop. Not part of business ontology. |
@@ -63,7 +63,7 @@ external systems, data reads, and writes.
 | Sync and snapshot | attraction | sync routes, auto-sync startup, `performManualSync` | Bitrix24 | local SQLite snapshot |
 | Analytics reports | attraction | `/api/dashboard`, `/api/reports/*`, report domain builders | none at render time | none |
 | Call analysis | attraction | `/api/calls/*`, call analysis service | Bitrix24 recordings, OpenRouter | local call analysis tables |
-| Messenger message analysis input | attraction | `/api/messenger-messages/collect`, messenger collection service | Bitrix24 Open Lines | none; raw text is transient only |
+| Messenger message analysis and reader | attraction | `/api/messenger-messages/summary`, `/read`, `/collect`, messenger collection service | Bitrix24 Open Lines | none; raw text is transient only |
 | Call enrichment | attraction | webhook intake, enrichment orchestrator, approval service, expiry job | Bitrix24, Telegram, OpenRouter | local proposals; approved Bitrix field updates |
 | Telegram manager registration | attraction | Telegram webhook, private `/start`, manual match, protected registration export | Telegram, n8n | local Telegram identities and Telegram-to-Bitrix mappings |
 | Telegram activity summary | attraction | `startTelegramActivityReport` background job | Telegram | none |
@@ -77,7 +77,7 @@ external systems, data reads, and writes.
 ```text
 Bitrix24 -> sync/import -> SQLite snapshot -> analytics reports -> web dashboard
 Bitrix24 -> call webhook -> call analysis -> local analysis -> call enrichment
-Bitrix24 Open Lines -> leader-triggered transient collection -> server-side analyzer -> safe summary
+Bitrix24 Open Lines -> leader-triggered transient collection -> safe Activities summary / bounded reader / server-side analyzer
 call enrichment -> Telegram approval -> approved narrow Bitrix writeback
 Telegram /start -> SQLite identity -> manual Bitrix match -> n8n notification recipient
 SQLite snapshot -> activity/call workload reports -> Telegram activity summary

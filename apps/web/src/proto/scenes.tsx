@@ -47,6 +47,7 @@ import {
 import { revenueVelocityTooltips } from '@/lib/revenue-velocity-tooltips'
 import { cn } from '@/lib/utils'
 import { buildDashboardQueryFromProtoFilters } from '@/proto/live-reporting'
+import { ActivitiesMessengerSection } from '@/proto/activities-messenger-section'
 import { FunnelStageDistributionChart } from '@/proto/funnel-stage-distribution-chart'
 import { SourceCohortStageConversionSection } from '@/proto/source-cohort-trajectory-section'
 import { managerOptions, sceneMetadata, sourceOptions } from '@/proto/scene-registry'
@@ -4860,7 +4861,11 @@ function BusinessClubWorkloadSection({
   )
 }
 
-export function ActivitiesScene({ filters, runtimeData }: SceneComponentProps) {
+export function ActivitiesScene({
+  filters,
+  runtimeData,
+  canReadMessengerMessages = false,
+}: SceneComponentProps) {
   const [summarySort, setSummarySort] = useState<ActivitySummarySort>({
     index: 2,
     direction: 'desc',
@@ -5136,6 +5141,11 @@ export function ActivitiesScene({ filters, runtimeData }: SceneComponentProps) {
           </table>
         </div>
       </section>
+
+      <ActivitiesMessengerSection
+        filters={filters}
+        canRead={canReadMessengerMessages}
+      />
 
       {activitiesWorkload ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">

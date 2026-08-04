@@ -428,6 +428,7 @@ export interface SceneComponentProps {
   commentMode: boolean
   filters: ProtoFilterState
   runtimeData?: ProtoRuntimeData
+  canReadMessengerMessages?: boolean
   salesPlanQuarter?: { year: number; quarter: number }
   salesPlanLoading?: boolean
   salesPlanSaving?: boolean

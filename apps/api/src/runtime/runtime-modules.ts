@@ -96,6 +96,8 @@ export const attractionRuntimeModules = [
     kind: "http",
     currentEntrypoints: [
       "/api/messenger-messages/collect",
+      "/api/messenger-messages/summary",
+      "/api/messenger-messages/read",
       "apps/api/src/server/messenger-message-collection.ts"
     ],
     reads: [
@@ -107,10 +109,11 @@ export const attractionRuntimeModules = [
     externalSystems: ["Bitrix24"],
     sourceOfTruth: [
       "docs/modules/attraction/MESSAGE_METRICS_RESEARCH.md",
-      "plans/037-transient-messenger-message-collection.md"
+      "plans/037-transient-messenger-message-collection.md",
+      "plans/038-activities-messenger-summary-and-reader.md"
     ],
     notes:
-      "Leader-only on-demand collection. Complete message text is process-memory-only and may be supplied to a server-side analyzer; HTTP returns safe aggregates only."
+      "Leader-only on-demand collection. Summary HTTP is aggregate-only; the bounded no-store reader returns transient text for one manager and never persists it."
   },
   {
     id: "call-enrichment",

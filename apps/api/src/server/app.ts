@@ -117,7 +117,11 @@ import type { TelegramManagerRegistrationService } from "./telegram-manager-regi
 import { MessengerMessageCollectionError } from "./messenger-message-collection.js";
 import type {
   MessengerMessageCollectionInput,
-  MessengerMessageSummary
+  MessengerMessageDetails,
+  MessengerMessageDetailsInput,
+  MessengerMessageSummary,
+  MessengerReportSummary,
+  MessengerReportSummaryInput
 } from "./messenger-message-collection.js";
 import {
   buildDailyActivityReportRange,
@@ -329,6 +333,12 @@ interface AppConfig {
       getManagerMessageSummary(
         input: MessengerMessageCollectionInput
       ): Promise<MessengerMessageSummary>;
+      getMessengerReportSummary?(
+        input: MessengerReportSummaryInput
+      ): Promise<MessengerReportSummary>;
+      getManagerMessageDetails?(
+        input: MessengerMessageDetailsInput
+      ): Promise<MessengerMessageDetails>;
     };
   };
   telegramActivityReport?: {
@@ -818,6 +828,23 @@ const messengerMessageCollectionBodySchema = z
     managerId: z.string().trim().min(1).max(64),
     from: z.string().datetime({ offset: true }),
     to: z.string().datetime({ offset: true })
+  })
+  .strict();
+
+const messengerReportSummaryBodySchema = z
+  .object({
+    managerIds: z.array(z.string().trim().min(1).max(64)).max(100).default([]),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true })
+  })
+  .strict();
+
+const messengerMessageReaderBodySchema = z
+  .object({
+    managerId: z.string().trim().min(1).max(64),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    limit: z.number().int().min(1).max(500).optional()
   })
   .strict();
 
@@ -2778,6 +2805,57 @@ export function createApp(
         response.set("Cache-Control", "no-store");
         response.json({
           summary: await messengerMessages.service.getManagerMessageSummary(payload)
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+    summary: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (
+        !messengerMessages?.enabled ||
+        !messengerMessages.service?.getMessengerReportSummary
+      ) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerReportSummaryBodySchema.parse(request.body);
+        response.set("Cache-Control", "no-store");
+        response.json({
+          summary:
+            await messengerMessages.service.getMessengerReportSummary(payload)
+        });
+      } catch (error) {
+        next(error);
+      }
+    },
+    read: async (request, response, next) => {
+      const messengerMessages = config.messengerMessages;
+      if (
+        !messengerMessages?.enabled ||
+        !messengerMessages.service?.getManagerMessageDetails
+      ) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+        return;
+      }
+      try {
+        const payload = messengerMessageReaderBodySchema.parse(request.body);
+        response.set("Cache-Control", "no-store");
+        response.json({
+          details:
+            await messengerMessages.service.getManagerMessageDetails({
+              managerId: payload.managerId,
+              from: payload.from,
+              to: payload.to,
+              ...(payload.limit === undefined ? {} : { limit: payload.limit })
+            })
         });
       } catch (error) {
         next(error);

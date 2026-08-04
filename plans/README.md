@@ -51,6 +51,7 @@ architectural issue found in the deep review.
 | [035](./035-fix-conversion-event-correctness.md) | Fix conversion event correctness | P0 | S | 034 | DONE |
 | [036](./036-fix-current-attraction-scope.md) | Reconcile current attraction scope without losing history | P0 | L | 027 | DONE |
 | [037](./037-transient-messenger-message-collection.md) | Collect messenger texts transiently for manager analysis | P1 | M | - | DONE |
+| [038](./038-activities-messenger-summary-and-reader.md) | Add messenger totals and a transient reader to Activities | P1 | L | 037 | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale - finding fixed independently or approach

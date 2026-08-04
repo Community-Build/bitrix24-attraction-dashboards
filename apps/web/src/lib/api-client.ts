@@ -52,6 +52,10 @@ import type {
   ManagerActionOutcomeDealSlaStatus,
   ManagerActionOutcomeReport,
   ManagerActionOutcomeReportSnapshot,
+  MessengerManagerSummaryRow,
+  MessengerMessageDetails,
+  MessengerReportSummary,
+  MessengerSenderKind,
   MetaResponse,
   OperationalDashboardReport,
   OperationalMeetingSlotCount,
@@ -3362,6 +3366,105 @@ function normalizeActivitiesWorkloadReport(value: unknown): ActivitiesWorkloadRe
   }
 }
 
+function normalizeMessengerSenderKind(value: unknown): MessengerSenderKind {
+  return value === 'connector' || value === 'operator' ? value : 'unknown'
+}
+
+function normalizeMessengerManagerSummary(
+  value: unknown,
+): MessengerManagerSummaryRow {
+  const data = isRecord(value) ? value : {}
+  const senderKinds = isRecord(data.senderKinds) ? data.senderKinds : {}
+
+  return {
+    managerId: asString(data.managerId),
+    managerName: asString(data.managerName),
+    from: asString(data.from),
+    to: asString(data.to),
+    currentDeals: asNumber(data.currentDeals),
+    sessions: asNumber(data.sessions),
+    uniqueDialogs: asNumber(data.uniqueDialogs),
+    dealsWithMessages: asNumber(data.dealsWithMessages),
+    messages: asNumber(data.messages),
+    messagesWithText: asNumber(data.messagesWithText),
+    attachmentOnlyMessages: asNumber(data.attachmentOnlyMessages),
+    systemMessagesExcluded: asNumber(data.systemMessagesExcluded),
+    senderKinds: {
+      connector: asNumber(senderKinds.connector),
+      operator: asNumber(senderKinds.operator),
+      unknown: asNumber(senderKinds.unknown),
+    },
+    channels: asArray(data.channels, (value) => {
+      const channel = isRecord(value) ? value : {}
+      return {
+        key: asString(channel.key),
+        label: asString(channel.label),
+        messages: asNumber(channel.messages),
+      }
+    }),
+    directionAvailable: false,
+    personalAuthorAvailable: false,
+  }
+}
+
+function normalizeMessengerReportSummaryResponse(
+  value: unknown,
+): MessengerReportSummary {
+  const response = isRecord(value) ? value : {}
+  const data = isRecord(response.summary) ? response.summary : {}
+
+  return {
+    from: asString(data.from),
+    to: asString(data.to),
+    totalMessages: asNumber(data.totalMessages),
+    messagesWithText: asNumber(data.messagesWithText),
+    attachmentOnlyMessages: asNumber(data.attachmentOnlyMessages),
+    uniqueDialogs: asNumber(data.uniqueDialogs),
+    dealsWithMessages: asNumber(data.dealsWithMessages),
+    systemMessagesExcluded: asNumber(data.systemMessagesExcluded),
+    managerRows: asArray(data.managerRows, normalizeMessengerManagerSummary),
+    directionAvailable: false,
+    personalAuthorAvailable: false,
+  }
+}
+
+function normalizeMessengerMessageDetailsResponse(
+  value: unknown,
+): MessengerMessageDetails {
+  const response = isRecord(value) ? value : {}
+  const data = isRecord(response.details) ? response.details : {}
+
+  return {
+    managerId: asString(data.managerId),
+    managerName: asString(data.managerName),
+    from: asString(data.from),
+    to: asString(data.to),
+    totalMessages: asNumber(data.totalMessages),
+    returnedMessages: asNumber(data.returnedMessages),
+    truncated: asBoolean(data.truncated),
+    directionAvailable: false,
+    personalAuthorAvailable: false,
+    messages: asArray(data.messages, (value) => {
+      const message = isRecord(value) ? value : {}
+      const channel = isRecord(message.channel) ? message.channel : {}
+      return {
+        id: asString(message.id),
+        sessionId: asString(message.sessionId),
+        dealId: asString(message.dealId),
+        occurredAt: asString(message.occurredAt),
+        channel: {
+          key: asString(channel.key),
+          label: asString(channel.label),
+        },
+        senderKind: normalizeMessengerSenderKind(message.senderKind),
+        direction: 'unknown',
+        text: asNullableString(message.text),
+        hasAttachment: asBoolean(message.hasAttachment),
+      }
+    }),
+  }
+}
+
 function normalizeCallsWorkloadSnapshot(value: unknown): CallsWorkloadReportSnapshot {
   const data = isRecord(value) ? value : {}
   const normalizeCallPopulation = (value: unknown) => {
@@ -5247,6 +5350,35 @@ export const apiClient = {
       buildUrl('/api/reports/activities-workload', buildQueryParams(query)),
       { method: 'GET' },
       normalizeActivitiesWorkloadReport,
+    )
+  },
+  async getMessengerReportSummary(input: {
+    managerIds: string[]
+    from: string
+    to: string
+  }) {
+    return requestJson(
+      buildUrl('/api/messenger-messages/summary'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      normalizeMessengerReportSummaryResponse,
+    )
+  },
+  async getManagerMessageDetails(input: {
+    managerId: string
+    from: string
+    to: string
+    limit?: number
+  }) {
+    return requestJson(
+      buildUrl('/api/messenger-messages/read'),
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      },
+      normalizeMessengerMessageDetailsResponse,
     )
   },
   async getAcquisitionOutcomesReport(query: DashboardQuery) {
