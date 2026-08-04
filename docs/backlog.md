@@ -25,37 +25,42 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
-### Activities messenger totals and transient manager reader
+### Activities messenger totals and SQLite-backed manager reader
 - Area: activities, web, api, data
 - Problem: the Activities report does not show messenger-message volume for its
   selected date/manager filters, and an authorized leader cannot inspect the
   underlying text without leaving the reporting workflow.
-- Expected behavior: the Activities screen starts a bounded live calculation
-  only after an explicit leader action, shows outgoing messages, unique Open
-  Lines dialogs and deals with outgoing messages, incoming messages, and
-  manager rows, and opens full text in a separate transient reader.
+- Expected behavior: the Activities screen automatically reads cached messenger
+  totals for the common date/manager filter, shows all known-direction outgoing
+  messages with confirmed/unknown author split, unique Open Lines dialogs and deals,
+  incoming/unknown-direction messages, and opens stored full text separately.
 - Acceptance criteria:
   - Every selected manager must be enabled in the attraction whitelist and
-    messages must belong to current attraction deals assigned to that manager.
-  - System events are excluded and attachment-only messages are counted
-    separately.
+    messages must belong to current attraction deals. Confirmed outgoing rows
+    use the actual message author; incoming/unknown rows use the deal owner.
+  - System events are retained as evidence but excluded from business totals;
+    attachment-only and outgoing-unknown-author rows are counted separately. The
+    overall sent total and its unique-dialog/deal metrics include both confirmed
+    and unknown-author outgoing rows.
   - The summary response never contains message text; the leader-only reader
     returns at most 500 newest messages with `Cache-Control: no-store`.
-  - Complete `text` is never stored in SQLite, logs, MCP, comments, or report
-    state and is rendered as plain text rather than HTML.
+  - Complete cleaned and original text is stored only in dedicated attraction
+    SQLite tables. It never enters aggregates, logs, MCP, comments, notifications,
+    or raw payload storage and is rendered as plain text rather than HTML.
   - WAZZUP rows use the embedded outgoing/system markers; unmarked WAZZUP rows
     are incoming. OLChat/Umnico direction remains `unknown`.
   - The reader strips WAZZUP service headers, links to the owning deal, and
     downloads only validated message attachments through a bounded proxy.
-  - The collection range is at most 31 days, initial report rendering performs
-    no Bitrix read, and service/HTTP/client/UI tests cover the boundary.
+  - Any valid common dashboard range is accepted, initial report rendering
+    performs no Bitrix read, changing the range automatically reloads the block,
+    and service/HTTP/client/UI tests cover the boundary.
 - Data dependencies:
   - Bitrix methods `crm.activity.list`, `imopenlines.session.history.get`, and
     `disk.file.get` with the existing production webhook.
 - Verification plan:
-  - Focused Vitest suites for Bitrix response parsing, manager scoping,
-    privacy-safe summary output, HTTP authorization, text escaping, and lazy UI
-    loading.
+  - Focused Vitest suites for sync/parsing, SQLite replacement, author-aware
+    scoping, privacy-safe summary output, HTTP authorization, text escaping, and
+    automatic UI loading.
 
 ### Telegram activity summaries by attraction team
 - Area: activities, api

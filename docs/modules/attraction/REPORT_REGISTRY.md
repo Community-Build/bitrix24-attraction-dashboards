@@ -340,24 +340,27 @@ Privacy and module boundaries:
 ### Message metrics research
 
 - Current research note: [MESSAGE_METRICS_RESEARCH.md](./MESSAGE_METRICS_RESEARCH.md).
-- Bitrix-only implementation can count non-system Open Lines messages through
-  `imopenlines.session.history.get` without persisting message text.
-- Activities exposes a manually triggered messenger section using the selected
-  date and manager filters. It does not call Bitrix during normal report render.
-- `POST /api/messenger-messages/summary` returns outgoing messages, unique Open
-  Lines sessions and deals with outgoing messages, incoming messages, unknown
-  direction, total coverage, excluded system events, and per-manager/channel
-  rows. `Unique dialogs` is not presented as unique people.
+- Normal attraction sync reads changed Open Lines sessions through
+  `imopenlines.session.history.get` and persists their full histories in the
+  dedicated attraction SQLite tables defined by ADR 0006.
+- Activities automatically loads the messenger section for the selected date
+  and manager filters. Summary and reader never call Bitrix during report render.
+- `POST /api/messenger-messages/summary` returns all known-direction outgoing
+  messages, unique Open Lines sessions and deals with outgoing messages, incoming
+  messages, unknown direction, total coverage, excluded system events, and
+  per-manager/channel rows. Confirmed-author and unknown-author outgoing counts
+  remain separate; only confirmed rows are credited to the actual message author.
+  `Unique dialogs` is not presented as unique people.
 - `POST /api/messenger-messages/read` is a leader-only, one-manager reader for
-  at most 500 newest messages in a maximum-31-day range. It is `no-store`, omits
-  names/contact data/raw payloads, strips WAZZUP service headers, and never
-  writes text to SQLite, logs, MCP, comments, or report state. Its deal link is
-  built from the configured portal host and internal deal ID.
+  at most 500 newest messages in the exact common dashboard range. It is
+  `no-store`, reads stored cleaned text, omits structured contact data/raw
+  payloads, and never sends text to logs, MCP, comments, notifications, or the
+  aggregate report state. Its deal link uses only the configured host and ID.
 - `POST /api/messenger-messages/attachment` is leader-only and validates the
   exact scoped message/file relation before proxying a maximum-20-MiB binary
   download. Credential-bearing Bitrix URLs never enter the response.
-- `POST /api/messenger-messages/collect` remains the server-side analysis input
-  boundary and returns safe counts/coverage only.
+- `POST /api/messenger-messages/collect` remains a compatibility/server-side
+  analysis boundary over the same SQLite snapshots and returns safe counts only.
 - WAZZUP `sent` / `received` uses its observed embedded outgoing marker;
   unmarked WAZZUP rows are incoming. OLChat/Umnico remain unknown.
 

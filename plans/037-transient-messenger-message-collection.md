@@ -1,5 +1,8 @@
 # Plan 037: Transient messenger-message collection
 
+> Superseded on 2026-08-04 by ADR 0006 and plan 040 for current runtime behavior.
+> This completed plan remains as implementation history.
+
 ## Outcome
 
 Provide a tested attraction-owned backend boundary that obtains complete

@@ -3552,6 +3552,7 @@ describe('apiClient', () => {
           uniqueDialogs: 4,
           dealsWithMessages: 3,
           outgoingMessages: 6,
+          outgoingUnknownAuthorMessages: 2,
           incomingMessages: 2,
           unknownDirectionMessages: 1,
           uniqueOutgoingDialogs: 3,
@@ -3568,6 +3569,7 @@ describe('apiClient', () => {
               uniqueDialogs: 4,
               dealsWithMessages: 3,
               outgoingMessages: 6,
+              outgoingUnknownAuthorMessages: 2,
               incomingMessages: 2,
               unknownDirectionMessages: 1,
               uniqueOutgoingDialogs: 3,
@@ -3610,6 +3612,7 @@ describe('apiClient', () => {
     expect(summary).toMatchObject({
       totalMessages: 9,
       outgoingMessages: 6,
+      outgoingUnknownAuthorMessages: 2,
       incomingMessages: 2,
       unknownDirectionMessages: 1,
       uniqueOutgoingDialogs: 3,
@@ -3621,6 +3624,7 @@ describe('apiClient', () => {
           managerId: '78',
           messages: 9,
           outgoingMessages: 6,
+          outgoingUnknownAuthorMessages: 2,
           channels: [
             { key: 'wz_telegram', label: 'WAZZUP: Telegram', messages: 9 },
           ],

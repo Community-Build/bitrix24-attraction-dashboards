@@ -1,5 +1,8 @@
 # Plan 038: Activities messenger summary and reader
 
+> Superseded on 2026-08-04 by ADR 0006 and plan 040 for current runtime behavior.
+> This completed plan remains as implementation history.
+
 ## Outcome
 
 Add an attraction-owned messenger section to the Activities screen that uses

@@ -14,8 +14,8 @@ metric implementation in the attraction module.
   `imopenlines.session.history.get` are available.
 - `im.dialog.messages.get` is still blocked with `insufficient_scope`; plain
   `im.*` methods are not available to the webhook.
-- For message counts, `im` scope is not required yet: `imopenlines.session.history.get`
-  returns a `message` object whose keys can be counted without persisting message text.
+- For message counts and stored analysis input, `im` scope is not required:
+  `imopenlines.session.history.get` returns the authoritative session history.
 
 ## Safe Counting Model
 
@@ -23,25 +23,28 @@ Use `crm.activity.list` with `PROVIDER_ID = IMOPENLINES_SESSION` as the entrypoi
 For period queries, filter candidate activities by `LAST_UPDATED` and then filter
 individual history messages by their own `date`.
 
-Safe message fields for local persistence:
+Accepted local persistence fields (ADR 0006):
 
 - Bitrix message id;
-- chat id;
 - session id;
 - message date;
-- CRM owner type/id;
+- attraction deal id and current deal-manager id;
 - activity id;
-- responsible manager id;
 - source/integration/channel;
 - direction bucket;
-- file/attachment presence as a boolean if needed.
+- original author label and resolved whitelist manager ID;
+- cleaned message body and original message body;
+- attachment file IDs and attachment-presence flag;
+- system-event flag and sync timestamps.
 
-Do not persist or expose through aggregate reports, MCP, logs, or comments:
+Do not persist as structured columns or expose through aggregate reports, MCP,
+logs, comments, or notifications:
 
-- message text or `textlegacy` (the explicit bounded leader reader described
-  below is the only HTTP exception and uses `no-store`);
 - raw attachments;
 - contact names, phones, emails, avatars, URLs, or raw Bitrix payloads.
+
+Full message text is the narrow exception: it is stored only in the dedicated
+attraction message table and returned only by the leader reader/server analyzer.
 
 System messages must be excluded from business counts:
 
@@ -78,16 +81,17 @@ The source/channel mapping should be centralized before any report uses it.
 
 ## Manager Attribution
 
-Two attribution modes were checked:
+The early research checked two ownership-based attribution modes:
 
 - by Open Lines activity `RESPONSIBLE_ID`;
 - by attraction deal `ASSIGNED_BY_ID`, using the activity CRM owner deal or the
   latest matching attraction deal for contact-owned activities.
 
-These produce different totals. For attraction sales/reporting, the recommended
-default is attribution by attraction deal responsible. Keep activity responsible
-as an audit/debug dimension because Open Lines ownership can differ from deal
-ownership.
+These produce different totals and neither proves who sent an outgoing message.
+The accepted implementation therefore uses the parsed WAZZUP author or a
+whitelist-matching Bitrix sender ID for outgoing attribution. Incoming and
+unsupported-direction messages use the attraction deal owner. `Телефон` and
+other ambiguous outgoing authors remain a separate bucket.
 
 ## Read-Only Production Sample
 
@@ -135,10 +139,13 @@ By Open Lines activity responsible, the same period yielded:
 - This evidence does not generalize to OLChat or Umnico. Their connector rows
   remain `unknown` until a provider-specific direction field is verified.
 - If `im` scope is later added, `im.dialog.messages.get` can be tested as an
-  alternate message-history source, but it should follow the same privacy rule:
-  count metadata only, never persist message text.
+  alternate message-history source, but it must follow ADR 0006 and never
+  persist raw provider payloads or structured contact data.
 
-## Implemented Transient Collection Boundary
+## Superseded Transient Collection Boundary
+
+The following boundary describes plans 037-039 and is superseded by ADR 0006
+and plan 040. It remains here as implementation history.
 
 - `POST /api/messenger-messages/collect` is an on-demand attraction runtime
   operation, not a dashboard report. With password auth enabled it is available
@@ -160,35 +167,44 @@ By Open Lines activity responsible, the same period yielded:
 - No semantic scoring rubric or model provider is selected in this change. The
   implemented boundary supplies safe input for that next decision.
 
-## Implemented Activities Summary And Reader
+## Current SQLite-backed Summary And Reader
 
 - The Activities screen has a leader-only messenger section. It uses the
-  selected date and manager filters but performs no Bitrix read until the user
-  explicitly starts the calculation.
-- `POST /api/messenger-messages/summary` collects all selected enabled managers
-  in one pass and returns no raw text. Its primary metrics are outgoing
-  messages, unique Open Lines sessions with outgoing messages, unique deal IDs
-  with outgoing messages, and incoming messages. It also reports unknown
-  direction, total non-system coverage, channels, and manager rows.
+  selected date and manager filters and loads automatically without a Bitrix
+  read during rendering.
+- Normal attraction sync discovers changed Open Lines activities, loads session
+  histories with bounded concurrency, atomically replaces refreshed sessions,
+  and advances a dedicated cursor only after complete success.
+- `POST /api/messenger-messages/summary` reads SQLite for all selected enabled
+  managers and returns no raw text. Its overall sent total, unique Open Lines
+  sessions, and unique deal IDs include every known-direction outgoing message.
+  It splits those messages into confirmed-author and unknown-author counts so an
+  ambiguous author is never credited to the current deal owner. It also reports
+  incoming messages, unknown direction, total non-system coverage, channels,
+  and manager rows.
 - `Unique dialogs` means distinct Open Lines session IDs with a retained message;
   `deals with messages` is separate. Neither metric is presented as unique real
   people because provider-level identity is not available reliably.
-- `POST /api/messenger-messages/read` accepts one enabled manager, no more than
-  31 days, and at most 500 newest messages. It returns safe IDs, timestamp,
+- `POST /api/messenger-messages/read` accepts one enabled manager, the exact
+  valid dashboard range, and at most 500 newest messages. It returns safe IDs, timestamp,
   channel, parsed direction/author, a configured-portal deal link, attachment
   IDs, and cleaned full text with `Cache-Control: no-store`.
-- `POST /api/messenger-messages/attachment` re-collects that exact manager,
+- `POST /api/messenger-messages/attachment` validates that exact cached manager,
   range, session, message, and file ID before proxying at most 20 MiB as
   `application/octet-stream`. It never returns the credential-bearing Bitrix
   download URL and does not persist the file.
 - The reader omits chat/contact/deal names, phones, emails, avatars, and raw
   Bitrix payloads. The web client renders text as a plain React text node and
   never interprets conversation content as HTML.
-- Summary, reader, and attachment routes require attraction leader access
-  before any Bitrix call. Text and files are not written to SQLite, logs, MCP,
-  comments, or report state.
+- Summary, reader, and attachment routes require attraction leader access.
+  Text is stored only in the dedicated SQLite table and never enters summary,
+  logs, MCP, comments, notifications, or report state; file bytes are transient.
 
 ## Direction Coverage Validation
+
+This historical sample grouped rows by current deal owner and therefore must
+not be reused as current per-manager outgoing totals. Plan 040 applies the
+author-aware rule from ADR 0006.
 
 Local read-only validation on `2026-08-04` used the range
 `2026-07-04T00:00:00+03:00` through `2026-08-03T23:59:59+03:00` and the current
@@ -213,6 +229,9 @@ in-process analyzer, but it must not be counted as manager-sent until provider
 direction evidence exists.
 
 ## Read-Only Production Coverage Audit
+
+This is a pre-persistence discovery snapshot. Its counts remain evidence of
+source coverage, not the current SQLite/report implementation contract.
 
 Period checked: `2026-07-04T00:00:00+03:00` through
 `2026-08-03T23:59:59+03:00`. The audit used the eight currently enabled

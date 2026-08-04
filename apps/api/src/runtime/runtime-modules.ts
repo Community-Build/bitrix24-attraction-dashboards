@@ -91,7 +91,7 @@ export const attractionRuntimeModules = [
   },
   {
     id: "messenger-message-analysis",
-    label: "Transient messenger-message analysis input",
+    label: "SQLite-backed messenger-message analysis",
     owner: "attraction",
     kind: "http",
     currentEntrypoints: [
@@ -99,24 +99,28 @@ export const attractionRuntimeModules = [
       "/api/messenger-messages/summary",
       "/api/messenger-messages/read",
       "/api/messenger-messages/attachment",
-      "apps/api/src/server/messenger-message-collection.ts"
+      "apps/api/src/server/messenger-message-collection.ts",
+      "apps/api/src/server/messenger-message-sync.ts",
+      "apps/api/src/server/sqlite/messenger-messages.ts"
     ],
     reads: [
       "current attraction deal scope",
       "manager whitelist",
-      "Bitrix24 Open Lines session history",
+      "local SQLite messenger session/message snapshots",
       "Bitrix24 Disk file metadata and bounded downloads"
     ],
-    writes: [],
+    writes: ["local SQLite messenger session/message snapshots"],
     externalSystems: ["Bitrix24"],
     sourceOfTruth: [
       "docs/modules/attraction/MESSAGE_METRICS_RESEARCH.md",
+      "docs/adr/0006-persist-messenger-messages-for-analysis.md",
       "plans/037-transient-messenger-message-collection.md",
       "plans/038-activities-messenger-summary-and-reader.md",
-      "plans/039-messenger-direction-links-and-attachments.md"
+      "plans/039-messenger-direction-links-and-attachments.md",
+      "plans/040-sqlite-messenger-reporting.md"
     ],
     notes:
-      "Leader-only on-demand collection. Summary HTTP is aggregate-only; the bounded no-store reader returns transient text and validated attachment downloads for one manager and never persists either."
+      "Normal attraction sync persists full message text with a dedicated cursor. Leader-only aggregate and reader routes use SQLite and follow the common report filters; attachment bytes stay transient."
   },
   {
     id: "call-enrichment",

@@ -251,7 +251,7 @@ export function MessengerMessageReader({
               id="messenger-message-reader-description"
               className="mt-1 text-sm leading-5 text-slate-500"
             >
-              Текст загружается только для просмотра и не сохраняется в отчёте.
+              Показаны сохранённые сообщения только за выбранный период отчёта.
             </p>
           </div>
           <button

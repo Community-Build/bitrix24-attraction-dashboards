@@ -1465,6 +1465,7 @@ export interface MessengerManagerSummaryRow {
   dealsWithMessages: number
   messages: number
   outgoingMessages: number
+  outgoingUnknownAuthorMessages: number
   incomingMessages: number
   unknownDirectionMessages: number
   uniqueOutgoingDialogs: number
@@ -1483,6 +1484,7 @@ export interface MessengerReportSummary {
   to: string
   totalMessages: number
   outgoingMessages: number
+  outgoingUnknownAuthorMessages: number
   incomingMessages: number
   unknownDirectionMessages: number
   uniqueOutgoingDialogs: number

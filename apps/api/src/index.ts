@@ -434,7 +434,7 @@ const app = createApp(service, {
     intervalMs: env.attractionAutoSyncIntervalMs
   },
   messengerMessages: {
-    enabled: env.bitrixEnabled,
+    enabled: true,
     service: messengerMessages
   },
   callEnrichmentIntake: {

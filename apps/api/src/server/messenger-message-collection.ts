@@ -1,3 +1,9 @@
+import type {
+  MessengerMessageDirection,
+  MessengerMessageSnapshot,
+  MessengerSenderKind
+} from "../domain/messenger-messages.js";
+
 type MessengerMessageRepository = {
   getManagerWhitelistSettings(moduleKey: string): Promise<
     Array<{
@@ -6,49 +12,25 @@ type MessengerMessageRepository = {
       enabled: boolean;
     }>
   >;
-  getCurrentAttractionScope(): Promise<{
-    dealIds: string[];
-  }>;
+  getCurrentAttractionScope(): Promise<{ dealIds: string[] }>;
   getDealsByIds(dealIds: string[]): Promise<
     Array<{
       id: string;
       assignedById: string | null;
     }>
   >;
+  listMessengerMessages(input: {
+    managerIds?: string[];
+    from: string;
+    to: string;
+  }): Promise<MessengerMessageSnapshot[]>;
+  getMessengerMessage(input: {
+    sessionId: string;
+    messageId: string;
+  }): Promise<MessengerMessageSnapshot | null>;
 };
 
 type MessengerMessageClient = {
-  listOpenLineActivities(input: {
-    ownerIds: string[];
-    modifiedAfter: string | null;
-  }): Promise<
-    Array<{
-      ID: string;
-      OWNER_ID: string;
-      ORIGIN_ID: string | null;
-    }>
-  >;
-  getOpenLineSessionHistory(sessionId: string): Promise<{
-    sessionId: string;
-    chat: {
-      id: string | null;
-      entityId: string | null;
-      entityType: string | null;
-    };
-    messages: Array<{
-      id: string;
-      chatId: string | null;
-      senderId: string;
-      date: string;
-      text: string | null;
-      attachmentFileIds?: string[];
-      hasAttachment: boolean;
-    }>;
-    users: Array<{
-      id: string;
-      connector: boolean | null;
-    }>;
-  }>;
   downloadDiskFile?(
     fileId: string,
     options: { maxBytes: number }
@@ -59,8 +41,7 @@ type MessengerMessageClient = {
   } | null>;
 };
 
-export type MessengerSenderKind = "connector" | "operator" | "unknown";
-export type MessengerMessageDirection = "outgoing" | "incoming" | "unknown";
+export type { MessengerMessageDirection, MessengerSenderKind };
 
 export interface MessengerAnalysisMessage {
   id: string;
@@ -100,6 +81,7 @@ export interface MessengerMessageSummary {
   dealsWithMessages: number;
   messages: number;
   outgoingMessages: number;
+  outgoingUnknownAuthorMessages: number;
   incomingMessages: number;
   unknownDirectionMessages: number;
   uniqueOutgoingDialogs: number;
@@ -134,6 +116,7 @@ export interface MessengerReportSummary {
   to: string;
   totalMessages: number;
   outgoingMessages: number;
+  outgoingUnknownAuthorMessages: number;
   incomingMessages: number;
   unknownDirectionMessages: number;
   uniqueOutgoingDialogs: number;
@@ -212,135 +195,26 @@ export class MessengerMessageCollectionError extends Error {
   }
 }
 
-const MAX_COLLECTION_RANGE_MS = 31 * 24 * 60 * 60 * 1_000;
 const MAX_DETAIL_MESSAGES = 500;
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
-const WAZZUP_OUTGOING_MARKER =
-  /^\s*===\s*Исходящее сообщение(?:,\s*автор:\s*(.+?))?\s*===\s*(?:\r?\n)?/iu;
-const WAZZUP_SYSTEM_MARKER = /^\s*===\s*SYSTEM\s+WZ\s*===/iu;
 
 function parseCollectionRange(input: { from: string; to: string }) {
   const from = Date.parse(input.from);
   const to = Date.parse(input.to);
-  if (
-    !Number.isFinite(from) ||
-    !Number.isFinite(to) ||
-    from > to ||
-    to - from > MAX_COLLECTION_RANGE_MS
-  ) {
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
     throw new MessengerMessageCollectionError(
       "INVALID_RANGE",
-      "Messenger message collection requires a valid range of at most 31 days."
+      "Messenger messages require a valid date range."
     );
   }
 
   return { from, to };
 }
 
-function extractSessionId(originId: string | null) {
-  return /^IMOL_(\d+)$/u.exec(originId ?? "")?.[1] ?? null;
-}
-
-function resolveChannel(entityId: string | null) {
-  const normalized = entityId?.trim().toLowerCase() ?? "";
-
-  if (normalized.startsWith("wz_telegram")) {
-    return { key: "wz_telegram", label: "WAZZUP: Telegram" };
-  }
-  if (normalized.startsWith("wz_max")) {
-    return { key: "wz_max", label: "WAZZUP: Max" };
-  }
-  if (
-    normalized.startsWith("wz_") &&
-    (normalized.includes("whatsapp") || normalized.includes("_wa"))
-  ) {
-    return { key: "wz_whatsapp", label: "WAZZUP: WhatsApp" };
-  }
-  if (normalized.includes("olchat_tg")) {
-    return { key: "olchat_telegram", label: "OLChat: Telegram" };
-  }
-  if (normalized.includes("olchat_wa")) {
-    return { key: "olchat_whatsapp", label: "OLChat: WhatsApp" };
-  }
-  if (normalized.includes("umnico") && normalized.includes("telegram")) {
-    return { key: "umnico_telegram", label: "Umnico: Telegram" };
-  }
-
-  return {
-    key: "unknown",
-    label: "Неизвестный канал"
-  };
-}
-
-function isInsideRange(value: string, from: number, to: number) {
-  const timestamp = Date.parse(value);
-  return Number.isFinite(timestamp) && timestamp >= from && timestamp <= to;
-}
-
-function normalizeAttachmentFileIds(fileIds: string[] | undefined) {
-  return [
-    ...new Set(
-      (fileIds ?? []).flatMap((fileId) => {
-        const normalized = String(fileId).trim();
-        return normalized ? [normalized] : [];
-      })
-    )
-  ];
-}
-
-function classifyMessage(input: {
-  channelKey: string;
-  senderKind: MessengerSenderKind;
-  text: string | null;
-}) {
-  const text = input.text;
-  if (text && WAZZUP_SYSTEM_MARKER.test(text)) {
-    return {
-      system: true,
-      direction: "unknown" as const,
-      authorLabel: null,
-      text: null
-    };
-  }
-
-  if (text) {
-    const outgoingMatch = WAZZUP_OUTGOING_MARKER.exec(text);
-    if (outgoingMatch) {
-      const authorLabel = outgoingMatch[1]?.trim() || null;
-      const messageText = text.slice(outgoingMatch[0].length).trim() || null;
-      return {
-        system: false,
-        direction: "outgoing" as const,
-        authorLabel,
-        text: messageText
-      };
-    }
-  }
-
-  if (input.senderKind === "operator") {
-    return {
-      system: false,
-      direction: "outgoing" as const,
-      authorLabel: null,
-      text
-    };
-  }
-
-  if (input.channelKey.startsWith("wz_")) {
-    return {
-      system: false,
-      direction: "incoming" as const,
-      authorLabel: null,
-      text
-    };
-  }
-
-  return {
-    system: false,
-    direction: "unknown" as const,
-    authorLabel: null,
-    text
-  };
+function attributedManagerId(message: MessengerMessageSnapshot) {
+  return message.direction === "outgoing" && message.authorManagerId
+    ? message.authorManagerId
+    : message.dealManagerId;
 }
 
 function buildDealUrl(portalHost: string | undefined, dealId: string) {
@@ -376,91 +250,16 @@ export function createMessengerMessageCollectionService(input: {
     managerName: string;
   };
 
-  type CollectedScope = {
+  type CachedScope = {
     managers: EnabledManager[];
     currentDealsByManager: Map<string, number>;
-    sessionsByManager: Map<string, number>;
-    systemMessagesExcludedByManager: Map<string, number>;
-    messages: MessengerAnalysisMessage[];
+    messages: MessengerMessageSnapshot[];
   };
 
-  function buildManagerSummary(
-    manager: EnabledManager,
-    request: { from: string; to: string },
-    collected: CollectedScope
-  ): MessengerMessageSummary {
-    const messages = collected.messages.filter(
-      (message) => message.managerId === manager.managerId
-    );
-    const channelCounts = new Map<
-      string,
-      { key: string; label: string; messages: number }
-    >();
-    const senderKinds: Record<MessengerSenderKind, number> = {
-      connector: 0,
-      operator: 0,
-      unknown: 0
-    };
-
-    for (const message of messages) {
-      senderKinds[message.senderKind] += 1;
-      const channel = channelCounts.get(message.channel.key) ?? {
-        ...message.channel,
-        messages: 0
-      };
-      channel.messages += 1;
-      channelCounts.set(channel.key, channel);
-    }
-    const outgoingMessages = messages.filter(
-      (message) => message.direction === "outgoing"
-    );
-
-    return {
-      managerId: manager.managerId,
-      managerName: manager.managerName,
-      from: request.from,
-      to: request.to,
-      currentDeals:
-        collected.currentDealsByManager.get(manager.managerId) ?? 0,
-      sessions: collected.sessionsByManager.get(manager.managerId) ?? 0,
-      uniqueDialogs: new Set(messages.map((message) => message.sessionId)).size,
-      dealsWithMessages: new Set(messages.map((message) => message.dealId)).size,
-      messages: messages.length,
-      outgoingMessages: outgoingMessages.length,
-      incomingMessages: messages.filter(
-        (message) => message.direction === "incoming"
-      ).length,
-      unknownDirectionMessages: messages.filter(
-        (message) => message.direction === "unknown"
-      ).length,
-      uniqueOutgoingDialogs: new Set(
-        outgoingMessages.map((message) => message.sessionId)
-      ).size,
-      dealsWithOutgoingMessages: new Set(
-        outgoingMessages.map((message) => message.dealId)
-      ).size,
-      messagesWithText: messages.filter(
-        (message) => Boolean(message.text?.trim())
-      ).length,
-      attachmentOnlyMessages: messages.filter(
-        (message) => !message.text?.trim() && message.hasAttachment
-      ).length,
-      systemMessagesExcluded:
-        collected.systemMessagesExcludedByManager.get(manager.managerId) ?? 0,
-      senderKinds,
-      channels: [...channelCounts.values()].sort(
-        (left, right) =>
-          right.messages - left.messages || left.label.localeCompare(right.label)
-      ),
-      directionAvailable: false,
-      personalAuthorAvailable: messages.some((message) => message.authorLabel)
-    };
-  }
-
-  async function collectScope(
+  async function loadScope(
     request: MessengerReportSummaryInput
-  ): Promise<CollectedScope> {
-    const range = parseCollectionRange(request);
+  ): Promise<CachedScope> {
+    parseCollectionRange(request);
     const settings = await input.repository.getManagerWhitelistSettings(
       "attraction"
     );
@@ -468,14 +267,6 @@ export function createMessengerMessageCollectionService(input: {
     const requestedManagerIds = [
       ...new Set((request.managerIds ?? []).map((managerId) => managerId.trim()))
     ];
-    const requestedManagerIdSet = new Set(requestedManagerIds);
-    const managers = (
-      requestedManagerIds.length > 0
-        ? enabledManagers.filter((manager) =>
-            requestedManagerIdSet.has(manager.managerId)
-          )
-        : enabledManagers
-    ).map(({ managerId, managerName }) => ({ managerId, managerName }));
     const enabledManagerIdSet = new Set(
       enabledManagers.map((manager) => manager.managerId)
     );
@@ -490,156 +281,161 @@ export function createMessengerMessageCollectionService(input: {
       );
     }
 
+    const requestedManagerIdSet = new Set(requestedManagerIds);
+    const managers = (
+      requestedManagerIds.length > 0
+        ? enabledManagers.filter((manager) =>
+            requestedManagerIdSet.has(manager.managerId)
+          )
+        : enabledManagers
+    ).map(({ managerId, managerName }) => ({ managerId, managerName }));
     const scope = await input.repository.getCurrentAttractionScope();
     const scopedDeals = await input.repository.getDealsByIds(scope.dealIds);
-    const managerIdSet = new Set(managers.map((manager) => manager.managerId));
-    const selectedDeals = scopedDeals.filter(
-      (deal) => deal.assignedById && managerIdSet.has(deal.assignedById)
-    );
-    const dealManagerIds = new Map(
-      selectedDeals.map((deal) => [deal.id, deal.assignedById as string])
+    const selectedManagerIds = new Set(
+      managers.map((manager) => manager.managerId)
     );
     const currentDealsByManager = new Map<string, number>();
-    for (const deal of selectedDeals) {
-      const managerId = deal.assignedById as string;
+    for (const deal of scopedDeals) {
+      if (!deal.assignedById || !selectedManagerIds.has(deal.assignedById)) {
+        continue;
+      }
       currentDealsByManager.set(
-        managerId,
-        (currentDealsByManager.get(managerId) ?? 0) + 1
+        deal.assignedById,
+        (currentDealsByManager.get(deal.assignedById) ?? 0) + 1
       );
     }
 
-    const ownerIds = selectedDeals.map((deal) => deal.id);
-    const activities =
-      ownerIds.length > 0
-        ? await input.client.listOpenLineActivities({
-            ownerIds,
-            modifiedAfter: request.from
-          })
-        : [];
-    const sessions = new Map<
-      string,
-      { activityId: string; dealId: string; managerId: string }
-    >();
-    for (const activity of activities) {
-      const sessionId = extractSessionId(activity.ORIGIN_ID);
-      const managerId = dealManagerIds.get(activity.OWNER_ID);
-      if (sessionId && managerId) {
-        sessions.set(sessionId, {
-          activityId: activity.ID,
-          dealId: activity.OWNER_ID,
-          managerId
-        });
-      }
-    }
-
-    const messages: MessengerAnalysisMessage[] = [];
-    const seenMessageIds = new Set<string>();
-    const sessionsByManager = new Map<string, number>();
-    const systemMessagesExcludedByManager = new Map<string, number>();
-
-    for (const [sessionId, activity] of sessions) {
-      sessionsByManager.set(
-        activity.managerId,
-        (sessionsByManager.get(activity.managerId) ?? 0) + 1
-      );
-      const history = await input.client.getOpenLineSessionHistory(sessionId);
-      const users = new Map(history.users.map((user) => [user.id, user]));
-      const channel = resolveChannel(history.chat.entityId);
-
-      for (const message of history.messages) {
-        if (!isInsideRange(message.date, range.from, range.to)) {
-          continue;
-        }
-
-        const messageKey = `${sessionId}:${message.id}`;
-        if (seenMessageIds.has(messageKey)) {
-          continue;
-        }
-        seenMessageIds.add(messageKey);
-
-        if (message.senderId === "0") {
-          systemMessagesExcludedByManager.set(
-            activity.managerId,
-            (systemMessagesExcludedByManager.get(activity.managerId) ?? 0) + 1
-          );
-          continue;
-        }
-
-        const connector = users.get(message.senderId)?.connector;
-        const senderKind: MessengerSenderKind =
-          connector === true
-            ? "connector"
-            : connector === false
-              ? "operator"
-              : "unknown";
-        const classification = classifyMessage({
-          channelKey: channel.key,
-          senderKind,
-          text: message.text
-        });
-        if (classification.system) {
-          systemMessagesExcludedByManager.set(
-            activity.managerId,
-            (systemMessagesExcludedByManager.get(activity.managerId) ?? 0) + 1
-          );
-          continue;
-        }
-        const attachmentFileIds = normalizeAttachmentFileIds(
-          message.attachmentFileIds
-        );
-        messages.push({
-          id: message.id,
-          sessionId,
-          activityId: activity.activityId,
-          dealId: activity.dealId,
-          managerId: activity.managerId,
-          occurredAt: message.date,
-          channel,
-          senderKind,
-          direction: classification.direction,
-          authorLabel: classification.authorLabel,
-          text: classification.text,
-          attachmentFileIds,
-          hasAttachment: message.hasAttachment || attachmentFileIds.length > 0
-        });
-      }
-    }
-
-    messages.sort((left, right) => {
-      const timestampDelta =
-        Date.parse(left.occurredAt) - Date.parse(right.occurredAt);
-      return timestampDelta || left.id.localeCompare(right.id);
-    });
     return {
       managers,
       currentDealsByManager,
-      sessionsByManager,
-      systemMessagesExcludedByManager,
-      messages
+      messages: await input.repository.listMessengerMessages({
+        managerIds: managers.map((manager) => manager.managerId),
+        from: request.from,
+        to: request.to
+      })
     };
   }
 
-  async function collectBatch(
-    request: MessengerMessageCollectionInput
-  ): Promise<{
-    batch: MessengerAnalysisBatch;
-    summary: MessengerMessageSummary;
-  }> {
-    const collected = await collectScope({
+  function buildManagerSummary(
+    manager: EnabledManager,
+    request: { from: string; to: string },
+    scope: CachedScope
+  ): MessengerMessageSummary {
+    const attributedMessages = scope.messages.filter(
+      (message) => attributedManagerId(message) === manager.managerId
+    );
+    const systemMessages = attributedMessages.filter((message) => message.system);
+    const messages = attributedMessages.filter((message) => !message.system);
+    const confirmedOutgoingMessages = messages.filter(
+      (message) =>
+        message.direction === "outgoing" &&
+        message.authorManagerId === manager.managerId
+    );
+    const outgoingUnknownAuthorMessages = messages.filter(
+      (message) =>
+        message.direction === "outgoing" && message.authorManagerId === null
+    );
+    const channelCounts = new Map<
+      string,
+      { key: string; label: string; messages: number }
+    >();
+    const senderKinds: Record<MessengerSenderKind, number> = {
+      connector: 0,
+      operator: 0,
+      unknown: 0
+    };
+
+    for (const message of messages) {
+      senderKinds[message.senderKind] += 1;
+      const channel = channelCounts.get(message.channelKey) ?? {
+        key: message.channelKey,
+        label: message.channelLabel,
+        messages: 0
+      };
+      channel.messages += 1;
+      channelCounts.set(channel.key, channel);
+    }
+
+    return {
+      managerId: manager.managerId,
+      managerName: manager.managerName,
+      from: request.from,
+      to: request.to,
+      currentDeals: scope.currentDealsByManager.get(manager.managerId) ?? 0,
+      sessions: new Set(messages.map((message) => message.sessionId)).size,
+      uniqueDialogs: new Set(messages.map((message) => message.sessionId)).size,
+      dealsWithMessages: new Set(messages.map((message) => message.dealId)).size,
+      messages: messages.length,
+      outgoingMessages: confirmedOutgoingMessages.length,
+      outgoingUnknownAuthorMessages: outgoingUnknownAuthorMessages.length,
+      incomingMessages: messages.filter(
+        (message) => message.direction === "incoming"
+      ).length,
+      unknownDirectionMessages: messages.filter(
+        (message) => message.direction === "unknown"
+      ).length,
+      uniqueOutgoingDialogs: new Set(
+        confirmedOutgoingMessages.map((message) => message.sessionId)
+      ).size,
+      dealsWithOutgoingMessages: new Set(
+        confirmedOutgoingMessages.map((message) => message.dealId)
+      ).size,
+      messagesWithText: messages.filter((message) => Boolean(message.text?.trim()))
+        .length,
+      attachmentOnlyMessages: messages.filter(
+        (message) => !message.text?.trim() && message.hasAttachment
+      ).length,
+      systemMessagesExcluded: systemMessages.length,
+      senderKinds,
+      channels: [...channelCounts.values()].sort(
+        (left, right) =>
+          right.messages - left.messages || left.label.localeCompare(right.label)
+      ),
+      directionAvailable: false,
+      personalAuthorAvailable: messages.some(
+        (message) => message.authorManagerId !== null
+      )
+    };
+  }
+
+  async function collectBatch(request: MessengerMessageCollectionInput) {
+    const scope = await loadScope({
       managerIds: [request.managerId],
       from: request.from,
       to: request.to
     });
-    const manager = collected.managers[0];
+    const manager = scope.managers[0];
     if (!manager) {
       throw new MessengerMessageCollectionError(
         "MANAGER_NOT_ENABLED",
         "Manager is not enabled for attraction message analysis."
       );
     }
-    const messages = collected.messages.filter(
-      (message) => message.managerId === manager.managerId
-    );
+    const messages = scope.messages
+      .filter(
+        (message) =>
+          !message.system && attributedManagerId(message) === manager.managerId
+      )
+      .map(
+        (message): MessengerAnalysisMessage => ({
+          id: message.id,
+          sessionId: message.sessionId,
+          activityId: message.activityId,
+          dealId: message.dealId,
+          managerId: manager.managerId,
+          occurredAt: message.occurredAt,
+          channel: {
+            key: message.channelKey,
+            label: message.channelLabel
+          },
+          senderKind: message.senderKind,
+          direction: message.direction,
+          authorLabel: message.authorLabel,
+          text: message.text,
+          attachmentFileIds: message.attachmentFileIds,
+          hasAttachment: message.hasAttachment
+        })
+      );
 
     return {
       batch: {
@@ -648,8 +444,8 @@ export function createMessengerMessageCollectionService(input: {
         from: request.from,
         to: request.to,
         messages
-      },
-      summary: buildManagerSummary(manager, request, collected)
+      } satisfies MessengerAnalysisBatch,
+      summary: buildManagerSummary(manager, request, scope)
     };
   }
 
@@ -657,63 +453,91 @@ export function createMessengerMessageCollectionService(input: {
     async getManagerMessageSummary(request: MessengerMessageCollectionInput) {
       return (await collectBatch(request)).summary;
     },
+
     async getMessengerReportSummary(
       request: MessengerReportSummaryInput
     ): Promise<MessengerReportSummary> {
-      const collected = await collectScope(request);
-      const outgoingMessages = collected.messages.filter(
-        (message) => message.direction === "outgoing"
+      const scope = await loadScope(request);
+      const managerRows = scope.managers.map((manager) =>
+        buildManagerSummary(manager, request, scope)
       );
+
       return {
         from: request.from,
         to: request.to,
-        totalMessages: collected.messages.length,
-        outgoingMessages: outgoingMessages.length,
-        incomingMessages: collected.messages.filter(
-          (message) => message.direction === "incoming"
-        ).length,
-        unknownDirectionMessages: collected.messages.filter(
-          (message) => message.direction === "unknown"
-        ).length,
+        totalMessages: managerRows.reduce(
+          (total, row) => total + row.messages,
+          0
+        ),
+        outgoingMessages: managerRows.reduce(
+          (total, row) => total + row.outgoingMessages,
+          0
+        ),
+        outgoingUnknownAuthorMessages: managerRows.reduce(
+          (total, row) => total + row.outgoingUnknownAuthorMessages,
+          0
+        ),
+        incomingMessages: managerRows.reduce(
+          (total, row) => total + row.incomingMessages,
+          0
+        ),
+        unknownDirectionMessages: managerRows.reduce(
+          (total, row) => total + row.unknownDirectionMessages,
+          0
+        ),
         uniqueOutgoingDialogs: new Set(
-          outgoingMessages.map((message) => message.sessionId)
+          scope.messages
+            .filter(
+              (message) =>
+                !message.system &&
+                message.direction === "outgoing"
+            )
+            .map((message) => message.sessionId)
         ).size,
         dealsWithOutgoingMessages: new Set(
-          outgoingMessages.map((message) => message.dealId)
+          scope.messages
+            .filter(
+              (message) =>
+                !message.system &&
+                message.direction === "outgoing"
+            )
+            .map((message) => message.dealId)
         ).size,
-        messagesWithText: collected.messages.filter((message) =>
-          Boolean(message.text?.trim())
-        ).length,
-        attachmentOnlyMessages: collected.messages.filter(
-          (message) => !message.text?.trim() && message.hasAttachment
-        ).length,
+        messagesWithText: managerRows.reduce(
+          (total, row) => total + row.messagesWithText,
+          0
+        ),
+        attachmentOnlyMessages: managerRows.reduce(
+          (total, row) => total + row.attachmentOnlyMessages,
+          0
+        ),
         uniqueDialogs: new Set(
-          collected.messages.map((message) => message.sessionId)
+          scope.messages
+            .filter((message) => !message.system)
+            .map((message) => message.sessionId)
         ).size,
         dealsWithMessages: new Set(
-          collected.messages.map((message) => message.dealId)
+          scope.messages
+            .filter((message) => !message.system)
+            .map((message) => message.dealId)
         ).size,
-        systemMessagesExcluded: [
-          ...collected.systemMessagesExcludedByManager.values()
-        ].reduce((total, count) => total + count, 0),
-        managerRows: collected.managers.map((manager) =>
-          buildManagerSummary(manager, request, collected)
+        systemMessagesExcluded: managerRows.reduce(
+          (total, row) => total + row.systemMessagesExcluded,
+          0
         ),
+        managerRows,
         directionAvailable: false,
-        personalAuthorAvailable: collected.messages.some(
-          (message) => message.authorLabel
+        personalAuthorAvailable: managerRows.some(
+          (row) => row.personalAuthorAvailable
         )
       };
     },
+
     async getManagerMessageDetails(
       request: MessengerMessageDetailsInput
     ): Promise<MessengerMessageDetails> {
       const limit = request.limit ?? MAX_DETAIL_MESSAGES;
-      if (
-        !Number.isInteger(limit) ||
-        limit < 1 ||
-        limit > MAX_DETAIL_MESSAGES
-      ) {
+      if (!Number.isInteger(limit) || limit < 1 || limit > MAX_DETAIL_MESSAGES) {
         throw new MessengerMessageCollectionError(
           "INVALID_LIMIT",
           `Messenger message detail limit must be between 1 and ${MAX_DETAIL_MESSAGES}.`
@@ -732,7 +556,7 @@ export function createMessengerMessageCollectionService(input: {
         truncated: selectedMessages.length < batch.messages.length,
         directionAvailable: false,
         personalAuthorAvailable: batch.messages.some(
-          (message) => message.authorLabel
+          (message) => message.direction === "outgoing" && message.authorLabel
         ),
         messages: selectedMessages.map((message) => ({
           id: message.id,
@@ -750,16 +574,37 @@ export function createMessengerMessageCollectionService(input: {
         }))
       };
     },
+
     async getManagerMessageAttachment(
       request: MessengerMessageAttachmentInput
     ): Promise<MessengerMessageAttachment> {
-      const { batch } = await collectBatch(request);
-      const message = batch.messages.find(
-        (candidate) =>
-          candidate.sessionId === request.sessionId &&
-          candidate.id === request.messageId
+      const range = parseCollectionRange(request);
+      const settings = await input.repository.getManagerWhitelistSettings(
+        "attraction"
       );
-      if (!message?.attachmentFileIds.includes(request.fileId)) {
+      if (
+        !settings.some(
+          (manager) =>
+            manager.enabled && manager.managerId === request.managerId
+        )
+      ) {
+        throw new MessengerMessageCollectionError(
+          "MANAGER_NOT_ENABLED",
+          "Manager is not enabled for attraction message analysis."
+        );
+      }
+      const message = await input.repository.getMessengerMessage({
+        sessionId: request.sessionId,
+        messageId: request.messageId
+      });
+      if (
+        !message ||
+        message.system ||
+        attributedManagerId(message) !== request.managerId ||
+        message.occurredAtMs < range.from ||
+        message.occurredAtMs > range.to ||
+        !message.attachmentFileIds.includes(request.fileId)
+      ) {
         throw new MessengerMessageCollectionError(
           "ATTACHMENT_NOT_FOUND",
           "Messenger attachment was not found in the requested message.",
@@ -804,6 +649,7 @@ export function createMessengerMessageCollectionService(input: {
         );
       }
     },
+
     async analyzeManagerMessages<T>(
       request: MessengerMessageCollectionInput,
       analyzer: (batch: MessengerAnalysisBatch) => Promise<T>

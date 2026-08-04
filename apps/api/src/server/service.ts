@@ -146,6 +146,10 @@ import type {
   CallAnalysisResultRecord,
   CallAnalysisRunSummary
 } from "./sqlite-repository.js";
+import {
+  synchronizeMessengerMessages,
+  type MessengerSyncRepository
+} from "./messenger-message-sync.js";
 
 interface CreateReportingServiceInput {
   dealCategoryIds: string[];
@@ -4023,6 +4027,49 @@ export function createReportingService(
             : {}),
           afterPersist: async () => {
             await rebuildAnalyticsFacts();
+            if (
+              input.client.listOpenLineActivities &&
+              input.client.getOpenLineSessionHistory
+            ) {
+              try {
+                const messengerSync = await synchronizeMessengerMessages({
+                  repository: input.repository as unknown as MessengerSyncRepository,
+                  client: {
+                    listOpenLineActivities: (request) =>
+                      input.client.listOpenLineActivities!(request),
+                    getOpenLineSessionHistory: (sessionId) =>
+                      input.client.getOpenLineSessionHistory!(sessionId)
+                  },
+                  now: () => nowFactory().toISOString(),
+                  bootstrapLookbackDays:
+                    input.bootstrapLookbackDays ?? 365
+                });
+                if (
+                  messengerSync.failedSessions > 0 &&
+                  process.env.NODE_ENV !== "test"
+                ) {
+                  console.warn(
+                    "sync.messenger_sessions_partial",
+                    JSON.stringify({
+                      sessionsSeen: messengerSync.sessionsSeen,
+                      sessionsStored: messengerSync.sessionsStored,
+                      failedSessions: messengerSync.failedSessions,
+                      cursorAdvanced: messengerSync.cursorAdvanced
+                    })
+                  );
+                }
+              } catch (error) {
+                if (process.env.NODE_ENV !== "test") {
+                  console.warn(
+                    "sync.messenger_messages_failed",
+                    JSON.stringify({
+                      error:
+                        error instanceof Error ? error.name : "unknown"
+                    })
+                  );
+                }
+              }
+            }
           }
         });
         return summary;

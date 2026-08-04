@@ -1,5 +1,8 @@
 # Plan 039: Messenger direction, deal links, and attachments
 
+> Superseded on 2026-08-04 by ADR 0006 and plan 040 for current runtime behavior.
+> This completed plan remains as implementation history.
+
 ## Outcome
 
 Use the direction evidence embedded by WAZZUP in Open Lines message text to

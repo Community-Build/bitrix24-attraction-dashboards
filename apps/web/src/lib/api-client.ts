@@ -3391,6 +3391,9 @@ function normalizeMessengerManagerSummary(
     dealsWithMessages: asNumber(data.dealsWithMessages),
     messages: asNumber(data.messages),
     outgoingMessages: asNumber(data.outgoingMessages),
+    outgoingUnknownAuthorMessages: asNumber(
+      data.outgoingUnknownAuthorMessages,
+    ),
     incomingMessages: asNumber(data.incomingMessages),
     unknownDirectionMessages: asNumber(data.unknownDirectionMessages),
     uniqueOutgoingDialogs: asNumber(data.uniqueOutgoingDialogs),
@@ -3427,6 +3430,9 @@ function normalizeMessengerReportSummaryResponse(
     to: asString(data.to),
     totalMessages: asNumber(data.totalMessages),
     outgoingMessages: asNumber(data.outgoingMessages),
+    outgoingUnknownAuthorMessages: asNumber(
+      data.outgoingUnknownAuthorMessages,
+    ),
     incomingMessages: asNumber(data.incomingMessages),
     unknownDirectionMessages: asNumber(data.unknownDirectionMessages),
     uniqueOutgoingDialogs: asNumber(data.uniqueOutgoingDialogs),

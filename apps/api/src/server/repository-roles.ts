@@ -90,9 +90,9 @@ export type AttractionSettingsRepository = Pick<
   SqliteRepository,
   | "getModuleEventTypeSettings"
   | "replaceModuleEventTypeSettings"
-  | "getManagerWhitelistSettings"
-  | "replaceManagerWhitelistSettings"
-  | "getConversionEventTypeOptions"
+    | "getManagerWhitelistSettings"
+    | "replaceManagerWhitelistSettings"
+    | "getConversionEventTypeOptions"
   | "replaceConversionEventTypeOptions"
   | "getSalesPlanRows"
   | "replaceSalesPlanRows"

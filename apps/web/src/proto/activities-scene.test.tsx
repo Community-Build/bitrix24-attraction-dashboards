@@ -358,7 +358,7 @@ describe('ActivitiesScene', () => {
     ).toHaveTextContent('1')
   })
 
-  it('loads messenger totals only on demand and opens a separate message reader', async () => {
+  it('loads messenger totals automatically for the selected period and opens a separate reader', async () => {
     messengerApiMock.getSummary.mockResolvedValue({
       from: '2026-04-01T00:00:00.000+03:00',
       to: '2026-04-30T23:59:59.999+03:00',
@@ -368,6 +368,7 @@ describe('ActivitiesScene', () => {
       uniqueDialogs: 5,
       dealsWithMessages: 4,
       outgoingMessages: 8,
+      outgoingUnknownAuthorMessages: 2,
       incomingMessages: 3,
       unknownDirectionMessages: 1,
       uniqueOutgoingDialogs: 4,
@@ -384,6 +385,7 @@ describe('ActivitiesScene', () => {
           uniqueDialogs: 5,
           dealsWithMessages: 4,
           outgoingMessages: 8,
+          outgoingUnknownAuthorMessages: 2,
           incomingMessages: 3,
           unknownDirectionMessages: 1,
           uniqueOutgoingDialogs: 4,
@@ -419,7 +421,7 @@ describe('ActivitiesScene', () => {
           sessionId: '441',
           dealId: '1001',
           dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
-          occurredAt: '2026-04-12T10:15:00+03:00',
+          occurredAt: '2026-04-20T10:15:00+03:00',
           channel: { key: 'wz_telegram', label: 'WAZZUP: Telegram' },
           senderKind: 'connector',
           direction: 'outgoing',
@@ -431,7 +433,7 @@ describe('ActivitiesScene', () => {
       ],
     })
 
-    render(
+    const { rerender } = render(
       <ActivitiesScene
         commentMode={false}
         filters={{ ...filters, managers: ['7'] }}
@@ -440,14 +442,12 @@ describe('ActivitiesScene', () => {
       />,
     )
 
-    expect(messengerApiMock.getSummary).not.toHaveBeenCalled()
     expect(
       screen.getByRole('heading', { name: 'Сообщения в мессенджерах' }),
     ).toBeInTheDocument()
-
-    await userEvent.click(
-      screen.getByRole('button', { name: /посчитать сообщения за период/i }),
-    )
+    expect(
+      screen.queryByRole('button', { name: /посчитать сообщения за период/i }),
+    ).not.toBeInTheDocument()
 
     await waitFor(() =>
       expect(messengerApiMock.getSummary).toHaveBeenCalledWith({
@@ -459,7 +459,7 @@ describe('ActivitiesScene', () => {
     expect(
       await screen.findByTestId('messenger-outgoing-messages'),
     ).toHaveTextContent(
-      '8',
+      '10',
     )
     expect(screen.getByTestId('messenger-unique-outgoing-dialogs')).toHaveTextContent(
       '4',
@@ -470,10 +470,34 @@ describe('ActivitiesScene', () => {
       '3',
     )
     expect(screen.getByTestId('messenger-incoming-messages')).toHaveTextContent('3')
+    expect(screen.getByTestId('messenger-unknown-author-7')).toHaveTextContent('2')
     expect(screen.getByTestId('messenger-unknown-7')).toHaveTextContent('1')
+    expect(
+      screen.getByRole('columnheader', { name: 'Автор подтверждён' }),
+    ).toBeInTheDocument()
     expect(
       screen.getByRole('columnheader', { name: 'Не определено' }),
     ).toBeInTheDocument()
+
+    rerender(
+      <ActivitiesScene
+        commentMode={false}
+        filters={{
+          ...filters,
+          rangeStart: '2026-04-15',
+          managers: ['7'],
+        }}
+        runtimeData={createRuntimeData()}
+        canReadMessengerMessages
+      />,
+    )
+    await waitFor(() =>
+      expect(messengerApiMock.getSummary).toHaveBeenLastCalledWith({
+        managerIds: ['7'],
+        from: '2026-04-15T00:00:00.000+03:00',
+        to: '2026-04-30T23:59:59.999+03:00',
+      }),
+    )
 
     await userEvent.click(
       screen.getByRole('button', {
@@ -486,7 +510,7 @@ describe('ActivitiesScene', () => {
     ).toBeInTheDocument()
     expect(messengerApiMock.getDetails).toHaveBeenCalledWith({
       managerId: '7',
-      from: '2026-04-01T00:00:00.000+03:00',
+      from: '2026-04-15T00:00:00.000+03:00',
       to: '2026-04-30T23:59:59.999+03:00',
       limit: 500,
     })
