@@ -33,6 +33,12 @@ const healthyRow: DealAnalysisRow = {
   ...row,
   dealId: '84',
   dealUrl: 'https://example.test/deal/84',
+  managerName: 'Борис Смирнов',
+  amount: 100000,
+  daysOnStage: 2,
+  stageOverdueDays: 0,
+  lastActivityAt: '2026-06-19T10:00:00.000Z',
+  nextAction: { status: 'scheduled', activityId: '15', deadline: '2026-06-25T12:00:00.000Z', overdueDays: 0 },
   healthScore: 85,
   healthBand: 'healthy',
   risks: [],
@@ -62,6 +68,23 @@ describe('DealAnalysisScene', () => {
     expect(screen.getAllByRole('row')[1]).toHaveTextContent('#84')
     await user.click(screen.getByRole('button', { name: /Оценка: по убыванию/ }))
     expect(screen.getAllByRole('row')[1]).toHaveTextContent('#42')
+    expect(screen.getByRole('button', { name: /Сделка: сортировка не применена/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Риски: сортировка не применена/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Менеджер: сортировка не применена/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Этап: сортировка не применена/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Активность: сортировка не применена/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /След. действие: сортировка не применена/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Сумма: сортировка не применена/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Менеджер: сортировка не применена/ }))
+    expect(screen.getByRole('columnheader', { name: /Менеджер/ })).toHaveAttribute('aria-sort', 'ascending')
+    await user.click(screen.getByRole('button', { name: /Менеджер: по возрастанию/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('#84')
+
+    await user.click(screen.getByRole('button', { name: /Сумма: сортировка не применена/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('#42')
+    await user.click(screen.getByRole('button', { name: /Сумма: по убыванию/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('#84')
     expect(screen.queryByRole('button', { name: '+ Добавить фильтр' })).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('Поиск по ID сделки')).not.toBeInTheDocument()
     await user.click(screen.getByText('#42'))
