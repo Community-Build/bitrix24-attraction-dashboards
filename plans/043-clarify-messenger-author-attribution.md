@@ -125,3 +125,11 @@ so no backup, data migration, or restore is required.
 - Summary wording matches ADR 0006 without changing any metric value.
 - Full checks and final reviews pass; PR is merged; production API/UI and
   issue #149 contain verification evidence.
+
+## Completion Evidence
+
+- Implemented as PR #150 with no database or aggregate-value changes.
+- Local focused and full test suites, typecheck, lint, ontology validation, and
+  diff checks passed on 2026-08-09; both GitHub CI runs passed.
+- Sanitized production API/UI verification and release evidence are recorded in
+  issue #149 after the merge-and-deploy workflow.
