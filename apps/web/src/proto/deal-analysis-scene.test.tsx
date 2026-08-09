@@ -28,10 +28,18 @@ const row: DealAnalysisRow = {
   risks: [{ key: 'missing_next_action', label: 'Нет следующего действия', evidence: 'Нет открытой активности с датой', recommendation: 'Назначить задачу с целью и датой', deduction: 30, observedDays: null, thresholdDays: null }],
   activityMarkers: [], activityMarkerCount: 0,
 }
+const healthyRow: DealAnalysisRow = {
+  ...row,
+  dealId: '84',
+  dealUrl: 'https://example.test/deal/84',
+  healthScore: 85,
+  healthBand: 'healthy',
+  risks: [],
+}
 const report: DealAnalysisReport = {
   range: { from: '2026-06-01T00:00:00.000Z', to: '2026-06-30T23:59:59.999Z' },
   generatedAt: '2026-06-30T12:00:00.000Z', scope: 'open',
-  currentScope: { status: 'ready', reconciledAt: null, dealCount: 1 }, rows: [row], thresholdsUpdatedAt: null,
+  currentScope: { status: 'ready', reconciledAt: null, dealCount: 2 }, rows: [row, healthyRow], thresholdsUpdatedAt: null,
 }
 
 describe('DealAnalysisScene', () => {
@@ -45,6 +53,14 @@ describe('DealAnalysisScene', () => {
 
     expect(await screen.findByText('#42')).toBeInTheDocument()
     expect(screen.getByText('35')).toBeInTheDocument()
+    const scoreHeader = screen.getByRole('columnheader', { name: /Оценка/ })
+    expect(scoreHeader).toHaveAttribute('aria-sort', 'ascending')
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('#42')
+    await user.click(screen.getByRole('button', { name: /Оценка: по возрастанию/ }))
+    expect(scoreHeader).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('#84')
+    await user.click(screen.getByRole('button', { name: /Оценка: по убыванию/ }))
+    expect(screen.getAllByRole('row')[1]).toHaveTextContent('#42')
     expect(screen.queryByRole('button', { name: '+ Добавить фильтр' })).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('Поиск по ID сделки')).not.toBeInTheDocument()
     await user.click(screen.getByText('#42'))
