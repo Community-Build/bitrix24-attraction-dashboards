@@ -22,18 +22,20 @@ describe("attraction manager whitelist", () => {
     ).toEqual(["13020"]);
   });
 
-  it("includes community managers who partly work in attraction", () => {
+  it("shows all calls for community managers without widening deal attribution", () => {
     expect(ATTRACTION_MANAGER_CATALOG).toEqual(
       expect.arrayContaining([
         {
           id: "7538",
           name: "Мария Саличева",
-          callAttributionPolicy: "direct_only"
+          callAttributionPolicy: "direct_only",
+          callDisplayPolicy: "all_calls"
         },
         {
           id: "118",
           name: "Аделия Космасова",
-          callAttributionPolicy: "direct_only"
+          callAttributionPolicy: "direct_only",
+          callDisplayPolicy: "all_calls"
         }
       ])
     );

@@ -428,7 +428,7 @@ describe("createReportingService", () => {
     expect(report.risks.map((risk) => risk.dealId)).toEqual(["CURRENT"]);
   });
 
-  it("preserves catalog call attribution policy in manager whitelist options", async () => {
+  it("separates all-call display from direct-only deal attribution for Adelia and Maria", async () => {
     const service = createReportingService({
       dealCategoryIds: ["10"],
       qualityFieldName: "UF_CRM_TEST",
@@ -447,18 +447,13 @@ describe("createReportingService", () => {
 
     const whitelist = await service.getManagerWhitelistSettings();
 
-    expect(whitelist.options).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "7538",
-          callAttributionPolicy: "direct_only"
-        }),
-        expect.objectContaining({
-          id: "118",
-          callAttributionPolicy: "direct_only"
-        })
-      ])
-    );
+    for (const managerId of ["7538", "118"]) {
+      const option = whitelist.options.find((manager) => manager.id === managerId);
+      expect(option).toMatchObject({
+        callAttributionPolicy: "direct_only",
+        callDisplayPolicy: "all_calls"
+      });
+    }
   });
 
   it("passes manager team assignments through when saving whitelist settings", async () => {
@@ -1392,7 +1387,7 @@ describe("createReportingService", () => {
     expect(report.managerRows.map((row) => row.managerId)).not.toContain("999");
   });
 
-  it("preserves catalog call attribution policy when stored manager directory rows only have names", async () => {
+  it("shows contact fallback calls without attributing them to deals for catalog managers", async () => {
     const repository = {
       getAllDeals: async () => [
         {
@@ -1483,6 +1478,7 @@ describe("createReportingService", () => {
     expect(report.linkedDealCalls.totalCalls).toBe(0);
     expect(report.linkedDealCalls.excludedByPolicyCalls?.totalCalls).toBe(1);
     expect(salicheva?.callAttributionPolicy).toBe("direct_only");
+    expect(salicheva?.callDisplayPolicy).toBe("all_calls");
     expect(salicheva?.linkedDealCalls).toMatchObject({
       dealCount: 0,
       totalCalls: 0,
@@ -1491,6 +1487,8 @@ describe("createReportingService", () => {
         outgoingCalls: 1
       })
     });
+    expect(salicheva?.callsHourlyHeatmap.total).toBe(1);
+    expect(salicheva?.stageBreakdown).toEqual([]);
   });
 
   it("warns when manager action outcome historical activity coverage is missing", async () => {

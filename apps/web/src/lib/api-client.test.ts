@@ -1947,6 +1947,7 @@ describe('apiClient', () => {
               id: '7538',
               name: 'Мария Саличева',
               callAttributionPolicy: 'direct_only',
+              callDisplayPolicy: 'all_calls',
             },
           ],
           settings: [
@@ -1973,6 +1974,7 @@ describe('apiClient', () => {
               id: '7538',
               name: 'Мария Саличева',
               callAttributionPolicy: 'direct_only',
+              callDisplayPolicy: 'all_calls',
             },
           ],
           settings: [
@@ -2017,10 +2019,12 @@ describe('apiClient', () => {
       id: '7538',
       name: 'Мария Саличева',
       callAttributionPolicy: 'direct_only',
+      callDisplayPolicy: 'all_calls',
     })
     expect(saved.options[1]).toMatchObject({
       id: '7538',
       callAttributionPolicy: 'direct_only',
+      callDisplayPolicy: 'all_calls',
     })
     expect(saved.settings[0]).toMatchObject({
       moduleKey: 'attraction',
@@ -2148,6 +2152,7 @@ describe('apiClient', () => {
             id: '7538',
             name: 'Мария Саличева',
             callAttributionPolicy: 'direct_only',
+            callDisplayPolicy: 'all_calls',
           },
         ],
         sourceCatalog: [],
@@ -2203,6 +2208,7 @@ describe('apiClient', () => {
           id: '7538',
           name: 'Мария Саличева',
           callAttributionPolicy: 'direct_only',
+          callDisplayPolicy: 'all_calls',
         },
       ],
     })
@@ -3111,6 +3117,7 @@ describe('apiClient', () => {
             managerId: '7538',
             managerName: 'Мария Саличева',
             callAttributionPolicy: 'direct_only',
+            callDisplayPolicy: 'all_calls',
             dealCount: 1,
             totalCalls: 2,
             outgoingCalls: 2,
@@ -3150,6 +3157,7 @@ describe('apiClient', () => {
 
     expect(calls.linkedDealCalls?.excludedByPolicyCalls?.totalCalls).toBe(1)
     expect(calls.managerRows[0]?.callAttributionPolicy).toBe('direct_only')
+    expect(calls.managerRows[0]?.callDisplayPolicy).toBe('all_calls')
     expect(
       calls.managerRows[0]?.linkedDealCalls?.excludedByPolicyCalls?.outgoingCalls,
     ).toBe(1)

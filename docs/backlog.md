@@ -25,6 +25,22 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
+### Show all telephony calls for Adelia and Maria ([#147](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/147))
+- Area: activities, api, data
+- Problem: the Activities dashboard applies `direct_only` to Maria Salicheva
+  and Adelia Kosmasova, so their primary call metrics omit synchronized
+  telephony calls that cannot be linked directly to Attraction deals.
+- Expected behavior: both managers use all synchronized telephony calls for
+  primary call counters and the outgoing-call heatmap; linked-deal and stage
+  metrics remain Attraction-only.
+- Acceptance criteria:
+  - Manager IDs `7538` and `118` use `all_calls` for display while retaining
+    `direct_only` for deal attribution.
+  - `linkedDealCalls`, calls-per-deal, and stage breakdown remain deal-scoped.
+  - Manager whitelist, access, funnel/SLA reports, sync, and call-analysis
+    authorization do not change.
+  - Focused API/web tests and production before/after checks pass.
+
 ### Activities messenger totals and SQLite-backed manager reader
 - Area: activities, web, api, data
 - Problem: the Activities report does not show messenger-message volume for its

@@ -1561,6 +1561,7 @@ export interface CallPopulationSummary {
 }
 
 export type CallAttributionPolicy = 'standard' | 'direct_only'
+export type CallDisplayPolicy = 'all_calls' | 'linked_deal_calls'
 
 export interface LinkedDealCallPopulationSummary extends CallPopulationSummary {
   dealCount: number
@@ -1590,6 +1591,7 @@ export interface ManagerCallsWorkloadRow {
   averageCallsPerDeal: number
   averageDurationSeconds: number
   callAttributionPolicy?: CallAttributionPolicy
+  callDisplayPolicy?: CallDisplayPolicy
   allCalls?: CallPopulationSummary
   linkedDealCalls?: LinkedDealCallPopulationSummary
   callsHourlyHeatmap?: HourlyWeekdayWorkloadHeatmap
@@ -2402,6 +2404,7 @@ export interface ManagerDirectoryEntry {
   id: string
   name: string
   callAttributionPolicy?: CallAttributionPolicy
+  callDisplayPolicy?: CallDisplayPolicy
 }
 
 export interface ManagerWhitelistSetting {

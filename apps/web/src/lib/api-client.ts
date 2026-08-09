@@ -5,6 +5,7 @@ import type {
   ActivitiesWorkloadReportSnapshot,
   AttractionOntologyResponse,
   CallAttributionPolicy,
+  CallDisplayPolicy,
   CallAnalysisAiEvaluation,
   CallAnalysisClassification,
   CallAnalysisClassificationType,
@@ -398,6 +399,11 @@ function normalizeHourlyWeekdayWorkloadHeatmap(
 function normalizeCallAttributionPolicy(value: unknown): CallAttributionPolicy | undefined {
   const policy = asString(value)
   return policy === 'standard' || policy === 'direct_only' ? policy : undefined
+}
+
+function normalizeCallDisplayPolicy(value: unknown): CallDisplayPolicy | undefined {
+  const policy = asString(value)
+  return policy === 'all_calls' || policy === 'linked_deal_calls' ? policy : undefined
 }
 
 function normalizeDealCallSummary(value: unknown) {
@@ -1817,11 +1823,13 @@ function normalizeManagerWhitelistSettings(value: unknown): ManagerWhitelistSett
       const callAttributionPolicy = normalizeCallAttributionPolicy(
         option.callAttributionPolicy,
       )
+      const callDisplayPolicy = normalizeCallDisplayPolicy(option.callDisplayPolicy)
 
       return {
         id: asString(option.id),
         name: asString(option.name, asString(option.id)),
         ...(callAttributionPolicy ? { callAttributionPolicy } : {}),
+        ...(callDisplayPolicy ? { callDisplayPolicy } : {}),
       }
     }).filter((option) => option.id),
     settings: asArray(data.settings, (entry) => {
@@ -1951,10 +1959,12 @@ function normalizeMeta(value: unknown): MetaResponse {
       const callAttributionPolicy = normalizeCallAttributionPolicy(
         item.callAttributionPolicy,
       )
+      const callDisplayPolicy = normalizeCallDisplayPolicy(item.callDisplayPolicy)
       return {
         id: asString(item.id),
         name: asString(item.name, asString(item.id)),
         ...(callAttributionPolicy ? { callAttributionPolicy } : {}),
+        ...(callDisplayPolicy ? { callDisplayPolicy } : {}),
       }
     }),
     sourceCatalog: asArray(data.sourceCatalog, (entry) => {
@@ -3565,6 +3575,7 @@ function normalizeCallsWorkloadSnapshot(value: unknown): CallsWorkloadReportSnap
       const rowCallAttributionPolicy = normalizeCallAttributionPolicy(
         item.callAttributionPolicy,
       )
+      const rowCallDisplayPolicy = normalizeCallDisplayPolicy(item.callDisplayPolicy)
       const rowExcludedByPolicyCalls = normalizeOptionalCallPopulation(
         linked.excludedByPolicyCalls,
       )
@@ -3588,6 +3599,7 @@ function normalizeCallsWorkloadSnapshot(value: unknown): CallsWorkloadReportSnap
         ...(rowCallAttributionPolicy
           ? { callAttributionPolicy: rowCallAttributionPolicy }
           : {}),
+        ...(rowCallDisplayPolicy ? { callDisplayPolicy: rowCallDisplayPolicy } : {}),
         allCalls: normalizeCallPopulation(item.allCalls),
         linkedDealCalls: {
           ...normalizeCallPopulation(linked),
