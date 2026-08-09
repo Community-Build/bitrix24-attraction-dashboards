@@ -90,6 +90,7 @@ import {
   buildOperationalDashboardReport
 } from "../domain/operational-dashboard.js";
 import {
+  buildDealAnalysisMessages,
   buildDealAnalysisReport,
   buildDealAnalysisTimeline
 } from "../domain/deal-analysis.js";
@@ -3134,13 +3135,7 @@ export function createReportingService(
           })
         : [];
       const safeMessages = includeSensitiveContent
-        ? messages.slice(-200).map((message) => ({
-            id: message.id,
-            occurredAt: message.occurredAt,
-            channelLabel: message.channelLabel,
-            direction: message.direction,
-            text: message.text
-          }))
+        ? buildDealAnalysisMessages(messages)
         : null;
       const callIds = uniqueStrings(
         dealFacts.filter((fact) => fact.kind === "call").map((fact) => fact.sourceEntityId)

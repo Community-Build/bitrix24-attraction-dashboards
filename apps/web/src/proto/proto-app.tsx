@@ -80,6 +80,7 @@ import type {
   ProtoRuntimeData,
   SceneComponentProps,
 } from '@/proto/types'
+import type { CallAnalysisTarget } from '@/proto/call-analysis-workspace'
 import { useProtoComments } from '@/proto/use-proto-comments'
 
 const LazyCallAnalysisWorkspace = lazy(() =>
@@ -1855,6 +1856,7 @@ function LeadgenDashboard({
 export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
   const initialModuleId = currentUser?.modules[0]?.id ?? 'attraction'
   const [route, setRoute] = useState<ProtoRoute>(() => readProtoRoute())
+  const [callAnalysisTarget, setCallAnalysisTarget] = useState<CallAnalysisTarget | null>(null)
   const [activeSceneId, setActiveSceneId] = useState(scenes[0]?.id ?? 'sales')
   const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null)
   const [commentMode, setCommentMode] = useState(false)
@@ -2337,6 +2339,16 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
   }
 
   function navigateToCalls() {
+    setCallAnalysisTarget(null)
+    writeProtoRoute('calls')
+    setRoute('calls')
+    setCommentsOpen(false)
+    setCommentMode(false)
+    setDraftComment(null)
+  }
+
+  function navigateToSelectedCall(callId: string, startedAt: string) {
+    setCallAnalysisTarget({ callId, startedAt })
     writeProtoRoute('calls')
     setRoute('calls')
     setCommentsOpen(false)
@@ -4802,6 +4814,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
               managerOptions={visibleManagerOptions}
               sourceOptions={availableSourceOptions}
               stageOptions={runtimeData.stageOptions ?? []}
+              initialTarget={callAnalysisTarget}
             />
           </Suspense>
         ) : route === 'ontology' ? (
@@ -5113,6 +5126,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                   handleSaveOperationalThresholdSettings
                 }
                 onSceneNavigate={handleSceneNavigate}
+                onCallAnalysisNavigate={navigateToSelectedCall}
                 conversionEventTypeSettings={runtimeData.conversionEventTypeSettings}
                 conversionEventTypeSettingsLoading={conversionEventTypeSettingsLoading}
                 conversionEventTypeSettingsSaving={conversionEventTypeSettingsSaving}

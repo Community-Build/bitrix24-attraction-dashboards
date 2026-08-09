@@ -2,6 +2,7 @@ import type {
   ActivitySnapshot,
   CallSnapshot,
   DealActivityMarker,
+  DealAnalysisMessage,
   DealAnalysisReport,
   DealAnalysisRisk,
   DealAnalysisRow,
@@ -18,6 +19,7 @@ import type {
   StageHistorySnapshot
 } from "@bitrix24-reporting/contracts";
 
+import type { MessengerMessageSnapshot } from "./messenger-messages.js";
 import { OPERATIONAL_LOST_STAGE_IDS } from "./operational-dashboard.js";
 import {
   buildManagerDirectoryMap,
@@ -134,7 +136,15 @@ export function buildDealAnalysisTimeline(
   facts: DealTouchpointFactSnapshot[]
 ): DealAnalysisTimelineItem[] {
   const visibleFacts = facts.filter(
-    (fact) => fact.kind !== "message_count" && fact.kind !== "comment_quality_signal"
+    (fact) => {
+      if (fact.kind === "message_count" || fact.kind === "comment_quality_signal") {
+        return false;
+      }
+      if (fact.kind === "task_created" || fact.kind === "task_completed") {
+        return textValue(payload(fact.payloadJson)?.providerId) !== "IMOPENLINES_SESSION";
+      }
+      return true;
+    }
   );
   const taskFacts = buildGroups(
     visibleFacts.filter(
@@ -229,6 +239,26 @@ export function buildDealAnalysisTimeline(
   return timeline.sort(
     (left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt)
   );
+}
+
+export function buildDealAnalysisMessages(
+  messages: Array<
+    Pick<
+      MessengerMessageSnapshot,
+      "id" | "occurredAt" | "channelLabel" | "direction" | "text" | "system"
+    >
+  >
+): DealAnalysisMessage[] {
+  return messages
+    .filter((message) => !message.system && message.text !== null)
+    .slice(-200)
+    .map((message) => ({
+      id: message.id,
+      occurredAt: message.occurredAt,
+      channelLabel: message.channelLabel,
+      direction: message.direction,
+      text: message.text
+    }));
 }
 
 function isCompletedMilestone(fact: DealTouchpointFactSnapshot) {

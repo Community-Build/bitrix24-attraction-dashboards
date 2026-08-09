@@ -37,6 +37,11 @@ interface CallAnalysisFilters {
   analysisStatus: '' | CallAnalysisQueueStatus
 }
 
+export interface CallAnalysisTarget {
+  callId: string
+  startedAt: string
+}
+
 export function createDefaultCallAnalysisFilters(today = new Date()): CallAnalysisFilters {
   const currentWeekStart = startOfCalendarWeek(today)
   const previousWeekStart = shiftDate(currentWeekStart, -7)
@@ -51,6 +56,20 @@ export function createDefaultCallAnalysisFilters(today = new Date()): CallAnalys
     callType: '',
     analysisStatus: '',
   }
+}
+
+export function createCallAnalysisFiltersForTarget(
+  target: CallAnalysisTarget | null,
+  today = new Date(),
+): CallAnalysisFilters {
+  const filters = createDefaultCallAnalysisFilters(today)
+  if (!target) return filters
+
+  const startedAt = new Date(target.startedAt)
+  if (Number.isNaN(startedAt.getTime())) return filters
+
+  const targetDate = formatDateInputValue(startedAt)
+  return { ...filters, rangeStart: targetDate, rangeEnd: targetDate }
 }
 
 const callTypeOptions: Array<{ value: '' | CallAnalysisQueueCallType; label: string }> = [
@@ -390,6 +409,7 @@ function CallQueueList({
             'grid w-full gap-1 px-4 py-3 text-left transition hover:bg-blue-50/60',
             selectedCallId === item.callId && 'bg-blue-50 ring-1 ring-inset ring-blue-300',
           )}
+          aria-pressed={selectedCallId === item.callId}
           onClick={() => onSelect(item.callId)}
         >
           <div className="flex items-start justify-between gap-3">
@@ -661,18 +681,20 @@ export function CallAnalysisWorkspace({
   managerOptions,
   sourceOptions,
   stageOptions,
+  initialTarget = null,
 }: {
   moduleId: string
   managerOptions: PickerOption[]
   sourceOptions: PickerOption[]
   stageOptions: PickerOption[]
+  initialTarget?: CallAnalysisTarget | null
 }) {
-  const [draftFilters, setDraftFilters] = useState<CallAnalysisFilters>(() => createDefaultCallAnalysisFilters())
-  const [appliedFilters, setAppliedFilters] = useState<CallAnalysisFilters>(() => createDefaultCallAnalysisFilters())
+  const [draftFilters, setDraftFilters] = useState<CallAnalysisFilters>(() => createCallAnalysisFiltersForTarget(initialTarget))
+  const [appliedFilters, setAppliedFilters] = useState<CallAnalysisFilters>(() => createCallAnalysisFiltersForTarget(initialTarget))
   const [queue, setQueue] = useState<CallAnalysisQueueResponse | null>(null)
   const [queueStatus, setQueueStatus] = useState<LoadStatus>('idle')
   const [queueError, setQueueError] = useState<string | null>(null)
-  const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(initialTarget?.callId ?? null)
   const [analysisResult, setAnalysisResult] = useState<CallAnalysisResult | null>(null)
   const [analysisLoadStatus, setAnalysisLoadStatus] = useState<AnalysisStatus>('idle')
   const [analysisError, setAnalysisError] = useState<string | null>(null)

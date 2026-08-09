@@ -31,13 +31,26 @@ returned only by the lazy, leader-only detail route for one exact deal ID. The
 same access boundary applies to starting call analysis. None of this content may
 enter aggregate responses, MCP, dashboard comments, notifications or logs.
 
+The timeline excludes technical Open Lines activities and messenger system rows
+(`sender_id = 0` / system classification). Rows without a user-visible message
+body are not rendered as customer communication. Task deadlines are presented
+as the planned completion time (`Выполнить до`), distinct from creation and
+actual completion.
+
+The deal drawer is a read-only context view. It may preview an already saved call
+score, summary and transcript, but it does not start a second analysis flow.
+Every call action opens the existing call-analysis workspace with the exact call
+preselected and its date applied to the queue filters; manual analysis remains
+owned by that workspace.
+
 ## Consequences
 
 - A sync is required before older activities gain titles and descriptions.
 - The activity snapshot and its backups now contain bounded sensitive work
   text and inherit the leader-only access and retention controls.
-- The deal drawer can reuse the existing call-analysis API and storage instead
-  of creating a second analysis pipeline.
+- The deal drawer reads existing call-analysis storage and routes manual work to
+  the existing call-analysis workspace instead of creating a second analysis
+  pipeline or a second mutation owner.
 - Raw AI evaluation, evidence quotes and raw Bitrix payloads remain excluded.
 
 ## Revisit Conditions

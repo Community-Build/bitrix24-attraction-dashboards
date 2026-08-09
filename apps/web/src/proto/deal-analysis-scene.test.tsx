@@ -3,14 +3,14 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
 import type { DealAnalysisReport, DealAnalysisRow } from '@/lib/dashboard-types'
+import { createCallAnalysisFiltersForTarget } from '@/proto/call-analysis-workspace'
 import { DealAnalysisScene } from '@/proto/deal-analysis-scene'
 import type { ProtoFilterState } from '@/proto/types'
 
-const api = vi.hoisted(() => ({ report: vi.fn(), detail: vi.fn(), analyze: vi.fn() }))
+const api = vi.hoisted(() => ({ report: vi.fn(), detail: vi.fn() }))
 vi.mock('@/lib/api-client', () => ({ apiClient: {
   getDealAnalysisReport: api.report,
   getDealAnalysisDetail: api.detail,
-  analyzeCall: api.analyze,
 } }))
 
 const filters: ProtoFilterState = {
@@ -133,29 +133,28 @@ describe('DealAnalysisScene', () => {
       callInsights: [{ callId: '99', status: 'not_analyzed', score: null, summary: null, risks: [], suggestedNextStep: null, transcript: null, analyzedAt: null, errorMessage: null }],
       sensitiveContentAvailable: true,
     })
-    api.analyze.mockResolvedValue({
-      result: {
-        aiEvaluation: { score: 84, summary: 'Потребность выявлена.', risks: ['Нет срока'], suggestedNextStep: 'Назначить встречу' },
-        fullTranscriptText: 'Менеджер: Добрый день.\nКлиент: Добрый день.',
-        analyzedAt: '2026-06-18T15:00:00.000Z',
-      },
-    })
+    const onCallAnalysisNavigate = vi.fn()
     const user = userEvent.setup()
-    render(<DealAnalysisScene filters={filters} commentMode={false} />)
+    render(<DealAnalysisScene filters={filters} commentMode={false} onCallAnalysisNavigate={onCallAnalysisNavigate} />)
 
     await user.click(await screen.findByText('#42'))
     await user.click(await screen.findByRole('button', { name: 'Активность' }))
 
     expect(screen.getByText('Подготовить предложение')).toBeInTheDocument()
     expect(screen.getByText('Согласовать состав пакета')).toBeInTheDocument()
-    expect(screen.getByText('Исходящий · 16 мин 39 сек')).toBeInTheDocument()
+    expect(screen.getByText('Выполнить до:')).toBeInTheDocument()
+    expect(screen.queryByText('Срок:')).not.toBeInTheDocument()
+    expect(screen.getByText('Исходящий звонок')).toBeInTheDocument()
+    expect(screen.getByText('16 мин 39 сек')).toBeInTheDocument()
     expect(screen.getByText('Подтверждаю встречу')).toBeInTheDocument()
     expect(screen.getByText('День открытых дверей')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'История этапов' })).toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: 'Проанализировать звонок' }))
-    await waitFor(() => expect(api.analyze).toHaveBeenCalledWith('99', 'attraction'))
-    expect(await screen.findByText('84/100')).toBeInTheDocument()
-    expect(screen.getByText('Показать транскрипт')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Открыть в анализе звонков' }))
+    expect(onCallAnalysisNavigate).toHaveBeenCalledWith('99', '2026-06-18T10:00:00.000Z')
+    expect(createCallAnalysisFiltersForTarget({ callId: '99', startedAt: '2026-06-18T10:00:00.000Z' })).toMatchObject({
+      rangeStart: '2026-06-18',
+      rangeEnd: '2026-06-18',
+    })
   })
 })

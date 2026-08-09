@@ -7,6 +7,7 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import {
+  buildDealAnalysisMessages,
   buildDealAnalysisReport,
   buildDealAnalysisTimeline
 } from "../src/domain/deal-analysis";
@@ -212,6 +213,18 @@ describe("buildDealAnalysisTimeline", () => {
           completedTime: "2026-08-02T15:00:00.000Z",
           deadline: "2026-08-03T12:00:00.000Z"
         })
+      },
+      {
+        factId: "task-created:system", kind: "task_created", sourceSystem: "bitrix24",
+        sourceEntityType: "activity", sourceEntityId: "system",
+        occurredAt: "2026-08-02T16:00:00.000Z", dealId: "42", contactId: null,
+        leadId: null, managerId: "7", sourceId: null, stageIdAtEvent: "C10:NEW",
+        stageNameAtEvent: "Новая", linkConfidence: "high", linkReason: "direct",
+        payloadJson: JSON.stringify({
+          providerId: "IMOPENLINES_SESSION",
+          subject: "Чат открытой линии",
+          deadline: "9999-12-31T00:00:00.000Z"
+        })
       }
     ]);
 
@@ -227,6 +240,41 @@ describe("buildDealAnalysisTimeline", () => {
         completedAt: "2026-08-02T15:00:00.000Z",
         direction: null
       })
+    ]);
+  });
+});
+
+describe("buildDealAnalysisMessages", () => {
+  it("removes technical messenger events from the customer timeline", () => {
+    const messages = buildDealAnalysisMessages([
+      {
+        id: "system",
+        occurredAt: "2026-08-06T16:05:01.000Z",
+        channelLabel: "WAZZUP: Max",
+        direction: "unknown",
+        text: null,
+        system: true
+      },
+      {
+        id: "attachment-only",
+        occurredAt: "2026-08-06T16:05:01.500Z",
+        channelLabel: "WAZZUP: Max",
+        direction: "incoming",
+        text: null,
+        system: false
+      },
+      {
+        id: "customer",
+        occurredAt: "2026-08-06T16:05:02.000Z",
+        channelLabel: "WAZZUP: Max",
+        direction: "incoming",
+        text: "Подтверждаю встречу",
+        system: false
+      }
+    ]);
+
+    expect(messages).toEqual([
+      expect.objectContaining({ id: "customer", text: "Подтверждаю встречу" })
     ]);
   });
 });

@@ -166,6 +166,10 @@ function directionLabel(direction: DealAnalysisTimelineItem['direction']) {
   return null
 }
 
+function activityComment(value: string) {
+  return value.replace(/\[\/?p\]/gi, '').trim()
+}
+
 function eventStatusLabel(value: string | null) {
   if (value === 'invited') return 'Приглашён'
   if (value === 'confirmed') return 'Участие подтверждено'
@@ -223,16 +227,12 @@ function SortHeader({
 
 function CallAnalysisBlock({
   insight,
-  loading,
-  actionError,
   allowed,
-  onAnalyze,
+  onOpen,
 }: {
   insight: DealAnalysisCallInsight | null
-  loading: boolean
-  actionError: string | null
   allowed: boolean
-  onAnalyze(): void
+  onOpen(): void
 }) {
   if (!allowed) {
     return <p className="mt-3 text-xs leading-5 text-slate-400">Анализ и транскрипт доступны только руководителю.</p>
@@ -256,6 +256,10 @@ function CallAnalysisBlock({
             <p className="mt-3 max-w-2xl whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{insight.transcript}</p>
           </details>
         ) : <p className="mt-2 text-xs text-blue-700">Транскрипт для этого анализа не сохранён.</p>}
+        <button type="button" className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg px-3 text-sm font-bold text-blue-700 transition-[background-color,transform] hover:bg-white/80 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300" onClick={onOpen}>
+          Открыть полный анализ
+          <HugeiconsIcon icon={ArrowUpRight01Icon} strokeWidth={2} className="size-4" aria-hidden="true" />
+        </button>
       </section>
     )
   }
@@ -264,24 +268,20 @@ function CallAnalysisBlock({
     <div className="mt-4 flex flex-wrap items-center gap-3">
       <button
         type="button"
-        className="btn btn-primary min-h-10 active:scale-[0.96]"
-        onClick={onAnalyze}
-        disabled={loading || insight?.status === 'analyzing'}
-        aria-busy={loading || insight?.status === 'analyzing'}
+        className="inline-flex min-h-10 items-center rounded-xl bg-blue-50 px-3.5 text-sm font-bold text-blue-700 shadow-[inset_0_0_0_1px_oklch(0.85_0.07_255)] transition-[background-color,box-shadow,transform] hover:bg-blue-100 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300"
+        onClick={onOpen}
       >
         <HugeiconsIcon icon={AiBrain01Icon} strokeWidth={2} className="mr-2 size-4" aria-hidden="true" />
-        {loading || insight?.status === 'analyzing' ? 'Анализируется…' : insight?.status === 'error' ? 'Повторить анализ звонка' : 'Проанализировать звонок'}
+        {insight?.status === 'analyzing' ? 'Открыть ход анализа' : insight?.status === 'error' ? 'Открыть и повторить анализ' : 'Открыть в анализе звонков'}
       </button>
-      <span aria-live="polite" className="text-sm text-rose-700">
-        {insight?.status === 'error' && insight.errorMessage ? insight.errorMessage : actionError}
-      </span>
+      {insight?.status === 'error' && insight.errorMessage ? <span className="text-sm text-rose-700">{insight.errorMessage}</span> : null}
     </div>
   )
 }
 
 function timelineVisual(item: DealAnalysisTimelineItem) {
   if (item.kind === 'call') return { icon: Call02Icon, label: 'Звонок', tone: 'bg-blue-50 text-blue-700' }
-  if (item.kind === 'message') return { icon: Message01Icon, label: item.title, tone: 'bg-sky-50 text-sky-700' }
+  if (item.kind === 'message') return { icon: Message01Icon, label: 'Сообщение', tone: 'bg-sky-50 text-sky-700' }
   if (item.kind === 'meeting' || item.kind === 'meeting_date_changed') return { icon: Calendar03Icon, label: item.kind === 'meeting' ? 'Встреча' : 'Изменение встречи', tone: 'bg-violet-50 text-violet-700' }
   if (item.kind === 'conversion_event_visit') return { icon: WorkflowSquare01Icon, label: 'Мероприятие', tone: 'bg-fuchsia-50 text-fuchsia-700' }
   if (item.kind === 'task_completed') return { icon: CheckmarkCircle02Icon, label: 'Задача', tone: 'bg-emerald-50 text-emerald-700' }
@@ -291,23 +291,20 @@ function timelineVisual(item: DealAnalysisTimelineItem) {
 function TimelineCard({
   item,
   insight,
-  analyzing,
-  actionError,
   analysisAllowed,
-  onAnalyze,
+  onOpenCallAnalysis,
 }: {
   item: DealAnalysisTimelineItem
   insight: DealAnalysisCallInsight | null
-  analyzing: boolean
-  actionError: string | null
   analysisAllowed: boolean
-  onAnalyze(): void
+  onOpenCallAnalysis(): void
 }) {
   const isTask = item.kind === 'task_created' || item.kind === 'task_completed'
   const isCall = item.kind === 'call'
   const isMessage = item.kind === 'message'
   const status = item.kind === 'conversion_event_visit' ? eventStatusLabel(item.detail) : null
   const visual = timelineVisual(item)
+  const heading = isCall ? `${directionLabel(item.direction) ?? ''} звонок`.trim() : item.title
 
   return (
     <article className="relative pl-12">
@@ -319,11 +316,11 @@ function TimelineCard({
           <div className="min-w-0">
             <p className="text-[11px] font-extrabold uppercase tracking-[0.08em] text-slate-400">{visual.label}</p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h3 className="break-words font-bold leading-6 text-slate-950">{item.title}</h3>
+              <h3 className="break-words font-bold leading-6 text-slate-950">{heading}</h3>
               {isTask ? <span className={cn('whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold', item.completedAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>{item.completedAt ? 'Выполнена' : 'Запланирована'}</span> : null}
               {status && !isTask ? <span className="whitespace-nowrap rounded-full bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-700">{status}</span> : null}
             </div>
-            {isCall || isMessage ? <p className="mt-1 text-sm font-medium text-slate-500">{[directionLabel(item.direction), isCall ? formatCallDuration(item.durationSeconds) : null].filter(Boolean).join(' · ')}</p> : null}
+            {isCall || isMessage ? <p className="mt-1 text-sm font-medium text-slate-500">{[isMessage ? directionLabel(item.direction) : null, isCall ? formatCallDuration(item.durationSeconds) : null].filter(Boolean).join(' · ')}</p> : null}
           </div>
           <time className="shrink-0 pt-0.5 text-xs font-semibold tabular-nums text-slate-400">{dateTime(item.occurredAt)}</time>
         </div>
@@ -332,21 +329,21 @@ function TimelineCard({
           <>
             <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm tabular-nums text-slate-500">
               {item.createdAt ? <span><strong className="text-slate-700">Создана:</strong> {dateTime(item.createdAt)}</span> : null}
-              {item.deadlineAt ? <span><strong className="text-slate-700">Срок:</strong> {dateTime(item.deadlineAt)}</span> : null}
+              {item.deadlineAt ? <span><strong className="text-slate-700">Выполнить до:</strong> {dateTime(item.deadlineAt)}</span> : null}
               {item.completedAt ? <span><strong className="text-slate-700">Завершена:</strong> {dateTime(item.completedAt)}</span> : null}
             </div>
-            {item.comment ? <p className="mt-4 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{item.comment}</p> : <p className="mt-3 text-sm text-slate-400">Комментарий к задаче не заполнен.</p>}
+            {item.comment ? <p className="mt-4 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{activityComment(item.comment)}</p> : <p className="mt-3 text-sm text-slate-400">Комментарий к задаче не заполнен.</p>}
           </>
         ) : null}
 
-        {isMessage ? <p className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{item.detail || 'Текст сообщения отсутствует.'}</p> : null}
+        {isMessage ? <p className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{item.detail || 'Сообщение без текста или только с вложением.'}</p> : null}
 
         {item.kind === 'meeting' && item.deadlineAt ? <p className="mt-3 text-sm text-slate-600"><strong>Встреча назначена:</strong> {dateTime(item.deadlineAt)}</p> : null}
         {item.kind === 'meeting' && item.comment ? <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{item.comment}</p> : null}
         {item.kind === 'meeting_date_changed' && item.detail ? <p className="mt-3 text-sm text-slate-600">{item.detail}</p> : null}
         {item.stageName ? <p className="mt-3 border-t border-slate-100 pt-3 text-xs font-medium text-slate-400">Этап на момент события: {item.stageName}</p> : null}
 
-        {isCall ? <CallAnalysisBlock insight={insight} loading={analyzing} actionError={actionError} allowed={analysisAllowed} onAnalyze={onAnalyze} /> : null}
+        {isCall ? <CallAnalysisBlock insight={insight} allowed={analysisAllowed} onOpen={onOpenCallAnalysis} /> : null}
       </div>
     </article>
   )
@@ -447,17 +444,17 @@ function DealDrawer({
   query,
   scope,
   onClose,
+  onOpenCallAnalysis,
 }: {
   row: DealAnalysisRow
   query: DashboardQuery
   scope: DealAnalysisScope
   onClose(): void
+  onOpenCallAnalysis(callId: string, startedAt: string): void
 }) {
   const closeRef = useRef<HTMLButtonElement>(null)
   const [detail, setDetail] = useState<DealAnalysisDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [analyzingCallId, setAnalyzingCallId] = useState<string | null>(null)
-  const [callActionErrors, setCallActionErrors] = useState<Record<string, string>>({})
   const [tab, setTab] = useState<'risks' | 'activity' | 'path' | 'details'>(row.risks.length ? 'risks' : 'activity')
 
   useEffect(() => {
@@ -481,44 +478,6 @@ function DealDrawer({
     () => new Map((detail?.callInsights ?? []).map((insight) => [insight.callId, insight])),
     [detail?.callInsights],
   )
-
-  async function analyzeCall(callId: string) {
-    setAnalyzingCallId(callId)
-    setCallActionErrors((current) => ({ ...current, [callId]: '' }))
-    try {
-      const response = await apiClient.analyzeCall(callId, 'attraction')
-      const result = response.result
-      const nextInsight: DealAnalysisCallInsight = {
-        callId,
-        status: 'ready',
-        score: result.aiEvaluation.score,
-        summary: result.aiEvaluation.summary,
-        risks: result.aiEvaluation.risks,
-        suggestedNextStep: result.aiEvaluation.suggestedNextStep,
-        transcript: result.fullTranscriptText,
-        analyzedAt: result.analyzedAt,
-        errorMessage: null,
-      }
-      setDetail((current) => {
-        if (!current) return current
-        const insights = current.callInsights ?? []
-        const hasCall = insights.some((insight) => insight.callId === callId)
-        return {
-          ...current,
-          callInsights: hasCall
-            ? insights.map((insight) => insight.callId === callId ? nextInsight : insight)
-            : [...insights, nextInsight],
-        }
-      })
-    } catch (nextError) {
-      setCallActionErrors((current) => ({
-        ...current,
-        [callId]: nextError instanceof Error ? nextError.message : 'Не удалось проанализировать звонок.',
-      }))
-    } finally {
-      setAnalyzingCallId(null)
-    }
-  }
 
   const tabs = [
     ['risks', 'Риски'], ['activity', 'Активность'], ['path', 'История этапов'], ['details', 'Детали'],
@@ -610,10 +569,8 @@ function DealDrawer({
                   key={item.id}
                   item={item}
                   insight={item.kind === 'call' ? callInsightById.get(item.sourceEntityId) ?? null : null}
-                  analyzing={analyzingCallId === item.sourceEntityId}
-                  actionError={callActionErrors[item.sourceEntityId] || null}
                   analysisAllowed={detail.sensitiveContentAvailable}
-                  onAnalyze={() => void analyzeCall(item.sourceEntityId)}
+                  onOpenCallAnalysis={() => onOpenCallAnalysis(item.sourceEntityId, item.occurredAt)}
                 />
               ))}
               {!detail.sensitiveContentAvailable ? <p className="text-xs text-slate-400">Тексты сообщений и выводы анализа звонков доступны только руководителю.</p> : null}
@@ -647,7 +604,7 @@ function DealDrawer({
   )
 }
 
-export function DealAnalysisScene({ filters }: SceneComponentProps) {
+export function DealAnalysisScene({ filters, onCallAnalysisNavigate }: SceneComponentProps) {
   const queryKey = useMemo(() => JSON.stringify(buildDashboardQueryFromProtoFilters(filters)), [filters])
   const query = useMemo(() => JSON.parse(queryKey) as DashboardQuery, [queryKey])
   const [scope, setScope] = useState<DealAnalysisScope>('open')
@@ -795,7 +752,7 @@ export function DealAnalysisScene({ filters }: SceneComponentProps) {
         ) : null}
         {filteredRows.length > visible ? <div className="border-t border-slate-100 p-4 text-center"><button type="button" onClick={() => setVisible((count) => count + 50)} className="btn btn-ghost">Показать ещё</button></div> : null}
       </div>
-      {selected ? <DealDrawer row={selected} query={query} scope={scope} onClose={() => setSelected(null)} /> : null}
+      {selected ? <DealDrawer row={selected} query={query} scope={scope} onClose={() => setSelected(null)} onOpenCallAnalysis={(callId, startedAt) => onCallAnalysisNavigate?.(callId, startedAt)} /> : null}
     </section>
   )
 }
