@@ -191,6 +191,57 @@ describe('MessengerMessageReader', () => {
     )
   })
 
+  it.each([
+    [
+      'ATTACHMENT_UNAVAILABLE',
+      'Bitrix24 не дал получить это вложение. Повторите позже; если ошибка сохранится, администратору нужно проверить доступ интеграции к файлам чата.',
+    ],
+    [
+      'ATTACHMENT_NOT_FOUND',
+      'Вложение больше недоступно в этом сообщении.',
+    ],
+    [
+      'ATTACHMENT_TOO_LARGE',
+      'Вложение больше 20 МБ и не может быть скачано через дашборд.',
+    ],
+    ['UNEXPECTED_FAILURE', 'Не удалось скачать вложение. Повторите попытку.'],
+  ])(
+    'shows %s beside the selected action and offers retry',
+    async (errorCode, expectedMessage) => {
+      apiMock.downloadAttachment.mockRejectedValue(new Error(errorCode))
+      render(
+        <MessengerMessageReader
+          open
+          managerId="7"
+          managerName="Анна Петрова"
+          from="2026-04-01T00:00:00.000+03:00"
+          to="2026-04-30T23:59:59.999+03:00"
+          returnFocus={null}
+          onRequestClose={vi.fn()}
+        />,
+      )
+
+      await screen.findByText('Диалог #441')
+      const message = screen.getByTestId('messenger-message-502')
+      fireEvent.click(
+        within(message).getByRole('button', { name: /скачать вложение 1/i }),
+      )
+
+      expect(await within(message).findByRole('alert')).toHaveTextContent(
+        expectedMessage,
+      )
+      const retry = within(message).getByRole('button', {
+        name: /повторить скачивание вложения 1/i,
+      })
+      expect(retry).toHaveTextContent('Повторить скачивание 1')
+
+      fireEvent.click(retry)
+      await waitFor(() =>
+        expect(apiMock.downloadAttachment).toHaveBeenCalledTimes(2),
+      )
+    },
+  )
+
   it('keeps escape under parent state control', async () => {
     const onRequestClose = vi.fn()
     render(
