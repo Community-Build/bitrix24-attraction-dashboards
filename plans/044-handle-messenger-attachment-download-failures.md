@@ -100,8 +100,7 @@ changing aggregate message metrics.
 - Final diff/CRG review of the scoped frontend and documentation change.
 - Production: clicking the exact 2026-07-17 12:36 attachment either shows an
   inline source-access message and retry or prepares a visible real link; a
-  trusted click on that link emits a download event; browser console stays
-  clean.
+  trusted click on that link saves the named file; browser console stays clean.
 
 ## Recovery And Rollback
 
@@ -119,3 +118,21 @@ data restore is required.
   when it is no longer usable.
 - Checks and review pass; PR is merged; production and issue #151 contain
   sanitized verification evidence.
+
+## Completion Evidence
+
+- PR #152 added adjacent failure messages, stable Russian error copy, and an
+  explicit retry; PR #153 retained a visible real download link after a
+  successful protected response.
+- GitHub Actions run `31318105938` passed lint, typecheck, tests, build, and the
+  production deploy. Production runs commit
+  `2f8eac000a77311d195092d9cb68304f703b73a7`; health is green, the app remains
+  non-root, and the protected endpoint rejects anonymous access with 401.
+- The exact production request for manager `11234`, session `34830`, message
+  `3280160`, file `357012` returned 200 with 19,543 binary bytes.
+- At 612px viewport, the exact 2026-07-17 12:36 message exposed the visible
+  ready state and a download link named
+  `Карточка_ООО_ФНБ_Инжиниринг.docx`. The automatic attempt and the trusted
+  visible-link click each saved a 19,543-byte file. The browser-control bridge
+  did not surface its download event, so filesystem evidence was used to
+  verify the actual result.
