@@ -77,7 +77,6 @@ export interface MessengerMessageSummary {
   from: string;
   to: string;
   currentDeals: number;
-  sessions: number;
   uniqueDialogs: number;
   dealsWithMessages: number;
   messages: number;
@@ -96,8 +95,6 @@ export interface MessengerMessageSummary {
     label: string;
     messages: number;
   }>;
-  directionAvailable: false;
-  personalAuthorAvailable: boolean;
 }
 
 export interface MessengerMessageCollectionInput {
@@ -128,8 +125,6 @@ export interface MessengerReportSummary {
   dealsWithMessages: number;
   systemMessagesExcluded: number;
   managerRows: MessengerMessageSummary[];
-  directionAvailable: false;
-  personalAuthorAvailable: boolean;
 }
 
 export interface MessengerMessageDetailsInput
@@ -158,8 +153,6 @@ export interface MessengerMessageDetails {
   totalMessages: number;
   returnedMessages: number;
   truncated: boolean;
-  directionAvailable: false;
-  personalAuthorAvailable: boolean;
   messages: Array<{
     id: string;
     sessionId: string;
@@ -337,6 +330,9 @@ export function createMessengerMessageCollectionService(input: {
       (message) =>
         message.direction === "outgoing" && message.authorManagerId === null
     );
+    const allOutgoingMessages = messages.filter(
+      (message) => message.direction === "outgoing"
+    );
     const channelCounts = new Map<
       string,
       { key: string; label: string; messages: number }
@@ -364,7 +360,6 @@ export function createMessengerMessageCollectionService(input: {
       from: request.from,
       to: request.to,
       currentDeals: scope.currentDealsByManager.get(manager.managerId) ?? 0,
-      sessions: new Set(messages.map((message) => message.sessionId)).size,
       uniqueDialogs: new Set(messages.map((message) => message.sessionId)).size,
       dealsWithMessages: new Set(messages.map((message) => message.dealId)).size,
       messages: messages.length,
@@ -377,10 +372,10 @@ export function createMessengerMessageCollectionService(input: {
         (message) => message.direction === "unknown"
       ).length,
       uniqueOutgoingDialogs: new Set(
-        confirmedOutgoingMessages.map((message) => message.sessionId)
+        allOutgoingMessages.map((message) => message.sessionId)
       ).size,
       dealsWithOutgoingMessages: new Set(
-        confirmedOutgoingMessages.map((message) => message.dealId)
+        allOutgoingMessages.map((message) => message.dealId)
       ).size,
       messagesWithText: messages.filter((message) => Boolean(message.text?.trim()))
         .length,
@@ -392,10 +387,6 @@ export function createMessengerMessageCollectionService(input: {
       channels: [...channelCounts.values()].sort(
         (left, right) =>
           right.messages - left.messages || left.label.localeCompare(right.label)
-      ),
-      directionAvailable: false,
-      personalAuthorAvailable: messages.some(
-        (message) => message.authorManagerId !== null
       )
     };
   }
@@ -529,11 +520,7 @@ export function createMessengerMessageCollectionService(input: {
           (total, row) => total + row.systemMessagesExcluded,
           0
         ),
-        managerRows,
-        directionAvailable: false,
-        personalAuthorAvailable: managerRows.some(
-          (row) => row.personalAuthorAvailable
-        )
+        managerRows
       };
     },
 
@@ -558,10 +545,6 @@ export function createMessengerMessageCollectionService(input: {
         totalMessages: batch.messages.length,
         returnedMessages: selectedMessages.length,
         truncated: selectedMessages.length < batch.messages.length,
-        directionAvailable: false,
-        personalAuthorAvailable: batch.messages.some(
-          (message) => message.authorConfirmed
-        ),
         messages: selectedMessages.map((message) => ({
           id: message.id,
           sessionId: message.sessionId,

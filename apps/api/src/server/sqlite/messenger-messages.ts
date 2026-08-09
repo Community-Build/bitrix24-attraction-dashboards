@@ -8,7 +8,7 @@ import {
 } from "../../domain/messenger-messages.js";
 import type { SqliteRepository } from "../sqlite-repository.js";
 
-const MESSENGER_MESSAGE_NORMALIZATION_VERSION = 1;
+const MESSENGER_MESSAGE_NORMALIZATION_VERSION = 2;
 
 type MessengerMessageRepositoryMethods = Pick<
   SqliteRepository,
@@ -52,7 +52,6 @@ interface StaleMessengerMessageRow {
   authorManagerId: string | null;
   text: string | null;
   rawText: string | null;
-  system: number;
 }
 
 function parseAttachmentFileIds(value: string) {
@@ -130,8 +129,7 @@ function normalizeStoredMessengerMessages(database: Database.Database) {
         author_label AS authorLabel,
         author_manager_id AS authorManagerId,
         message_text AS text,
-        raw_text AS rawText,
-        is_system AS system
+        raw_text AS rawText
       FROM messenger_message_snapshots
       WHERE normalization_version < ?`
     )
@@ -156,27 +154,21 @@ function normalizeStoredMessengerMessages(database: Database.Database) {
       author_label = @authorLabel,
       author_manager_id = @authorManagerId,
       message_text = @text,
+      is_system = @system,
       normalization_version = @normalizationVersion
     WHERE session_id = @sessionId AND message_id = @messageId
   `);
   const normalizeTransaction = database.transaction(
     (rows: StaleMessengerMessageRow[]) => {
       for (const row of rows) {
-        if (row.system === 1) {
-          updateMessage.run({
-            ...row,
-            normalizationVersion: MESSENGER_MESSAGE_NORMALIZATION_VERSION
-          });
-          continue;
-        }
-
         const classification = classifyMessengerMessage({
           channelKey: row.channelKey,
+          senderId: row.senderId,
           senderKind: row.senderKind,
           text: row.rawText ?? row.text
         });
         const authorManagerId =
-          classification.direction === "outgoing"
+          !classification.system && classification.direction === "outgoing"
             ? resolveMessengerAuthorManagerId({
                 authorLabel: classification.authorLabel,
                 senderId: row.senderId,
@@ -191,6 +183,7 @@ function normalizeStoredMessengerMessages(database: Database.Database) {
           authorLabel: classification.authorLabel,
           authorManagerId,
           text: classification.text,
+          system: classification.system ? 1 : 0,
           normalizationVersion: MESSENGER_MESSAGE_NORMALIZATION_VERSION
         });
       }

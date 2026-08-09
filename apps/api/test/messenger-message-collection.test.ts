@@ -8,7 +8,8 @@ import {
 
 const managers = [
   { managerId: "78", managerName: "Егоров Андрей", enabled: true },
-  { managerId: "11234", managerName: "Ромашова Ольга", enabled: true }
+  { managerId: "11234", managerName: "Ромашова Ольга", enabled: true },
+  { managerId: "6994", managerName: "Кузнецова Анастасия", enabled: true }
 ];
 
 function message(
@@ -43,10 +44,11 @@ function message(
 function createRepository(rows: MessengerMessageSnapshot[]) {
   return {
     getManagerWhitelistSettings: async () => managers,
-    getCurrentAttractionScope: async () => ({ dealIds: ["1001", "1002"] }),
+    getCurrentAttractionScope: async () => ({ dealIds: ["1001", "1002", "1003"] }),
     getDealsByIds: async () => [
       { id: "1001", assignedById: "78" },
-      { id: "1002", assignedById: "11234" }
+      { id: "1002", assignedById: "11234" },
+      { id: "1003", assignedById: "6994" }
     ],
     listMessengerMessages: async (input: {
       managerIds?: string[];
@@ -159,7 +161,9 @@ describe("cached messenger message reporting", () => {
         expect.objectContaining({
           managerId: "11234",
           outgoingMessages: 1,
-          outgoingUnknownAuthorMessages: 1
+          outgoingUnknownAuthorMessages: 1,
+          uniqueOutgoingDialogs: 2,
+          dealsWithOutgoingMessages: 2
         })
       ])
     );
@@ -209,7 +213,6 @@ describe("cached messenger message reporting", () => {
     });
 
     expect(details.totalMessages).toBe(2);
-    expect(details.personalAuthorAvailable).toBe(true);
     expect(details.messages[0]).toMatchObject({
       id: "inside",
       authorConfirmed: true,
@@ -221,6 +224,86 @@ describe("cached messenger message reporting", () => {
       authorLabel: "Телефон",
       authorConfirmed: false
     });
+  });
+
+  it("reports the reviewed Kuznetsova OLChat population without unknown direction", async () => {
+    const incoming = Array.from({ length: 218 }, (_, index) =>
+      message({
+        id: `incoming-${index}`,
+        sessionId: `dialog-${index % 14}`,
+        dealId: "1003",
+        dealManagerId: "6994",
+        channelKey: "olchat_telegram",
+        channelLabel: "OLChat: Telegram",
+        occurredAt: "2026-07-15T10:00:00+03:00",
+        senderId: `connector-${index % 14}`,
+        senderKind: "connector",
+        direction: "incoming"
+      })
+    );
+    const outgoing = Array.from({ length: 205 }, (_, index) =>
+      message({
+        id: `outgoing-${index}`,
+        sessionId: `dialog-${index % 14}`,
+        dealId: "1003",
+        dealManagerId: "6994",
+        channelKey: "olchat_telegram",
+        channelLabel: "OLChat: Telegram",
+        occurredAt: "2026-07-15T10:01:00+03:00",
+        senderId: "0",
+        senderKind: "unknown",
+        direction: "outgoing",
+        authorManagerId: null
+      })
+    );
+    const system = Array.from({ length: 27 }, (_, index) =>
+      message({
+        id: `system-${index}`,
+        sessionId: `dialog-${index % 14}`,
+        dealId: "1003",
+        dealManagerId: "6994",
+        channelKey: "olchat_telegram",
+        channelLabel: "OLChat: Telegram",
+        occurredAt: "2026-07-15T10:02:00+03:00",
+        senderId: "0",
+        senderKind: "unknown",
+        direction: "unknown",
+        system: true
+      })
+    );
+    const service = createMessengerMessageCollectionService({
+      repository: createRepository([...incoming, ...outgoing, ...system]),
+      client: {}
+    });
+
+    const report = await service.getMessengerReportSummary({
+      managerIds: ["6994"],
+      from: "2026-07-01T00:00:00+03:00",
+      to: "2026-07-31T23:59:59+03:00"
+    });
+
+    expect(report).toMatchObject({
+      totalMessages: 423,
+      outgoingMessages: 0,
+      outgoingUnknownAuthorMessages: 205,
+      incomingMessages: 218,
+      unknownDirectionMessages: 0,
+      uniqueOutgoingDialogs: 14,
+      dealsWithOutgoingMessages: 1,
+      systemMessagesExcluded: 27
+    });
+    expect(report.managerRows).toEqual([
+      expect.objectContaining({
+        managerId: "6994",
+        messages: 423,
+        outgoingUnknownAuthorMessages: 205,
+        incomingMessages: 218,
+        unknownDirectionMessages: 0,
+        uniqueOutgoingDialogs: 14,
+        dealsWithOutgoingMessages: 1,
+        systemMessagesExcluded: 27
+      })
+    ]);
   });
 
   it("validates manager access, ranges, and reader limits", async () => {

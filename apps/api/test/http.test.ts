@@ -1159,7 +1159,6 @@ describe("createApp", () => {
                 from: input.from,
                 to: input.to,
                 currentDeals: 10,
-                sessions: 2,
                 uniqueDialogs: 2,
                 dealsWithMessages: 2,
                 messages: 5,
@@ -1184,8 +1183,6 @@ describe("createApp", () => {
                     messages: 5
                   }
                 ],
-                directionAvailable: false as const,
-                personalAuthorAvailable: false as const
               };
             }
           }
@@ -1248,8 +1245,6 @@ describe("createApp", () => {
                 dealsWithMessages: 3,
                 systemMessagesExcluded: 2,
                 managerRows: [],
-                directionAvailable: false as const,
-                personalAuthorAvailable: false as const
               };
             },
             getManagerMessageDetails: async () => {
@@ -1309,8 +1304,6 @@ describe("createApp", () => {
                 totalMessages: 1,
                 returnedMessages: 1,
                 truncated: false,
-                directionAvailable: false as const,
-                personalAuthorAvailable: false as const,
                 messages: [
                   {
                     id: "501",
@@ -1356,8 +1349,6 @@ describe("createApp", () => {
           totalMessages: 1,
           returnedMessages: 1,
           truncated: false,
-          directionAvailable: false,
-          personalAuthorAvailable: false,
           messages: [
             {
               id: "501",

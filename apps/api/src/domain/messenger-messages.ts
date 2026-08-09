@@ -66,6 +66,8 @@ const RUSSIAN_OUTGOING_MARKER =
   /^\s*===\s*Исходящее сообщение(?:,\s*автор:\s*(.+?))?\s*===\s*(?:\r?\n)?/iu;
 const UMNICO_OUTGOING_MARKER =
   /^[^\S\r\n]*===\s*Out(?:coming|going)\s+message\.?\s*(?:Source:\s*(.+?))?\s*===[^\S\r\n]*(?=\r?$)/imu;
+const OLCHAT_TELEGRAM_OUTGOING_MARKER =
+  /^\s*\[OLChat\]\s*Telegram:\s*\r?\n\s*\[b\]\[Исходящее\]\[\/b\]\s*(?:\r?\n)?/iu;
 const WAZZUP_SYSTEM_MARKER = /^\s*===\s*SYSTEM\s+WZ\s*===/iu;
 const BOLD_BBCODE_TOKEN = /\[\/?b\]/giu;
 const GENERIC_AUTHOR_TOKENS = new Set([
@@ -83,13 +85,19 @@ function normalizeMessengerDisplayText(value: string | null) {
   return value.replace(BOLD_BBCODE_TOKEN, "").trim() || null;
 }
 
-function matchOutgoingMarker(channelKey: string, rawText: string) {
-  const russianMarker = RUSSIAN_OUTGOING_MARKER.exec(rawText);
-  if (russianMarker) {
-    return russianMarker;
+function matchOutgoingMarker(input: {
+  channelKey: string;
+  senderId: string;
+  rawText: string;
+}) {
+  if (input.channelKey.startsWith("wz_")) {
+    return RUSSIAN_OUTGOING_MARKER.exec(input.rawText);
   }
-  if (channelKey.startsWith("umnico")) {
-    return UMNICO_OUTGOING_MARKER.exec(rawText);
+  if (input.channelKey.startsWith("umnico")) {
+    return UMNICO_OUTGOING_MARKER.exec(input.rawText);
+  }
+  if (input.channelKey === "olchat_telegram" && input.senderId === "0") {
+    return OLCHAT_TELEGRAM_OUTGOING_MARKER.exec(input.rawText);
   }
 
   return null;
@@ -203,11 +211,16 @@ export function resolveMessengerAuthorManagerId(input: {
 
 export function classifyMessengerMessage(input: {
   channelKey: string;
+  senderId: string;
   senderKind: MessengerSenderKind;
   text: string | null;
 }) {
   const rawText = input.text;
-  if (rawText && WAZZUP_SYSTEM_MARKER.test(rawText)) {
+  if (
+    rawText &&
+    input.channelKey.startsWith("wz_") &&
+    WAZZUP_SYSTEM_MARKER.test(rawText)
+  ) {
     return {
       system: true,
       direction: "unknown" as const,
@@ -218,7 +231,11 @@ export function classifyMessengerMessage(input: {
   }
 
   if (rawText) {
-    const outgoingMatch = matchOutgoingMarker(input.channelKey, rawText);
+    const outgoingMatch = matchOutgoingMarker({
+      channelKey: input.channelKey,
+      senderId: input.senderId,
+      rawText
+    });
     if (outgoingMatch) {
       return {
         system: false,
@@ -228,6 +245,16 @@ export function classifyMessengerMessage(input: {
         rawText
       };
     }
+  }
+
+  if (input.senderId === "0") {
+    return {
+      system: true,
+      direction: "unknown" as const,
+      authorLabel: null,
+      text: null,
+      rawText
+    };
   }
 
   if (input.senderKind === "operator") {
@@ -242,7 +269,8 @@ export function classifyMessengerMessage(input: {
 
   if (
     input.channelKey.startsWith("wz_") ||
-    input.channelKey.startsWith("umnico")
+    input.channelKey.startsWith("umnico") ||
+    input.channelKey.startsWith("olchat_")
   ) {
     return {
       system: false,
@@ -298,10 +326,11 @@ export function buildMessengerSessionSnapshot(input: {
           : "unknown";
     const classification = classifyMessengerMessage({
       channelKey: channel.key,
+      senderId: message.senderId,
       senderKind,
       text: message.text
     });
-    const system = message.senderId === "0" || classification.system;
+    const system = classification.system;
     const attachmentFileIds = normalizeMessengerAttachmentFileIds(
       message.attachmentFileIds
     );

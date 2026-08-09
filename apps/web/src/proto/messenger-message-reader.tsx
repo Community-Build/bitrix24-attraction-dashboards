@@ -343,10 +343,10 @@ export function MessengerMessageReader({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-            Для WAZZUP и Umnico служебная пометка определяет исходящее сообщение,
-            а сообщение без неё — входящее от клиента. Если источник не называет
-            автора, показываем ответственного менеджера, не выдавая его за
-            физического отправителя.
+            Для WAZZUP, Umnico и OLChat Telegram направление определяется по
+            служебным признакам источника. Если источник не называет автора,
+            показываем ответственного менеджера, не выдавая его за физического
+            отправителя.
           </div>
 
           {loading ? (

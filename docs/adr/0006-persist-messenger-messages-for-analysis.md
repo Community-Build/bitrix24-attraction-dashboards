@@ -54,8 +54,8 @@ The reader must keep authorship and operational responsibility visibly
 different. A resolved whitelist author is labelled as the author. An unresolved
 outgoing row can appear in the responsible deal manager's reader, but that
 manager is labelled as `Ответственный`, not as the physical author. A proven
-incoming WAZZUP/Umnico row is labelled as a client message without persisting or
-exposing client identity.
+incoming WAZZUP/Umnico/OLChat row is labelled as a client message without
+persisting or exposing client identity.
 
 The Activities messenger block reads SQLite automatically whenever the common
 date or manager filter changes. Aggregate responses never contain body text.
@@ -75,11 +75,17 @@ through the existing validated, bounded proxy.
   `Телефон` and other ambiguous authors are no longer credited to the current
   deal owner.
 - WAZZUP and Umnico direction use separate provider-specific embedded markers.
-  For either supported connector, a marked row is outgoing and an unmarked
-  non-system connector row is incoming. Umnico display text removes its service
-  prefix plus `[b]` / `[/b]` formatting tokens while preserving exact raw text.
-- The current connector evidence still cannot determine OLChat direction; those
-  rows remain visible under `unknown` until a provider-specific rule is proven.
+  For either connector, a marked row is outgoing and an unmarked non-system
+  connector row is incoming. Umnico display text removes its service prefix
+  plus `[b]` / `[/b]` formatting tokens while preserving exact raw text.
+- OLChat Telegram publishes external outgoing messages with `sender_id = 0`
+  and an anchored `[OLChat] Telegram` / `[Исходящее]` prefix. That exact shape
+  is outgoing and non-system; other `sender_id = 0` rows remain system events.
+  Unmarked connector rows are incoming and explicit Bitrix operators are
+  outgoing. OLChat does not name the physical author in this prefix, so those
+  outgoing rows stay in the unknown-author bucket under the responsible deal
+  manager. OLChat WhatsApp keeps the observed operator/connector semantics and
+  does not reuse the Telegram marker.
 
 ## Revisit Conditions
 

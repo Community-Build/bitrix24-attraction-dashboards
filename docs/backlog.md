@@ -25,6 +25,28 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
+### Fix OLChat messenger direction across all managers ([#155](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/155))
+- Area: activities, api, data, web
+- Problem: OLChat Telegram outgoing rows arrive with `sender_id = 0` and an
+  embedded provider marker, but the current normalization treats every
+  `sender_id = 0` row as a system event. Outgoing messages are hidden and all
+  remaining connector messages are reported with unknown direction.
+- Expected behavior: parse the structural OLChat Telegram marker for every
+  manager, show unmarked connector rows as incoming, retain real service events
+  as excluded evidence, and keep unknown physical authors separate from the
+  responsible manager.
+- Acceptance criteria:
+  - Provider-scoped tests cover WAZZUP, Umnico, OLChat Telegram, OLChat
+    WhatsApp, operator, connector, system, and marker-spoof cases.
+  - Historical SQLite normalization recalculates direction and `is_system`
+    from retained `raw_text` without changing the raw evidence.
+  - The Kuznetsova July fixture yields 218 incoming and 205 outgoing messages,
+    zero unknown direction, and 27 excluded system rows.
+  - Summary responses still omit bodies; reader access remains leader-only;
+    author versus responsible-manager semantics do not change.
+  - Full local API/web tests, typecheck, lint, ontology validation, and browser
+    verification pass before any production rollout.
+
 ### Show messenger attachment download failures inline ([#151](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/151))
 - Area: activities, web
 - Problem: when the protected attachment endpoint fails, the long scrolled
@@ -102,7 +124,9 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
     or raw payload storage and is rendered as plain text rather than HTML.
   - WAZZUP rows use the embedded outgoing/system markers; unmarked WAZZUP rows
     are incoming. Umnico uses its embedded `Outcoming message` marker and treats
-    unmarked non-system rows as incoming. OLChat direction remains `unknown`.
+    unmarked non-system rows as incoming. OLChat Telegram uses the anchored
+    `[OLChat] Telegram` / `[Исходящее]` sender-zero marker; unmarked connector
+    rows are incoming and unmarked sender-zero rows remain system events.
   - The reader strips WAZZUP/Umnico service headers and bold BBCode tokens,
     links to the owning deal, and downloads only validated message attachments
     through a bounded proxy.

@@ -1460,7 +1460,6 @@ export interface MessengerManagerSummaryRow {
   from: string
   to: string
   currentDeals: number
-  sessions: number
   uniqueDialogs: number
   dealsWithMessages: number
   messages: number
@@ -1475,8 +1474,6 @@ export interface MessengerManagerSummaryRow {
   systemMessagesExcluded: number
   senderKinds: Record<MessengerSenderKind, number>
   channels: MessengerChannelSummary[]
-  directionAvailable: false
-  personalAuthorAvailable: boolean
 }
 
 export interface MessengerReportSummary {
@@ -1495,8 +1492,6 @@ export interface MessengerReportSummary {
   dealsWithMessages: number
   systemMessagesExcluded: number
   managerRows: MessengerManagerSummaryRow[]
-  directionAvailable: false
-  personalAuthorAvailable: boolean
 }
 
 export interface MessengerMessageDetailItem {
@@ -1526,8 +1521,6 @@ export interface MessengerMessageDetails {
   totalMessages: number
   returnedMessages: number
   truncated: boolean
-  directionAvailable: false
-  personalAuthorAvailable: boolean
   messages: MessengerMessageDetailItem[]
 }
 

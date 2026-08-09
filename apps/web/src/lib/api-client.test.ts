@@ -3573,7 +3573,6 @@ describe('apiClient', () => {
               from: '2026-08-01T00:00:00+03:00',
               to: '2026-08-03T23:59:59+03:00',
               currentDeals: 10,
-              sessions: 5,
               uniqueDialogs: 4,
               dealsWithMessages: 3,
               outgoingMessages: 6,
@@ -3590,12 +3589,8 @@ describe('apiClient', () => {
               channels: [
                 { key: 'wz_telegram', label: 'WAZZUP: Telegram', messages: 9 },
               ],
-              directionAvailable: false,
-              personalAuthorAvailable: false,
             },
           ],
-          directionAvailable: false,
-          personalAuthorAvailable: false,
         },
       }),
     })
@@ -3653,8 +3648,6 @@ describe('apiClient', () => {
           totalMessages: 2,
           returnedMessages: 1,
           truncated: true,
-          directionAvailable: false,
-          personalAuthorAvailable: false,
           messages: [
             {
               id: '501',
