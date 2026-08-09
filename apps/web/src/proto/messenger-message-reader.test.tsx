@@ -160,7 +160,7 @@ describe('MessengerMessageReader', () => {
       .spyOn(URL, 'revokeObjectURL')
       .mockImplementation(() => undefined)
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
-    render(
+    const { unmount } = render(
       <MessengerMessageReader
         open
         managerId="7"
@@ -186,9 +186,45 @@ describe('MessengerMessageReader', () => {
       }),
     )
     expect(createObjectUrl).toHaveBeenCalledOnce()
-    await waitFor(() =>
-      expect(revokeObjectUrl).toHaveBeenCalledWith('blob:attachment'),
+    const preparedDownload = await screen.findByRole('link', {
+      name: /скачать готовый файл 1/i,
+    })
+    expect(preparedDownload).toHaveAttribute('href', 'blob:attachment')
+    expect(preparedDownload).toHaveAttribute('download', 'Договор.docx')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Файл готов. Если загрузка не началась автоматически, нажмите ссылку.',
     )
+    expect(revokeObjectUrl).not.toHaveBeenCalled()
+
+    unmount()
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:attachment')
+  })
+
+  it('keeps the prepared link when an embedded browser blocks the automatic click', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:blocked-automatic')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {
+      throw new Error('Download blocked')
+    })
+    render(
+      <MessengerMessageReader
+        open
+        managerId="7"
+        managerName="Анна Петрова"
+        from="2026-04-01T00:00:00.000+03:00"
+        to="2026-04-30T23:59:59.999+03:00"
+        returnFocus={null}
+        onRequestClose={vi.fn()}
+      />,
+    )
+
+    await screen.findByText('Диалог #441')
+    fireEvent.click(screen.getByRole('button', { name: /скачать вложение 1/i }))
+
+    expect(
+      await screen.findByRole('link', { name: /скачать готовый файл 1/i }),
+    ).toHaveAttribute('href', 'blob:blocked-automatic')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it.each([

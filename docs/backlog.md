@@ -30,11 +30,15 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 - Problem: when the protected attachment endpoint fails, the long scrolled
   reader shows the error only at its top, so the clicked button appears inert.
 - Expected behavior: show an actionable Russian error beside the exact
-  attachment and turn the same control into an explicit retry action.
+  attachment and turn the same control into an explicit retry action; after a
+  successful response retain a visible real download link so browsers that
+  block asynchronous synthetic clicks still let the operator save the file.
 - Acceptance criteria:
   - Known attachment error codes have clear operator-facing messages.
   - Unknown failures have a safe generic retry message.
-  - Successful Blob downloads remain unchanged.
+  - Successful Blob downloads keep the automatic attempt and expose a visible
+    trusted-click fallback link until the reader changes or closes.
+  - Replaced and closed-reader Blob URLs are revoked.
   - Leader-only access, message/file scope validation, the 20 MiB cap, no-store
     headers, aggregate values, and message privacy remain unchanged.
 - Data dependency: actual retrieval of files rejected by Bitrix with

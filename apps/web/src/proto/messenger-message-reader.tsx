@@ -20,6 +20,12 @@ type AttachmentDownloadError = {
   message: string
 }
 
+type PreparedAttachmentDownload = {
+  attachmentKey: string
+  objectUrl: string
+  fileName: string
+}
+
 function attachmentDownloadErrorMessage(error: unknown) {
   const code = error instanceof Error ? error.message : null
 
@@ -117,6 +123,10 @@ export function MessengerMessageReader({
   const [error, setError] = useState<string | null>(null)
   const [attachmentError, setAttachmentError] =
     useState<AttachmentDownloadError | null>(null)
+  const [preparedAttachment, setPreparedAttachment] =
+    useState<PreparedAttachmentDownload | null>(null)
+  const preparedAttachmentUrlRef = useRef<string | null>(null)
+  const attachmentRequestVersionRef = useRef(0)
   const [downloadingAttachment, setDownloadingAttachment] = useState<string | null>(
     null,
   )
@@ -143,12 +153,18 @@ export function MessengerMessageReader({
     }
 
     dialog.dataset.state = 'closed'
+    attachmentRequestVersionRef.current += 1
     if (dialog.open) {
       closeTimerRef.current = window.setTimeout(() => {
         dialog.close()
         setData(null)
         setError(null)
         setAttachmentError(null)
+        if (preparedAttachmentUrlRef.current) {
+          URL.revokeObjectURL(preparedAttachmentUrlRef.current)
+          preparedAttachmentUrlRef.current = null
+        }
+        setPreparedAttachment(null)
         setDownloadingAttachment(null)
         setLoading(false)
         returnFocus?.focus()
@@ -164,6 +180,17 @@ export function MessengerMessageReader({
     }
   }, [open, returnFocus])
 
+  useEffect(
+    () => () => {
+      attachmentRequestVersionRef.current += 1
+      if (preparedAttachmentUrlRef.current) {
+        URL.revokeObjectURL(preparedAttachmentUrlRef.current)
+        preparedAttachmentUrlRef.current = null
+      }
+    },
+    [],
+  )
+
   useEffect(() => {
     if (!open || !managerId) return
 
@@ -173,6 +200,13 @@ export function MessengerMessageReader({
       setLoading(true)
       setError(null)
       setAttachmentError(null)
+      attachmentRequestVersionRef.current += 1
+      if (preparedAttachmentUrlRef.current) {
+        URL.revokeObjectURL(preparedAttachmentUrlRef.current)
+        preparedAttachmentUrlRef.current = null
+      }
+      setPreparedAttachment(null)
+      setDownloadingAttachment(null)
       setData(null)
 
       void apiClient
@@ -210,6 +244,8 @@ export function MessengerMessageReader({
   ) {
     if (!managerId) return
     const attachmentKey = `${message.sessionId}:${message.id}:${fileId}`
+    const requestVersion = attachmentRequestVersionRef.current + 1
+    attachmentRequestVersionRef.current = requestVersion
     setDownloadingAttachment(attachmentKey)
     setAttachmentError(null)
 
@@ -222,28 +258,42 @@ export function MessengerMessageReader({
         messageId: message.id,
         fileId,
       })
+      if (attachmentRequestVersionRef.current !== requestVersion) return
+
       const objectUrl = URL.createObjectURL(attachment.blob)
+      if (preparedAttachmentUrlRef.current) {
+        URL.revokeObjectURL(preparedAttachmentUrlRef.current)
+      }
+      preparedAttachmentUrlRef.current = objectUrl
+      setPreparedAttachment({
+        attachmentKey,
+        objectUrl,
+        fileName: attachment.fileName,
+      })
+
+      const anchor = document.createElement('a')
+      anchor.href = objectUrl
+      anchor.download = attachment.fileName
+      anchor.hidden = true
+      document.body.append(anchor)
       try {
-        const anchor = document.createElement('a')
-        anchor.href = objectUrl
-        anchor.download = attachment.fileName
-        anchor.hidden = true
-        document.body.append(anchor)
-        try {
-          anchor.click()
-        } finally {
-          anchor.remove()
-        }
+        anchor.click()
+      } catch {
+        // Some embedded browsers block synthetic downloads after async work.
+        // The visible link remains available for a trusted user click.
       } finally {
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+        anchor.remove()
       }
     } catch (downloadError) {
+      if (attachmentRequestVersionRef.current !== requestVersion) return
       setAttachmentError({
         attachmentKey,
         message: attachmentDownloadErrorMessage(downloadError),
       })
     } finally {
-      setDownloadingAttachment(null)
+      if (attachmentRequestVersionRef.current === requestVersion) {
+        setDownloadingAttachment(null)
+      }
     }
   }
 
@@ -422,7 +472,10 @@ export function MessengerMessageReader({
                                     downloadingAttachment === attachmentKey
                                   const failedAttachment =
                                     attachmentError?.attachmentKey === attachmentKey
+                                  const readyAttachment =
+                                    preparedAttachment?.attachmentKey === attachmentKey
                                   const attachmentErrorId = `messenger-attachment-error-${message.id}-${attachment.id}`
+                                  const attachmentReadyId = `messenger-attachment-ready-${message.id}-${attachment.id}`
                                   return (
                                     <div
                                       key={attachment.id}
@@ -460,6 +513,22 @@ export function MessengerMessageReader({
                                         >
                                           {attachmentError.message}
                                         </p>
+                                      ) : null}
+                                      {readyAttachment ? (
+                                        <div className="max-w-md rounded-lg bg-emerald-50 px-3 py-2 text-xs leading-5 text-emerald-950">
+                                          <p id={attachmentReadyId} role="status">
+                                            Файл готов. Если загрузка не началась
+                                            автоматически, нажмите ссылку.
+                                          </p>
+                                          <a
+                                            href={preparedAttachment.objectUrl}
+                                            download={preparedAttachment.fileName}
+                                            aria-describedby={attachmentReadyId}
+                                            className="mt-2 inline-flex min-h-10 items-center rounded-xl border border-emerald-200 bg-white px-3 font-bold text-emerald-800 outline-none transition-[border-color,box-shadow,transform] duration-150 hover:border-emerald-400 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-[0.97]"
+                                          >
+                                            Скачать готовый файл {index + 1}
+                                          </a>
+                                        </div>
                                       ) : null}
                                     </div>
                                   )
