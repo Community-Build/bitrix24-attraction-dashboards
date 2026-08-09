@@ -5,8 +5,10 @@
 ## Outcome
 
 Make a failed messenger attachment download visible beside the exact control
-that initiated it and offer an explicit retry. Preserve the current successful
-download path and every authorization, scope, size, and privacy boundary.
+that initiated it and offer an explicit retry. After a successful response,
+retain a visible real download link so browsers that block the best-effort
+automatic Blob click still let the operator save the file. Preserve every
+authorization, scope, size, and privacy boundary.
 
 ## Change Classification And Authority
 
@@ -21,8 +23,9 @@ download path and every authorization, scope, size, and privacy boundary.
 
 In scope: translate the stable attachment API failure codes into concise
 Russian messages, render the last failure adjacent to the selected attachment,
-offer retry, cover success and failure with focused tests, and verify the exact
-production message after release.
+offer retry, retain one visible prepared-file download link after success,
+revoke replaced/closed Blob URLs, cover success and failure with focused tests,
+and verify the exact production message after release.
 
 Not in scope: changing Bitrix webhook/app permissions or credentials, adding a
 provider integration, weakening the leader-only reader, bypassing message/file
@@ -35,8 +38,10 @@ changing aggregate message metrics.
 - Current protected attachment route and collection service.
 - Current web reader and API client.
 - Sanitized live evidence for manager `11234`, session `34830`, message
-  `3280160`, file `357012`: the protected endpoint returns 502 because Bitrix
-  `disk.file.get` returns `ACCESS_DENIED`; Open Lines exposes only the file ID.
+  `3280160`, file `357012`: the first probe returned 502 with Bitrix
+  `ACCESS_DENIED`; after release the same endpoint returned 200/19,543 bytes,
+  but the in-app browser emitted no download event for the asynchronous hidden
+  anchor click.
 
 ## Decisions Already Made
 
@@ -44,6 +49,9 @@ changing aggregate message metrics.
   download or an inert button.
 - Error feedback belongs beside the attachment action because the reader is a
   long independently scrolling drawer.
+- A successful API response must not rely only on a synthetic click after an
+  asynchronous fetch. The automatic attempt remains best-effort and a visible
+  `<a download>` provides a new trusted user gesture.
 - `ATTACHMENT_UNAVAILABLE`, `ATTACHMENT_NOT_FOUND`, and
   `ATTACHMENT_TOO_LARGE` receive distinct messages; unknown failures receive a
   safe generic retry message.
@@ -52,9 +60,9 @@ changing aggregate message metrics.
 
 ## Critical Unknowns
 
-- The current Bitrix credential cannot call the read-only IM file download
-  method, and `disk.file.get` denies this WAZZUP/Open Lines file. A separately
-  authorized credential change may make the file retrievable later.
+- Bitrix file access was inconsistent across live probes. The UI must represent
+  both source failure and source success correctly; expanding credential scope
+  remains a separately authorized change if `ACCESS_DENIED` recurs.
 
 ## Boundaries And Contracts
 
@@ -65,12 +73,14 @@ changing aggregate message metrics.
 | Privacy | Do not expose raw URLs, credentials, payloads, or message bodies outside the existing reader. |
 | Resource limit | Keep the 20 MiB bounded proxy and no-store response behavior. |
 | UI state | Associate the visible failure with one exact attachment key and clear it before retry or reader reload. |
+| Browser download | Keep at most one prepared Blob URL, expose it through a real link, and revoke it on replacement, reload, close, or unmount. |
 
 ## Work Packets
 
 1. Web failure state
    - Owns: `apps/web/src/proto/messenger-message-reader.tsx`.
-   - Output: stable error-code copy, adjacent alert, retry action.
+   - Output: stable error-code copy, adjacent alert, retry action, visible
+     prepared-file link, and bounded Blob URL lifecycle.
    - Stop: if the change requires widening API access or browser-side direct
      Bitrix/provider URLs.
 2. Focused verification
@@ -88,9 +98,10 @@ changing aggregate message metrics.
 - Focused messenger reader test and full web suite.
 - `pnpm typecheck`, `pnpm lint`, and `pnpm ontology:validate`.
 - Final diff/CRG review of the scoped frontend and documentation change.
-- Production: clicking the exact 2026-07-17 12:36 attachment shows an inline
-  source-access message and a retry action; successful attachments remain
-  downloadable; browser console stays clean.
+- Production: clicking the exact 2026-07-17 12:36 attachment either shows an
+  inline source-access message and retry or prepares a visible real link; a
+  trusted click on that link emits a download event; browser console stays
+  clean.
 
 ## Recovery And Rollback
 
@@ -104,6 +115,7 @@ data restore is required.
 - The error is visible beside the exact selected attachment and offers retry.
 - Stable server codes have actionable Russian messages and unknown failures
   have a safe fallback.
-- Successful downloads and all existing server-side controls remain unchanged.
+- Successful responses expose a real downloadable link and revoke its Blob URL
+  when it is no longer usable.
 - Checks and review pass; PR is merged; production and issue #151 contain
   sanitized verification evidence.
