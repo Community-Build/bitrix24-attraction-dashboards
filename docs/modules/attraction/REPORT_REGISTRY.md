@@ -89,10 +89,12 @@ Stable dashboard anchors used by ontology report bindings:
   Every deduction publishes evidence, threshold and a fixed recommendation.
 - The summary is agent-readable and never includes deal title, contact/company
   identity, message body, call-analysis narrative, transcript or raw payload.
-- The detail route is not registered as agent-readable. Message body and safe
-  call-analysis summary/risks are returned only for a leader (or an explicitly
-  auth-disabled local runtime), after the query is constrained to one exact
-  deal ID. Transcript, evidence quotes and raw evaluation are never returned.
+- The detail route is not registered as agent-readable. Cleaned task subject and
+  description, message body, safe call-analysis summary/risks and the saved
+  transcript are returned only for a leader (or an explicitly auth-disabled
+  local runtime), after the query is constrained to one exact deal ID. Evidence
+  quotes, raw evaluation and raw Bitrix payloads are never returned. See ADR
+  0007.
 - Deal-field completeness, MEDDICC, predictive scoring and Bitrix writes are
   intentionally outside V1.
 - Page rendering reads local SQLite snapshots and canonical facts only; it

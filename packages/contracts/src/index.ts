@@ -340,6 +340,7 @@ export interface DealAnalysisReport {
 
 export interface DealAnalysisTimelineItem {
   id: string;
+  sourceEntityId: string;
   kind:
     | "call"
     | "task_created"
@@ -351,6 +352,12 @@ export interface DealAnalysisTimelineItem {
   occurredAt: string;
   title: string;
   detail: string | null;
+  subject: string | null;
+  comment: string | null;
+  createdAt: string | null;
+  deadlineAt: string | null;
+  completedAt: string | null;
+  eventName: string | null;
   direction: "incoming" | "outgoing" | "unknown" | null;
   durationSeconds: number | null;
   successful: boolean | null;
@@ -368,11 +375,14 @@ export interface DealAnalysisMessage {
 
 export interface DealAnalysisCallInsight {
   callId: string;
+  status: CallAnalysisQueueStatus;
   score: number | null;
   summary: string | null;
   risks: string[];
   suggestedNextStep: string | null;
-  analyzedAt: string;
+  transcript: string | null;
+  analyzedAt: string | null;
+  errorMessage: string | null;
 }
 
 export interface DealAnalysisDetail {
@@ -561,6 +571,8 @@ export interface ActivitySnapshot {
   lastUpdated: string;
   completed: boolean;
   completedTime: string | null;
+  subject?: string | null;
+  description?: string | null;
 }
 
 export interface ActivityBindingSnapshot {

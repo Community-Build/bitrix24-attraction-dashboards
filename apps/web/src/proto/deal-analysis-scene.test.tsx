@@ -6,10 +6,11 @@ import type { DealAnalysisReport, DealAnalysisRow } from '@/lib/dashboard-types'
 import { DealAnalysisScene } from '@/proto/deal-analysis-scene'
 import type { ProtoFilterState } from '@/proto/types'
 
-const api = vi.hoisted(() => ({ report: vi.fn(), detail: vi.fn() }))
+const api = vi.hoisted(() => ({ report: vi.fn(), detail: vi.fn(), analyze: vi.fn() }))
 vi.mock('@/lib/api-client', () => ({ apiClient: {
   getDealAnalysisReport: api.report,
   getDealAnalysisDetail: api.detail,
+  analyzeCall: api.analyze,
 } }))
 
 const filters: ProtoFilterState = {
@@ -68,5 +69,70 @@ describe('DealAnalysisScene', () => {
     expect(await screen.findByRole('dialog', { name: 'Сделка 42' })).toBeInTheDocument()
     expect(screen.getByText('Нет следующего действия')).toBeInTheDocument()
     await waitFor(() => expect(api.detail).toHaveBeenCalledWith('42', expect.any(Object), 'open'))
+  })
+
+  it('renders a concrete full timeline and connects a call to analysis', async () => {
+    api.report.mockResolvedValue(report)
+    api.detail.mockResolvedValue({
+      row,
+      timeline: [
+        {
+          id: 'task:11', sourceEntityId: '11', kind: 'task_completed',
+          occurredAt: '2026-06-18T14:00:00.000Z', title: 'Подготовить предложение',
+          detail: null, subject: 'Подготовить предложение', comment: 'Согласовать состав пакета',
+          createdAt: '2026-06-17T09:00:00.000Z', deadlineAt: '2026-06-19T12:00:00.000Z',
+          completedAt: '2026-06-18T14:00:00.000Z', eventName: null, direction: null,
+          durationSeconds: null, successful: true, stageId: 'C10:NEW', stageName: 'Квалификация',
+        },
+        {
+          id: 'call:99', sourceEntityId: '99', kind: 'call',
+          occurredAt: '2026-06-18T10:00:00.000Z', title: 'Звонок', detail: null,
+          subject: null, comment: null, createdAt: null, deadlineAt: null,
+          completedAt: null, eventName: null, direction: 'outgoing', durationSeconds: 999,
+          successful: true, stageId: 'C10:NEW', stageName: 'Квалификация',
+        },
+        {
+          id: 'message:7', sourceEntityId: '7', kind: 'message',
+          occurredAt: '2026-06-18T09:00:00.000Z', title: 'WhatsApp', detail: 'Подтверждаю встречу',
+          subject: null, comment: null, createdAt: '2026-06-18T09:00:00.000Z', deadlineAt: null,
+          completedAt: null, eventName: null, direction: 'incoming', durationSeconds: null,
+          successful: null, stageId: null, stageName: null,
+        },
+        {
+          id: 'event:4', sourceEntityId: '4', kind: 'conversion_event_visit',
+          occurredAt: '2026-06-17T18:00:00.000Z', title: 'День открытых дверей', detail: 'invited',
+          subject: null, comment: null, createdAt: null, deadlineAt: null, completedAt: null,
+          eventName: 'День открытых дверей', direction: null, durationSeconds: null,
+          successful: null, stageId: 'C10:NEW', stageName: 'Квалификация',
+        },
+      ],
+      stageHistory: [], messages: [],
+      callInsights: [{ callId: '99', status: 'not_analyzed', score: null, summary: null, risks: [], suggestedNextStep: null, transcript: null, analyzedAt: null, errorMessage: null }],
+      sensitiveContentAvailable: true,
+    })
+    api.analyze.mockResolvedValue({
+      result: {
+        aiEvaluation: { score: 84, summary: 'Потребность выявлена.', risks: ['Нет срока'], suggestedNextStep: 'Назначить встречу' },
+        fullTranscriptText: 'Менеджер: Добрый день.\nКлиент: Добрый день.',
+        analyzedAt: '2026-06-18T15:00:00.000Z',
+      },
+    })
+    const user = userEvent.setup()
+    render(<DealAnalysisScene filters={filters} commentMode={false} />)
+
+    await user.click(await screen.findByText('#42'))
+    await user.click(await screen.findByRole('button', { name: 'Активность' }))
+
+    expect(screen.getByText('Подготовить предложение')).toBeInTheDocument()
+    expect(screen.getByText('Согласовать состав пакета')).toBeInTheDocument()
+    expect(screen.getByText('Исходящий · 16 мин 39 сек')).toBeInTheDocument()
+    expect(screen.getByText('Подтверждаю встречу')).toBeInTheDocument()
+    expect(screen.getByText('День открытых дверей')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'История этапов' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Проанализировать звонок' }))
+    await waitFor(() => expect(api.analyze).toHaveBeenCalledWith('99', 'attraction'))
+    expect(await screen.findByText('84/100')).toBeInTheDocument()
+    expect(screen.getByText('Показать транскрипт')).toBeInTheDocument()
   })
 })

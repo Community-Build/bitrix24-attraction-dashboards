@@ -21,6 +21,10 @@ import type {
 } from "@bitrix24-reporting/contracts";
 
 import { ATTRACTION_MANAGER_IDS } from "./attraction-managers.js";
+import {
+  sanitizeActivityDescription,
+  sanitizeActivitySubject
+} from "./activity-content.js";
 import type { OpenLineSessionHistoryInput } from "./messenger-messages.js";
 import { sanitizeRefusalReasonDetail } from "./refusal-detail.js";
 
@@ -68,6 +72,8 @@ export interface ActivityRow {
   LAST_UPDATED: string;
   COMPLETED: string;
   COMPLETED_DATE?: string | null;
+  SUBJECT?: string | null;
+  DESCRIPTION?: string | null;
 }
 
 export interface ActivityBindingRow {
@@ -242,6 +248,7 @@ export interface SyncRepository {
     reconciledAt: string;
   }): Promise<void>;
   getActivitiesByIds(activityIds: string[]): Promise<ActivitySnapshot[]>;
+  getActivityIdsMissingContentBackfill?(limit?: number): Promise<string[]>;
   getCallActivityIdsMissingActivities?(
     limit?: number,
     callStartDateFrom?: string | null,
@@ -368,6 +375,7 @@ export const LEADGEN_US_BASKET_REASON_FIELD_NAME =
   ATTRACTION_BASKET_REASON_FIELD_NAME;
 const TASK_ACTIVITY_PROVIDER_IDS = ["CRM_TODO", "CRM_TASKS_TASK"] as const;
 const MISSING_CALL_ACTIVITY_BACKFILL_LIMIT = 20_000;
+const ACTIVITY_CONTENT_BACKFILL_LIMIT = 5_000;
 const MISSING_CALL_STATS_BACKFILL_LIMIT = 20_000;
 const CALL_STATS_REFRESH_LIMIT = 20_000;
 const EVENT_VISIT_STAGE_HISTORY_BACKFILL_LIMIT = 5_000;
@@ -926,7 +934,9 @@ function mapActivityRow(row: ActivityRow): ActivitySnapshot {
     deadline: row.DEADLINE ?? null,
     lastUpdated: row.LAST_UPDATED,
     completed,
-    completedTime: completed ? row.COMPLETED_DATE ?? row.LAST_UPDATED : null
+    completedTime: completed ? row.COMPLETED_DATE ?? row.LAST_UPDATED : null,
+    subject: sanitizeActivitySubject(row.SUBJECT),
+    description: sanitizeActivityDescription(row.DESCRIPTION)
   };
 }
 
@@ -2372,12 +2382,29 @@ export async function performManualSync(
               callStatsOwnerIdSet.has(String(row.OWNER_ID))
           )
         : [];
+    const activityContentBackfillIds =
+      input.repository.getActivityIdsMissingContentBackfill &&
+      input.client.listActivitiesByIds &&
+      callStatsOwnerIds.length > 0
+        ? await input.repository.getActivityIdsMissingContentBackfill(
+            ACTIVITY_CONTENT_BACKFILL_LIMIT
+          )
+        : [];
+    const activityContentBackfillRows =
+      activityContentBackfillIds.length > 0 && input.client.listActivitiesByIds
+        ? (await input.client.listActivitiesByIds(activityContentBackfillIds)).filter(
+            (row) =>
+              String(row.OWNER_TYPE_ID) === "2" &&
+              callStatsOwnerIdSet.has(String(row.OWNER_ID))
+          )
+        : [];
     const initialActivityRows = Array.from(
       new Map(
-        [...syncedActivityRows, ...missingCallActivityRows].map((row) => [
-          String(row.ID),
-          row
-        ])
+        [
+          ...syncedActivityRows,
+          ...missingCallActivityRows,
+          ...activityContentBackfillRows
+        ].map((row) => [String(row.ID), row])
       ).values()
     );
     const missingCallStatsActivityIds =

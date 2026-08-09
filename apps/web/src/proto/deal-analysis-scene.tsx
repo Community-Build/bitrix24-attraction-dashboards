@@ -3,9 +3,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { apiClient } from '@/lib/api-client'
 import type {
   DashboardQuery,
+  DealAnalysisCallInsight,
   DealAnalysisDetail,
   DealAnalysisRow,
   DealAnalysisScope,
+  DealAnalysisTimelineItem,
   DealHealthBand,
 } from '@/lib/dashboard-types'
 import { formatAmount, formatInteger, formatShortDate } from '@/lib/formatters'
@@ -35,6 +37,139 @@ function dateTime(value: string | null) {
   return new Intl.DateTimeFormat('ru-RU', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   }).format(new Date(value))
+}
+
+function formatCallDuration(value: number | null) {
+  if (value === null) return null
+  const seconds = Math.max(0, Math.round(value))
+  const hours = Math.floor(seconds / 3_600)
+  const minutes = Math.floor((seconds % 3_600) / 60)
+  const remainingSeconds = seconds % 60
+  return [
+    hours ? `${hours} ч` : null,
+    minutes ? `${minutes} мин` : null,
+    remainingSeconds || (!hours && !minutes) ? `${remainingSeconds} сек` : null,
+  ].filter(Boolean).join(' ')
+}
+
+function directionLabel(direction: DealAnalysisTimelineItem['direction']) {
+  if (direction === 'outgoing') return 'Исходящий'
+  if (direction === 'incoming') return 'Входящий'
+  if (direction === 'unknown') return 'Направление не определено'
+  return null
+}
+
+function eventStatusLabel(value: string | null) {
+  if (value === 'invited') return 'Приглашён'
+  if (value === 'confirmed') return 'Участие подтверждено'
+  if (value === 'attended') return 'Посетил'
+  if (value === 'missed') return 'Не пришёл'
+  if (value === 'refused') return 'Отказался'
+  return value
+}
+
+function CallAnalysisBlock({
+  insight,
+  loading,
+  actionError,
+  allowed,
+  onAnalyze,
+}: {
+  insight: DealAnalysisCallInsight | null
+  loading: boolean
+  actionError: string | null
+  allowed: boolean
+  onAnalyze(): void
+}) {
+  if (!allowed) {
+    return <p className="mt-3 text-xs text-slate-400">Анализ и транскрипт доступны только руководителю.</p>
+  }
+  if (insight?.status === 'ready') {
+    return (
+      <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50/80 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <strong className="text-sm text-blue-950">Анализ звонка</strong>
+          {insight.score !== null ? <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-blue-700">{insight.score}/100</span> : null}
+        </div>
+        {insight.summary ? <p className="mt-2 text-sm leading-6 text-blue-950">{insight.summary}</p> : null}
+        {insight.risks.length ? <p className="mt-2 text-sm text-blue-800"><strong>Риски:</strong> {insight.risks.join(' · ')}</p> : null}
+        {insight.suggestedNextStep ? <p className="mt-2 text-sm text-blue-950"><strong>Следующий шаг:</strong> {insight.suggestedNextStep}</p> : null}
+        {insight.transcript ? (
+          <details className="mt-3 rounded-lg border border-blue-200 bg-white px-3 py-2">
+            <summary className="cursor-pointer text-sm font-bold text-blue-700">Показать транскрипт</summary>
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{insight.transcript}</p>
+          </details>
+        ) : <p className="mt-2 text-xs text-blue-700">Транскрипт для этого анализа не сохранён.</p>}
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap items-center gap-3">
+      <button type="button" className="btn btn-primary" onClick={onAnalyze} disabled={loading || insight?.status === 'analyzing'}>
+        {loading || insight?.status === 'analyzing' ? 'Анализируется…' : insight?.status === 'error' ? 'Повторить анализ звонка' : 'Проанализировать звонок'}
+      </button>
+      {insight?.status === 'error' && insight.errorMessage ? <span className="text-sm text-rose-700">{insight.errorMessage}</span> : null}
+      {actionError ? <span className="text-sm text-rose-700">{actionError}</span> : null}
+    </div>
+  )
+}
+
+function TimelineCard({
+  item,
+  insight,
+  analyzing,
+  actionError,
+  analysisAllowed,
+  onAnalyze,
+}: {
+  item: DealAnalysisTimelineItem
+  insight: DealAnalysisCallInsight | null
+  analyzing: boolean
+  actionError: string | null
+  analysisAllowed: boolean
+  onAnalyze(): void
+}) {
+  const isTask = item.kind === 'task_created' || item.kind === 'task_completed'
+  const isCall = item.kind === 'call'
+  const isMessage = item.kind === 'message'
+  const status = item.kind === 'conversion_event_visit' ? eventStatusLabel(item.detail) : null
+
+  return (
+    <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className="font-bold text-slate-950">{item.title}</h3>
+            {isTask ? <span className={cn('rounded-full px-2.5 py-1 text-xs font-bold', item.completedAt ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>{item.completedAt ? 'Выполнена' : 'Запланирована'}</span> : null}
+            {status && !isTask ? <span className="rounded-full bg-violet-50 px-2.5 py-1 text-xs font-bold text-violet-700">{status}</span> : null}
+          </div>
+          {isCall || isMessage ? <p className="mt-1 text-sm font-medium text-slate-500">{[directionLabel(item.direction), isCall ? formatCallDuration(item.durationSeconds) : null].filter(Boolean).join(' · ')}</p> : null}
+        </div>
+        <time className="shrink-0 text-xs font-medium text-slate-400">{dateTime(item.occurredAt)}</time>
+      </div>
+
+      {isTask ? (
+        <>
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-500">
+            {item.createdAt ? <span><strong className="text-slate-700">Создана:</strong> {dateTime(item.createdAt)}</span> : null}
+            {item.deadlineAt ? <span><strong className="text-slate-700">Срок:</strong> {dateTime(item.deadlineAt)}</span> : null}
+            {item.completedAt ? <span><strong className="text-slate-700">Завершена:</strong> {dateTime(item.completedAt)}</span> : null}
+          </div>
+          {item.comment ? <p className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{item.comment}</p> : <p className="mt-3 text-sm text-slate-400">Комментарий к задаче не заполнен.</p>}
+        </>
+      ) : null}
+
+      {isMessage ? <p className="mt-3 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{item.detail || 'Текст сообщения отсутствует.'}</p> : null}
+
+      {item.kind === 'meeting' && item.deadlineAt ? <p className="mt-3 text-sm text-slate-600"><strong>Встреча назначена:</strong> {dateTime(item.deadlineAt)}</p> : null}
+      {item.kind === 'meeting' && item.comment ? <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.comment}</p> : null}
+      {item.kind === 'meeting_date_changed' && item.detail ? <p className="mt-3 text-sm text-slate-600">{item.detail}</p> : null}
+      {item.stageName ? <p className="mt-3 text-xs font-medium text-slate-400">Этап на момент события: {item.stageName}</p> : null}
+
+      {isCall ? <CallAnalysisBlock insight={insight} loading={analyzing} actionError={actionError} allowed={analysisAllowed} onAnalyze={onAnalyze} /> : null}
+    </article>
+  )
 }
 
 function nextActionLabel(row: DealAnalysisRow) {
@@ -84,6 +219,8 @@ function DealDrawer({
   const closeRef = useRef<HTMLButtonElement>(null)
   const [detail, setDetail] = useState<DealAnalysisDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [analyzingCallId, setAnalyzingCallId] = useState<string | null>(null)
+  const [callActionErrors, setCallActionErrors] = useState<Record<string, string>>({})
   const [tab, setTab] = useState<'risks' | 'activity' | 'path' | 'details'>(row.risks.length ? 'risks' : 'activity')
 
   useEffect(() => {
@@ -103,8 +240,51 @@ function DealDrawer({
     return () => { cancelled = true }
   }, [query, row.dealId, scope])
 
+  const callInsightById = useMemo(
+    () => new Map((detail?.callInsights ?? []).map((insight) => [insight.callId, insight])),
+    [detail?.callInsights],
+  )
+
+  async function analyzeCall(callId: string) {
+    setAnalyzingCallId(callId)
+    setCallActionErrors((current) => ({ ...current, [callId]: '' }))
+    try {
+      const response = await apiClient.analyzeCall(callId, 'attraction')
+      const result = response.result
+      const nextInsight: DealAnalysisCallInsight = {
+        callId,
+        status: 'ready',
+        score: result.aiEvaluation.score,
+        summary: result.aiEvaluation.summary,
+        risks: result.aiEvaluation.risks,
+        suggestedNextStep: result.aiEvaluation.suggestedNextStep,
+        transcript: result.fullTranscriptText,
+        analyzedAt: result.analyzedAt,
+        errorMessage: null,
+      }
+      setDetail((current) => {
+        if (!current) return current
+        const insights = current.callInsights ?? []
+        const hasCall = insights.some((insight) => insight.callId === callId)
+        return {
+          ...current,
+          callInsights: hasCall
+            ? insights.map((insight) => insight.callId === callId ? nextInsight : insight)
+            : [...insights, nextInsight],
+        }
+      })
+    } catch (nextError) {
+      setCallActionErrors((current) => ({
+        ...current,
+        [callId]: nextError instanceof Error ? nextError.message : 'Не удалось проанализировать звонок.',
+      }))
+    } finally {
+      setAnalyzingCallId(null)
+    }
+  }
+
   const tabs = [
-    ['risks', 'Риски'], ['activity', 'Активность'], ['path', 'Путь сделки'], ['details', 'Детали'],
+    ['risks', 'Риски'], ['activity', 'Активность'], ['path', 'История этапов'], ['details', 'Детали'],
   ] as const
 
   return (
@@ -144,19 +324,16 @@ function DealDrawer({
           ) : null}
           {detail && tab === 'activity' ? (
             <div className="space-y-3">
-              {detail.callInsights?.map((insight) => (
-                <article key={`insight:${insight.callId}`} className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-                  <div className="flex items-center justify-between gap-3"><h3 className="font-bold text-blue-950">Анализ звонка</h3>{insight.score !== null ? <span className="rounded-full bg-white px-2.5 py-1 text-xs font-bold text-blue-700">{insight.score}/100</span> : null}</div>
-                  {insight.summary ? <p className="mt-2 text-sm leading-6 text-blue-900">{insight.summary}</p> : null}
-                  {insight.risks.length ? <p className="mt-2 text-sm text-blue-800">Риски: {insight.risks.join(' · ')}</p> : null}
-                  {insight.suggestedNextStep ? <p className="mt-3 text-sm font-semibold text-blue-950">Проверить: {insight.suggestedNextStep}</p> : null}
-                </article>
-              ))}
               {detail.timeline.length === 0 ? <p className="text-slate-500">За выбранный период активностей нет.</p> : detail.timeline.map((item) => (
-                <article key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="flex items-start justify-between gap-4"><h3 className="font-bold text-slate-900">{item.title}</h3><time className="shrink-0 text-xs text-slate-400">{dateTime(item.occurredAt)}</time></div>
-                  <p className="mt-1 text-sm text-slate-500">{[item.direction, item.durationSeconds ? `${item.durationSeconds} сек.` : null, item.detail].filter(Boolean).join(' · ') || 'Событие зафиксировано'}</p>
-                </article>
+                <TimelineCard
+                  key={item.id}
+                  item={item}
+                  insight={item.kind === 'call' ? callInsightById.get(item.sourceEntityId) ?? null : null}
+                  analyzing={analyzingCallId === item.sourceEntityId}
+                  actionError={callActionErrors[item.sourceEntityId] || null}
+                  analysisAllowed={detail.sensitiveContentAvailable}
+                  onAnalyze={() => void analyzeCall(item.sourceEntityId)}
+                />
               ))}
               {!detail.sensitiveContentAvailable ? <p className="text-xs text-slate-400">Тексты сообщений и выводы анализа звонков доступны только руководителю.</p> : null}
             </div>

@@ -2709,7 +2709,9 @@ describe("createSqliteRepository", () => {
         deadline: "2026-04-09T10:00:00.000Z",
         lastUpdated: "2026-04-08T10:00:00.000Z",
         completed: false,
-        completedTime: null
+        completedTime: null,
+        subject: "Подготовить предложение",
+        description: "Согласовать состав пакета"
       },
       {
         id: "A_CALL_NO_STAT",
@@ -2813,7 +2815,9 @@ describe("createSqliteRepository", () => {
         deadline: "2026-04-09T10:00:00.000Z",
         lastUpdated: "2026-04-08T10:00:00.000Z",
         completed: false,
-        completedTime: null
+        completedTime: null,
+        subject: "Подготовить предложение",
+        description: "Согласовать состав пакета"
       }
     ]);
     expect(await repository.getCallActivityIdsMissingActivities()).toEqual([
@@ -2854,7 +2858,9 @@ describe("createSqliteRepository", () => {
         deadline: "2026-04-09T10:00:00.000Z",
         lastUpdated: "2026-04-08T10:00:00.000Z",
         completed: false,
-        completedTime: null
+        completedTime: null,
+        subject: "Подготовить предложение",
+        description: "Согласовать состав пакета"
       },
       {
         id: "A_CALL_NO_STAT",
@@ -2867,7 +2873,9 @@ describe("createSqliteRepository", () => {
         deadline: null,
         lastUpdated: "2026-04-08T13:01:00.000Z",
         completed: true,
-        completedTime: "2026-04-08T13:01:00.000Z"
+        completedTime: "2026-04-08T13:01:00.000Z",
+        subject: null,
+        description: null
       }
     ]);
     expect(await repository.getAllActivityBindings()).toEqual([

@@ -6,7 +6,10 @@ import type {
 } from "@bitrix24-reporting/contracts";
 import { describe, expect, it } from "vitest";
 
-import { buildDealAnalysisReport } from "../src/domain/deal-analysis";
+import {
+  buildDealAnalysisReport,
+  buildDealAnalysisTimeline
+} from "../src/domain/deal-analysis";
 
 const now = "2026-06-20T12:00:00.000Z";
 const range = { from: "2026-05-20T00:00:00.000Z", to: "2026-06-20T23:59:59.999Z" };
@@ -177,5 +180,53 @@ describe("buildDealAnalysisReport", () => {
     expect(report.rows[0]?.risks).toEqual(expect.arrayContaining([
       expect.objectContaining({ key: "stalled_after_milestone", deduction: 20 })
     ]));
+  });
+});
+
+describe("buildDealAnalysisTimeline", () => {
+  it("merges task lifecycle facts and keeps concrete task content and dates", () => {
+    const timeline = buildDealAnalysisTimeline([
+      {
+        factId: "task-created:11", kind: "task_created", sourceSystem: "bitrix24",
+        sourceEntityType: "activity", sourceEntityId: "11",
+        occurredAt: "2026-08-01T09:00:00.000Z", dealId: "42", contactId: null,
+        leadId: null, managerId: "7", sourceId: null, stageIdAtEvent: "C10:NEW",
+        stageNameAtEvent: "Новая", linkConfidence: "high", linkReason: "direct",
+        payloadJson: JSON.stringify({
+          subject: "Подготовить предложение",
+          description: "Согласовать состав пакета с клиентом",
+          createdTime: "2026-08-01T09:00:00.000Z",
+          deadline: "2026-08-03T12:00:00.000Z"
+        })
+      },
+      {
+        factId: "task-completed:11", kind: "task_completed", sourceSystem: "bitrix24",
+        sourceEntityType: "activity", sourceEntityId: "11",
+        occurredAt: "2026-08-02T15:00:00.000Z", dealId: "42", contactId: null,
+        leadId: null, managerId: "7", sourceId: null, stageIdAtEvent: "C10:NEW",
+        stageNameAtEvent: "Новая", linkConfidence: "high", linkReason: "direct",
+        payloadJson: JSON.stringify({
+          subject: "Подготовить предложение",
+          description: "Согласовать состав пакета с клиентом",
+          createdTime: "2026-08-01T09:00:00.000Z",
+          completedTime: "2026-08-02T15:00:00.000Z",
+          deadline: "2026-08-03T12:00:00.000Z"
+        })
+      }
+    ]);
+
+    expect(timeline).toEqual([
+      expect.objectContaining({
+        id: "task:11",
+        sourceEntityId: "11",
+        kind: "task_completed",
+        title: "Подготовить предложение",
+        comment: "Согласовать состав пакета с клиентом",
+        createdAt: "2026-08-01T09:00:00.000Z",
+        deadlineAt: "2026-08-03T12:00:00.000Z",
+        completedAt: "2026-08-02T15:00:00.000Z",
+        direction: null
+      })
+    ]);
   });
 });

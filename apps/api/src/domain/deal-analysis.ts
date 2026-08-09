@@ -133,41 +133,102 @@ function numberValue(value: unknown) {
 export function buildDealAnalysisTimeline(
   facts: DealTouchpointFactSnapshot[]
 ): DealAnalysisTimelineItem[] {
-  return facts
-    .filter((fact) => fact.kind !== "message_count" && fact.kind !== "comment_quality_signal")
-    .map((fact) => {
+  const visibleFacts = facts.filter(
+    (fact) => fact.kind !== "message_count" && fact.kind !== "comment_quality_signal"
+  );
+  const taskFacts = buildGroups(
+    visibleFacts.filter(
+      (fact) => fact.kind === "task_created" || fact.kind === "task_completed"
+    ),
+    (fact) => fact.sourceEntityId
+  );
+  const timeline = visibleFacts
+    .filter((fact) => fact.kind !== "task_created" && fact.kind !== "task_completed")
+    .map((fact): DealAnalysisTimelineItem => {
       const data = payload(fact.payloadJson);
       const direction: DealAnalysisTimelineItem["direction"] =
         data?.direction === "incoming" || data?.direction === "outgoing"
-        ? data.direction as "incoming" | "outgoing"
-        : data?.direction === null
-          ? null
-          : "unknown";
+          ? data.direction
+          : data?.direction === "unknown"
+            ? "unknown"
+            : null;
+      const eventName = textValue(data?.eventName);
+      const subject = textValue(data?.subject);
       const titles: Record<string, string> = {
         call: "Звонок",
-        task_created: "Задача создана",
-        task_completed: "Задача выполнена",
         meeting: "Встреча",
         meeting_date_changed: "Дата встречи изменена",
-        conversion_event_visit: "Посещение мероприятия"
+        conversion_event_visit: "Мероприятие"
       };
-      const eventName = textValue(data?.eventName);
-      const deadline = textValue(data?.deadline);
-      const detail = eventName ?? (deadline ? `Срок: ${deadline}` : null);
+
       return {
         id: fact.factId,
+        sourceEntityId: fact.sourceEntityId,
         kind: fact.kind as DealAnalysisTimelineItem["kind"],
         occurredAt: fact.occurredAt,
-        title: titles[fact.kind] ?? fact.kind,
-        detail,
+        title: subject ?? eventName ?? titles[fact.kind] ?? fact.kind,
+        detail: textValue(data?.status),
+        subject,
+        comment: textValue(data?.description),
+        createdAt: textValue(data?.createdTime),
+        deadlineAt: textValue(data?.deadline) ?? textValue(data?.scheduledAt),
+        completedAt: textValue(data?.completedTime),
+        eventName,
         direction,
         durationSeconds: numberValue(data?.durationSeconds),
         successful: typeof data?.connected === "boolean" ? data.connected : null,
         stageId: fact.stageIdAtEvent,
         stageName: fact.stageNameAtEvent
       };
-    })
-    .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
+    });
+
+  for (const [sourceEntityId, rows] of taskFacts) {
+    const created = rows.find((fact) => fact.kind === "task_created") ?? null;
+    const completed = rows.find((fact) => fact.kind === "task_completed") ?? null;
+    const createdData = payload(created?.payloadJson ?? null);
+    const completedData = payload(completed?.payloadJson ?? null);
+    const subject = textValue(completedData?.subject) ?? textValue(createdData?.subject);
+    const comment =
+      textValue(completedData?.description) ?? textValue(createdData?.description);
+    const createdAt =
+      textValue(completedData?.createdTime) ??
+      textValue(createdData?.createdTime) ??
+      created?.occurredAt ??
+      null;
+    const completedAt =
+      textValue(completedData?.completedTime) ??
+      textValue(createdData?.completedTime) ??
+      completed?.occurredAt ??
+      null;
+    const deadlineAt =
+      textValue(completedData?.deadline) ?? textValue(createdData?.deadline);
+    const latestFact = completed ?? created;
+    if (!latestFact) continue;
+
+    timeline.push({
+      id: `task:${sourceEntityId}`,
+      sourceEntityId,
+      kind: completedAt ? "task_completed" : "task_created",
+      occurredAt: completedAt ?? createdAt ?? latestFact.occurredAt,
+      title: subject ?? "Задача",
+      detail: null,
+      subject,
+      comment,
+      createdAt,
+      deadlineAt,
+      completedAt,
+      eventName: null,
+      direction: null,
+      durationSeconds: null,
+      successful: completedAt ? true : null,
+      stageId: latestFact.stageIdAtEvent,
+      stageName: latestFact.stageNameAtEvent
+    });
+  }
+
+  return timeline.sort(
+    (left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt)
+  );
 }
 
 function isCompletedMilestone(fact: DealTouchpointFactSnapshot) {

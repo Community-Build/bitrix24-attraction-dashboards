@@ -134,6 +134,8 @@ export interface ActivityRow {
   LAST_UPDATED: string;
   COMPLETED: string;
   COMPLETED_DATE?: string | null;
+  SUBJECT?: string | null;
+  DESCRIPTION?: string | null;
 }
 
 export interface OpenLineActivityRow {
@@ -2053,7 +2055,9 @@ export class BitrixClient {
             "DEADLINE",
             "LAST_UPDATED",
             "COMPLETED",
-            "COMPLETED_DATE"
+            "COMPLETED_DATE",
+            "SUBJECT",
+            "DESCRIPTION"
           ],
           start: -1
         })),
@@ -2257,7 +2261,9 @@ export class BitrixClient {
             "DEADLINE",
             "LAST_UPDATED",
             "COMPLETED",
-            "COMPLETED_DATE"
+            "COMPLETED_DATE",
+            "SUBJECT",
+            "DESCRIPTION"
           ],
           start: 0
         });

@@ -1892,7 +1892,15 @@ export function createReportingService(
       wonStageIds,
       dealUrlBuilder: (dealId) => buildBitrixDealUrl(bitrixPortalHost, dealId)
     });
-    return { report, stageCatalog, stageHistory: reportStageHistory, calls: reportCalls, touchpoints, resolvedRange };
+    return {
+      report,
+      stageCatalog,
+      stageHistory: reportStageHistory,
+      activities,
+      calls: reportCalls,
+      touchpoints,
+      resolvedRange
+    };
   };
 
   return {
@@ -3137,39 +3145,80 @@ export function createReportingService(
       const callIds = uniqueStrings(
         dealFacts.filter((fact) => fact.kind === "call").map((fact) => fact.sourceEntityId)
       );
-      const analyses = includeSensitiveContent
-        ? await Promise.all(callIds.map((callId) => input.repository.getCallAnalysisResult(callId)))
-        : [];
+      const [analyses, latestRuns] = includeSensitiveContent
+        ? await Promise.all([
+            Promise.all(
+              callIds.map((callId) => input.repository.getCallAnalysisResult(callId))
+            ),
+            input.repository.getLatestCallAnalysisRuns(callIds)
+          ])
+        : [[], []];
+      const analysisByCallId = new Map(
+        analyses
+          .filter((analysis): analysis is CallAnalysisResultRecord => analysis !== null)
+          .map((analysis) => [analysis.callId, analysis])
+      );
+      const latestRunByCallId = new Map(latestRuns.map((run) => [run.callId, run]));
       const callInsights = includeSensitiveContent
-        ? analyses.flatMap((analysis) => {
-            if (!analysis) return [];
-            const evaluation = analysis.aiEvaluation;
-            const score = typeof evaluation.score === "number" ? evaluation.score : null;
-            const summary = typeof evaluation.summary === "string" ? evaluation.summary : null;
-            const risks = Array.isArray(evaluation.risks)
+        ? callIds.map((callId) => {
+            const analysis = analysisByCallId.get(callId) ?? null;
+            const latestRun = latestRunByCallId.get(callId) ?? null;
+            const evaluation = analysis?.aiEvaluation;
+            const score =
+              typeof evaluation?.score === "number" ? evaluation.score : null;
+            const summary =
+              typeof evaluation?.summary === "string" ? evaluation.summary : null;
+            const risks = Array.isArray(evaluation?.risks)
               ? evaluation.risks.filter((item): item is string => typeof item === "string")
               : [];
-            const suggestedNextStep = typeof evaluation.suggestedNextStep === "string"
+            const suggestedNextStep = typeof evaluation?.suggestedNextStep === "string"
               ? evaluation.suggestedNextStep
               : null;
-            return [{
-              callId: analysis.callId,
+            return {
+              callId,
+              status: resolveQueueAnalysisStatus(analysis, latestRun),
               score,
               summary,
               risks,
               suggestedNextStep,
-              analyzedAt: analysis.analyzedAt
-            }];
+              transcript: analysis?.fullTranscriptText ?? null,
+              analyzedAt: analysis?.analyzedAt ?? null,
+              errorMessage: latestRun?.errorMessage ?? null
+            };
           })
         : null;
       const timeline = buildDealAnalysisTimeline(dealFacts);
+      const activityById = new Map(
+        loaded.activities
+          .filter((activity) => activity.ownerId === dealId)
+          .map((activity) => [activity.id, activity])
+      );
+      for (const item of timeline) {
+        const activity = activityById.get(item.sourceEntityId);
+        if (!activity) continue;
+        item.subject ??= activity.subject ?? null;
+        item.comment ??= activity.description ?? null;
+        item.createdAt ??= activity.createdTime;
+        item.deadlineAt ??= activity.deadline;
+        item.completedAt ??= activity.completedTime;
+        if (item.subject && (item.kind === "task_created" || item.kind === "task_completed")) {
+          item.title = item.subject;
+        }
+      }
       if (safeMessages) {
         timeline.push(...safeMessages.map((message) => ({
           id: `message:${message.id}`,
+          sourceEntityId: message.id,
           kind: "message" as const,
           occurredAt: message.occurredAt,
           title: message.channelLabel,
           detail: message.text,
+          subject: null,
+          comment: null,
+          createdAt: message.occurredAt,
+          deadlineAt: null,
+          completedAt: null,
+          eventName: null,
           direction: message.direction,
           durationSeconds: null,
           successful: null,
