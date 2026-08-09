@@ -131,6 +131,13 @@ describe("messenger message SQLite cache", () => {
       })
     ]);
     await expect(
+      repository.listMessengerMessages({
+        dealIds: ["another-deal"],
+        from: "2026-08-03T00:00:00+03:00",
+        to: "2026-08-03T23:59:59+03:00"
+      })
+    ).resolves.toEqual([]);
+    await expect(
       repository.getMessengerMessage({ sessionId: "441", messageId: "502" })
     ).resolves.toBeNull();
     await expect(

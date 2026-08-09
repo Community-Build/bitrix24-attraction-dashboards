@@ -43,6 +43,12 @@ export interface AttractionReportRouteService {
   ): Promise<unknown>;
   getActivitiesWorkloadReport(input: RangeRequest): Promise<unknown>;
   getOperationalDashboardReport(input: RangeRequest): Promise<unknown>;
+  getDealAnalysisReport?(input: RangeRequest & { scope?: "open" | "won" | "lost" }): Promise<unknown>;
+  getDealAnalysisDetail?(input: RangeRequest & {
+    dealId: string;
+    scope?: "open" | "won" | "lost";
+    includeSensitiveContent?: boolean;
+  }): Promise<unknown | null>;
   getAcquisitionOutcomesReport(input: RangeRequest): Promise<unknown>;
   getTargetGroupConversionReport(input: RangeRequest): Promise<unknown>;
   getManagerActionOutcomeReport(input: RangeRequest): Promise<unknown>;
@@ -76,6 +82,7 @@ export interface CreateAttractionReportRouteHandlersInput {
   getModuleService(moduleId: string): ModuleReportRouteService | undefined;
   authEnabled: boolean;
   denyIfMissingAttractionAccess(response: express.Response): boolean;
+  canAccessAttractionLeaderContent(response: express.Response): boolean;
   requireModuleAccess(
     response: express.Response,
     permission: undefined,
@@ -114,6 +121,8 @@ const sourceCohortJourneyDrilldownQuerySchema = z.object({
   stepKey: z.string().trim().min(1).max(128)
 });
 
+const dealAnalysisScopeSchema = z.enum(["open", "won", "lost"]);
+
 function createErrorResponse(code: string, details?: unknown) {
   return {
     error: code,
@@ -150,6 +159,7 @@ export function createAttractionReportRouteHandlers({
   getModuleService,
   authEnabled,
   denyIfMissingAttractionAccess,
+  canAccessAttractionLeaderContent,
   requireModuleAccess,
   parseRangeRequest,
   parseRevenueVelocityRequest,
@@ -295,6 +305,57 @@ export function createAttractionReportRouteHandlers({
           service.getOperationalDashboardReport(
             await parseScopedRangeRequest(request, response)
           )
+      });
+    },
+    getDealAnalysisReport: async (request, response, next) => {
+      if (denyIfMissingAttractionAccess(response)) return;
+      const getDealAnalysisReport = service.getDealAnalysisReport;
+      if (!getDealAnalysisReport) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      await sendTimedJson({
+        request,
+        response,
+        next,
+        moduleId: "attraction",
+        route: "deal-analysis",
+        handler: async () => {
+          const scoped = await parseScopedRangeRequest(request, response);
+          return getDealAnalysisReport({
+            ...scoped,
+            scope: dealAnalysisScopeSchema.catch("open").parse(request.query.scope)
+          });
+        }
+      });
+    },
+    getDealAnalysisDetail: async (request, response, next) => {
+      if (denyIfMissingAttractionAccess(response)) return;
+      const getDealAnalysisDetail = service.getDealAnalysisDetail;
+      if (!getDealAnalysisDetail) {
+        response.status(404).json(createErrorResponse("NOT_FOUND"));
+        return;
+      }
+      await sendTimedJson({
+        request,
+        response,
+        next,
+        moduleId: "attraction",
+        route: "deal-analysis-detail",
+        handler: async () => {
+          const scoped = await parseScopedRangeRequest(request, response);
+          const detail = await getDealAnalysisDetail({
+            ...scoped,
+            dealId: requestRouteParam(request, "dealId").trim(),
+            scope: dealAnalysisScopeSchema.catch("open").parse(request.query.scope),
+            includeSensitiveContent: canAccessAttractionLeaderContent(response)
+          });
+          if (!detail) {
+            response.status(404);
+            return createErrorResponse("NOT_FOUND");
+          }
+          return detail;
+        }
       });
     },
     getAcquisitionOutcomesReport: async (request, response, next) => {

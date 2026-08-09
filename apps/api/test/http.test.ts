@@ -779,6 +779,15 @@ function createTestApp(
       comparisons: []
     }),
     getOperationalDashboardReport: async () => createEmptyOperationalDashboardReport(),
+    getDealAnalysisReport: async () => ({
+      range: { from: "2026-04-01T00:00:00.000Z", to: "2026-04-30T23:59:59.999Z" },
+      generatedAt: "2026-04-30T12:00:00.000Z",
+      scope: "open" as const,
+      currentScope: { status: "ready" as const, reconciledAt: null, dealCount: 0 },
+      rows: [],
+      thresholdsUpdatedAt: null
+    }),
+    getDealAnalysisDetail: async () => null,
     getConversionEventsReport: async () => ({
       range: {
         from: "2026-04-01T00:00:00.000Z",
@@ -1621,6 +1630,42 @@ describe("createApp", () => {
           responseBody.manifest.reports.every((report) => report.status === "planned")
         ).toBe(true);
       });
+  });
+
+  it("routes deal analysis summary and lazy detail with explicit local sensitive access", async () => {
+    const summaryInputs: unknown[] = [];
+    const detailInputs: unknown[] = [];
+    const app = createTestApp({
+      getDealAnalysisReport: async (input) => {
+        summaryInputs.push(input);
+        return {
+          range: { from: "2026-06-01T00:00:00.000Z", to: "2026-06-30T23:59:59.999Z" },
+          generatedAt: "2026-06-30T12:00:00.000Z",
+          scope: input.scope ?? "open",
+          currentScope: { status: "ready", reconciledAt: null, dealCount: 1 },
+          rows: [],
+          thresholdsUpdatedAt: null
+        };
+      },
+      getDealAnalysisDetail: async (input) => {
+        detailInputs.push(input);
+        return { row: { dealId: input.dealId }, timeline: [], stageHistory: [], messages: [], callInsights: [], sensitiveContentAvailable: input.includeSensitiveContent };
+      }
+    });
+
+    await request(app)
+      .get("/api/reports/deal-analysis?periodDays=30&scope=won")
+      .expect(200)
+      .expect(({ body }) => expect(body.scope).toBe("won"));
+    await request(app)
+      .get("/api/reports/deal-analysis/42?periodDays=30&scope=won")
+      .expect(200)
+      .expect(({ body }) => expect(body.sensitiveContentAvailable).toBe(true));
+
+    expect(summaryInputs).toEqual([expect.objectContaining({ periodDays: 30, scope: "won" })]);
+    expect(detailInputs).toEqual([
+      expect.objectContaining({ dealId: "42", scope: "won", includeSensitiveContent: true })
+    ]);
   });
 
   it("marks leadgen report capabilities available only when the leadgen module service is registered", async () => {

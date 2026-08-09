@@ -86,6 +86,7 @@ export interface MessengerMessageQuery {
   from: string;
   to: string;
   managerIds?: string[];
+  dealIds?: string[];
 }
 
 const DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS: OperationalStageAgingThreshold[] = [

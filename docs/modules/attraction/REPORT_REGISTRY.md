@@ -70,6 +70,34 @@ Stable dashboard anchors used by ontology report bindings:
   marker advance only after a complete Bitrix inventory and snapshot refresh
   commit successfully. See [ADR 0004](../../adr/0004-current-attraction-scope-projection.md).
 
+## deal-analysis
+
+- Module: `attraction`.
+- Report scene: `deal-analysis` / `Анализ сделок`.
+- Privacy-safe summary route: `/api/reports/deal-analysis`; lazy per-deal route:
+  `/api/reports/deal-analysis/:dealId`.
+- Backend contracts: `DealAnalysisReport` and `DealAnalysisDetail`.
+- Unit of analysis: a retained deal that is also present in the atomically
+  reconciled `attraction_current_deal_ids` projection and matches the active
+  attraction manager/team access scope. Open, won and lost are separate views.
+- The selected period limits compact activity evidence only; it never removes
+  an old current open deal from the intervention queue.
+- Open-deal health is deterministic operational health, not win probability:
+  it starts at 100 and deducts for a missing or overdue dated next action,
+  configured stage aging, configured activity/call silence, and seven days
+  without stage movement after a trusted completed meeting or attended event.
+  Every deduction publishes evidence, threshold and a fixed recommendation.
+- The summary is agent-readable and never includes deal title, contact/company
+  identity, message body, call-analysis narrative, transcript or raw payload.
+- The detail route is not registered as agent-readable. Message body and safe
+  call-analysis summary/risks are returned only for a leader (or an explicitly
+  auth-disabled local runtime), after the query is constrained to one exact
+  deal ID. Transcript, evidence quotes and raw evaluation are never returned.
+- Deal-field completeness, MEDDICC, predictive scoring and Bitrix writes are
+  intentionally outside V1.
+- Page rendering reads local SQLite snapshots and canonical facts only; it
+  never calls Bitrix directly.
+
 ## source-cohort-conversion
 
 - Module: `attraction`.

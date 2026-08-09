@@ -25,6 +25,35 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
+### Deal analysis: daily intervention queue ([plan 046](../plans/046-deal-analysis-v1.md))
+- Area: sales, activities, web, api, data
+- Problem: the operational dashboard exposes aggregate risk counts and a risk
+  feed, but the attraction leader cannot review every current deal in one
+  explainable queue with health, next action, recent activity and a unified
+  drill-down.
+- Expected behavior: add a read-only `Анализ сделок` scene over the current
+  attraction scope. It ranks current open deals by deterministic operational
+  health, reuses the existing manager/team and activity-period filters, and
+  opens a right-side deal drawer with risks, activity, lifecycle and safe deal
+  attributes.
+- Acceptance criteria:
+  - Open deals are the default population; won and lost deals are separate
+    scopes and are not assigned an operational-health band.
+  - Health is explainable and uses only next-action state, stage aging, recent
+    CRM activity, recent calls and post-meeting/event movement. Missing fields,
+    message coverage and call-analysis coverage do not reduce the score.
+  - Every penalty has evidence, threshold and a deterministic recommendation.
+  - Table rendering and detail drill-down read local SQLite-backed API data;
+    page rendering never calls Bitrix directly.
+  - The drawer opens from a deal row; Bitrix navigation remains a separate
+    `Открыть сделку в CRM` action.
+  - Messenger text and call-analysis narrative remain leader-only and never
+    enter the summary response, logs, MCP, comments or notifications.
+  - The scene uses the existing attraction analytics design system and passes
+    focused API/web tests, typecheck, lint and browser verification.
+- Non-goals: CRM writes, MEDDICC, contact data, deal-field completeness,
+  predictive win probability, LLM advice and production deployment.
+
 ### Fix OLChat messenger direction across all managers ([#155](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/155))
 - Area: activities, api, data, web
 - Problem: OLChat Telegram outgoing rows arrive with `sender_id = 0` and an

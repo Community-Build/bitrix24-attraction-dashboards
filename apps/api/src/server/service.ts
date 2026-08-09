@@ -21,6 +21,9 @@ import type {
   ConversionEventTypeSettingsInput,
   DashboardData,
   DashboardSnapshot,
+  DealAnalysisDetail,
+  DealAnalysisReport,
+  DealAnalysisScope,
   DealSnapshot,
   DealPricingSettings,
   DealPricingSettingsInput,
@@ -86,6 +89,10 @@ import {
   OPERATIONAL_LOST_STAGE_IDS,
   buildOperationalDashboardReport
 } from "../domain/operational-dashboard.js";
+import {
+  buildDealAnalysisReport,
+  buildDealAnalysisTimeline
+} from "../domain/deal-analysis.js";
 import {
   ATTRACTION_MANAGER_CATALOG,
   buildManagerTeams,
@@ -214,6 +221,20 @@ export interface ReportingService {
     range?: ReportRange;
     filters?: ReportFilters;
   }): Promise<OperationalDashboardReport>;
+  getDealAnalysisReport(input: {
+    periodDays?: number;
+    range?: ReportRange;
+    filters?: ReportFilters;
+    scope?: DealAnalysisScope;
+  }): Promise<DealAnalysisReport>;
+  getDealAnalysisDetail(input: {
+    dealId: string;
+    scope?: DealAnalysisScope;
+    periodDays?: number;
+    range?: ReportRange;
+    filters?: ReportFilters;
+    includeSensitiveContent?: boolean;
+  }): Promise<DealAnalysisDetail | null>;
   getAcquisitionOutcomesReport(input: {
     periodDays?: number;
     range?: ReportRange;
@@ -1783,6 +1804,97 @@ export function createReportingService(
     };
   };
 
+  const loadDealAnalysisInputs = async (request: {
+    periodDays?: number | undefined;
+    range?: ReportRange | undefined;
+    filters?: ReportFilters | undefined;
+    scope?: DealAnalysisScope | undefined;
+  }) => {
+    const managerScope = await getAttractionManagerScope();
+    const scopedFilters = normalizeAttractionManagerFilters(request.filters, managerScope);
+    const now = nowFactory();
+    const [
+      deals,
+      stageCatalog,
+      stageHistory,
+      activities,
+      calls,
+      wonStageIds,
+      thresholds,
+      currentScopeSnapshot
+    ] = await Promise.all([
+      input.repository.getAllDeals(),
+      getScopedStageCatalog(true),
+      input.repository.getAllStageHistory(),
+      input.repository.getAllActivities(),
+      input.repository.getAllCalls(),
+      input.repository.getWonStageIds(),
+      input.repository.getOperationalThresholdSettings(),
+      input.repository.getCurrentAttractionScope()
+    ]);
+    const expectedScopeKey = buildCategoryScopeKey(input.dealCategoryIds, managerScope);
+    const status = resolveOperationalCurrentScopeStatus({
+      ...currentScopeSnapshot,
+      expectedScopeKey,
+      now
+    });
+    const currentScope: OperationalCurrentScope = {
+      status,
+      reconciledAt: currentScopeSnapshot.reconciledAt,
+      dealCount: currentScopeSnapshot.dealIds.length
+    };
+    const currentDealIds = status === "uninitialized" || status === "scope_mismatch"
+      ? new Set<string>()
+      : new Set(currentScopeSnapshot.dealIds);
+    const canonical = await loadCanonicalReportInputs(
+      { stageHistory, activities, calls },
+      { includeTouchpointFacts: true }
+    );
+    const scopedDeals = filterDealsByFilters(deals, stageCatalog, scopedFilters);
+    const scopedDealIds = new Set(scopedDeals.map((deal) => deal.id));
+    const reportStageHistory = canonical.stageHistory.filter((row) => scopedDealIds.has(row.ownerId));
+    const reportActivities = (canonical.activities ?? activities).filter(
+      (row) => isDealOwnerType(row.ownerTypeId) && scopedDealIds.has(row.ownerId)
+    );
+    const activityById = new Map(reportActivities.map((row) => [row.id, row]));
+    const reportCalls = (canonical.calls ?? calls).filter((call) =>
+      Boolean(
+        (isDealCallEntity(call.crmEntityType) && call.crmEntityId && scopedDealIds.has(call.crmEntityId)) ||
+        (call.crmActivityId && activityById.has(call.crmActivityId))
+      )
+    );
+    const touchpoints = canonical.dealTouchpointFacts.filter(
+      (row) => Boolean(row.dealId && scopedDealIds.has(row.dealId))
+    );
+    const managerDirectory = await getLocalManagerDirectory(
+      uniqueStrings(scopedDeals.map((deal) => deal.assignedById))
+    );
+    const resolvedRange = resolveRange(
+      request.periodDays,
+      request.range,
+      input.defaultPeriodDays,
+      now
+    );
+    const report = buildDealAnalysisReport({
+      range: resolvedRange,
+      now: now.toISOString(),
+      scope: request.scope ?? "open",
+      deals: scopedDeals,
+      currentDealIds,
+      currentScope,
+      stageCatalog,
+      stageHistory: reportStageHistory,
+      activities: reportActivities,
+      calls: reportCalls,
+      touchpoints,
+      managerDirectory,
+      thresholds,
+      wonStageIds,
+      dealUrlBuilder: (dealId) => buildBitrixDealUrl(bitrixPortalHost, dealId)
+    });
+    return { report, stageCatalog, stageHistory: reportStageHistory, calls: reportCalls, touchpoints, resolvedRange };
+  };
+
   return {
     async getLeadgenFunnelReport({ periodDays, range, filters }) {
       const resolvedRange = resolveRange(
@@ -2977,6 +3089,112 @@ export function createReportingService(
         wonStageIds,
         dealUrlBuilder: (dealId) => buildBitrixDealUrl(bitrixPortalHost, dealId)
       });
+    },
+
+    async getDealAnalysisReport({ periodDays, range, filters, scope }) {
+      return (await loadDealAnalysisInputs({ periodDays, range, filters, scope })).report;
+    },
+
+    async getDealAnalysisDetail({
+      dealId,
+      scope,
+      periodDays,
+      range,
+      filters,
+      includeSensitiveContent = false
+    }) {
+      const loaded = await loadDealAnalysisInputs({
+        periodDays,
+        range,
+        filters,
+        scope: scope ?? "open"
+      });
+      const row = loaded.report.rows.find((candidate) => candidate.dealId === dealId);
+      if (!row) return null;
+
+      const dealFacts = loaded.touchpoints.filter((fact) => fact.dealId === dealId);
+      const stageNames = new Map(
+        loaded.stageCatalog
+          .filter((stage) => stage.entityType === "deal")
+          .map((stage) => [stage.statusId, stage.name])
+      );
+      const messages = includeSensitiveContent
+        ? await input.repository.listMessengerMessages({
+            from: loaded.resolvedRange.from,
+            to: loaded.resolvedRange.to,
+            dealIds: [dealId]
+          })
+        : [];
+      const safeMessages = includeSensitiveContent
+        ? messages.slice(-200).map((message) => ({
+            id: message.id,
+            occurredAt: message.occurredAt,
+            channelLabel: message.channelLabel,
+            direction: message.direction,
+            text: message.text
+          }))
+        : null;
+      const callIds = uniqueStrings(
+        dealFacts.filter((fact) => fact.kind === "call").map((fact) => fact.sourceEntityId)
+      );
+      const analyses = includeSensitiveContent
+        ? await Promise.all(callIds.map((callId) => input.repository.getCallAnalysisResult(callId)))
+        : [];
+      const callInsights = includeSensitiveContent
+        ? analyses.flatMap((analysis) => {
+            if (!analysis) return [];
+            const evaluation = analysis.aiEvaluation;
+            const score = typeof evaluation.score === "number" ? evaluation.score : null;
+            const summary = typeof evaluation.summary === "string" ? evaluation.summary : null;
+            const risks = Array.isArray(evaluation.risks)
+              ? evaluation.risks.filter((item): item is string => typeof item === "string")
+              : [];
+            const suggestedNextStep = typeof evaluation.suggestedNextStep === "string"
+              ? evaluation.suggestedNextStep
+              : null;
+            return [{
+              callId: analysis.callId,
+              score,
+              summary,
+              risks,
+              suggestedNextStep,
+              analyzedAt: analysis.analyzedAt
+            }];
+          })
+        : null;
+      const timeline = buildDealAnalysisTimeline(dealFacts);
+      if (safeMessages) {
+        timeline.push(...safeMessages.map((message) => ({
+          id: `message:${message.id}`,
+          kind: "message" as const,
+          occurredAt: message.occurredAt,
+          title: message.channelLabel,
+          detail: message.text,
+          direction: message.direction,
+          durationSeconds: null,
+          successful: null,
+          stageId: null,
+          stageName: null
+        })));
+        timeline.sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
+      }
+
+      return {
+        row,
+        timeline,
+        stageHistory: loaded.stageHistory
+          .filter((entry) => entry.ownerId === dealId)
+          .sort((left, right) => Date.parse(right.createdTime) - Date.parse(left.createdTime))
+          .map((entry) => ({
+            id: entry.id,
+            stageId: entry.stageId,
+            stageName: stageNames.get(entry.stageId) ?? entry.stageId,
+            enteredAt: entry.createdTime
+          })),
+        messages: safeMessages,
+        callInsights,
+        sensitiveContentAvailable: includeSensitiveContent
+      };
     },
 
     async getAcquisitionOutcomesReport({

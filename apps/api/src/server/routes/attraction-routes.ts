@@ -13,6 +13,8 @@ export interface AttractionRouteHandlers {
   getSourceCohortConversionJourneyDrilldown: ApiRouteHandler;
   getActivitiesWorkloadReport: ApiRouteHandler;
   getOperationalDashboardReport: ApiRouteHandler;
+  getDealAnalysisReport: ApiRouteHandler;
+  getDealAnalysisDetail: ApiRouteHandler;
   getAcquisitionOutcomesReport: ApiRouteHandler;
   getTargetGroupConversionReport: ApiRouteHandler;
   getManagerActionOutcomeReport: ApiRouteHandler;
@@ -90,6 +92,8 @@ export type AttractionReportRouteHandlers = Pick<
   | "getSourceCohortConversionJourneyDrilldown"
   | "getActivitiesWorkloadReport"
   | "getOperationalDashboardReport"
+  | "getDealAnalysisReport"
+  | "getDealAnalysisDetail"
   | "getAcquisitionOutcomesReport"
   | "getTargetGroupConversionReport"
   | "getManagerActionOutcomeReport"
@@ -127,6 +131,8 @@ export function registerAttractionReportRoutes(
   );
   app.get("/api/reports/activities-workload", handlers.getActivitiesWorkloadReport);
   app.get("/api/reports/operational-dashboard", handlers.getOperationalDashboardReport);
+  app.get("/api/reports/deal-analysis", handlers.getDealAnalysisReport);
+  app.get("/api/reports/deal-analysis/:dealId", handlers.getDealAnalysisDetail);
   app.get("/api/reports/acquisition-outcomes", handlers.getAcquisitionOutcomesReport);
   app.get(
     "/api/reports/target-group-conversion",

@@ -59,6 +59,7 @@ architectural issue found in the deep review.
 | [043](./043-clarify-messenger-author-attribution.md) | Clarify messenger author versus responsible manager | P1 | S | 040, 041 | DONE |
 | [044](./044-handle-messenger-attachment-download-failures.md) | Show messenger attachment download failures inline | P1 | S | 039, 040 | DONE |
 | [045](./045-fix-olchat-message-direction.md) | Fix OLChat message direction across the messenger feature | P0 | M | 040, 043 | DONE |
+| [046](./046-deal-analysis-v1.md) | Build the read-only deal analysis intervention queue | P1 | L | 007, 026, 027, 040 | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale - finding fixed independently or approach

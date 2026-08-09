@@ -21,6 +21,7 @@ export interface AttractionCapabilityService {
   getSourceQualityConversionReport?: unknown;
   getActivitiesWorkloadReport?: unknown;
   getOperationalDashboardReport?: unknown;
+  getDealAnalysisReport?: unknown;
   getAcquisitionOutcomesReport?: unknown;
   getTargetGroupConversionReport?: unknown;
   getManagerActionOutcomeReport?: unknown;
@@ -79,6 +80,10 @@ const attractionCapabilityReportAvailability: Array<
     route: "/api/reports/operational-dashboard",
     isAvailable: (service) =>
       typeof service.getOperationalDashboardReport === "function"
+  },
+  {
+    route: "/api/reports/deal-analysis",
+    isAvailable: (service) => typeof service.getDealAnalysisReport === "function"
   },
   {
     route: "/api/reports/acquisition-outcomes",
@@ -248,6 +253,17 @@ export function createAttractionCapabilityManifest(): ModuleCapabilityManifest {
         route: "/api/reports/operational-dashboard",
         inputSchemaId: "attraction.report-range-with-filters.v1",
         outputSchemaId: "attraction.operational-dashboard.v1",
+        status: "available",
+        agentReadable: true
+      },
+      {
+        id: "deal-analysis",
+        title: "Анализ сделок",
+        description:
+          "Privacy-safe daily intervention queue over current cached attraction deals with deterministic health explanations.",
+        route: "/api/reports/deal-analysis",
+        inputSchemaId: "attraction.deal-analysis-request.v1",
+        outputSchemaId: "attraction.deal-analysis.v1",
         status: "available",
         agentReadable: true
       },

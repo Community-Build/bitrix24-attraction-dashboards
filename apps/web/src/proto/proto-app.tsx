@@ -109,6 +109,9 @@ const LazyRevenueVelocityScene = lazy(() =>
 const LazyOperationsScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.OperationsScene })),
 )
+const LazyDealAnalysisScene = lazy(() =>
+  import('@/proto/deal-analysis-scene').then((module) => ({ default: module.DealAnalysisScene })),
+)
 const LazySourceCohortsScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.SourceCohortsScene })),
 )
@@ -127,6 +130,7 @@ const lazySceneComponents: Record<
   LazyExoticComponent<ComponentType<SceneComponentProps>>
 > = {
   operations: LazyOperationsScene,
+  'deal-analysis': LazyDealAnalysisScene,
   sales: LazySalesScene,
   'sales-plan': LazySalesPlanScene,
   'activities-calls': LazyActivitiesScene,
