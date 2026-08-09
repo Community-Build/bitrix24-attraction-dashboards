@@ -9,6 +9,7 @@ import type {
   DealHealthBand,
 } from '@/lib/dashboard-types'
 import { formatAmount, formatInteger, formatShortDate } from '@/lib/formatters'
+import { cn } from '@/lib/utils'
 import { buildDashboardQueryFromProtoFilters } from '@/proto/live-reporting'
 import type { SceneComponentProps } from '@/proto/types'
 
@@ -188,80 +189,54 @@ export function DealAnalysisScene({ filters }: SceneComponentProps) {
   const query = useMemo(() => JSON.parse(queryKey) as DashboardQuery, [queryKey])
   const [scope, setScope] = useState<DealAnalysisScope>('open')
   const requestKey = `${queryKey}:${scope}`
-  const [reportState, setReportState] = useState<{ requestKey: string; rows: DealAnalysisRow[]; scopeStatus: string; generatedAt: string } | null>(null)
+  const [reportState, setReportState] = useState<{ requestKey: string; rows: DealAnalysisRow[]; scopeStatus: string } | null>(null)
   const [errorState, setErrorState] = useState<{ requestKey: string; message: string } | null>(null)
-  const [search, setSearch] = useState('')
   const [health, setHealth] = useState<DealHealthBand | 'all'>('all')
-  const [stage, setStage] = useState('all')
-  const [nextAction, setNextAction] = useState('all')
-  const [moreFilters, setMoreFilters] = useState(false)
-  const [minAmount, setMinAmount] = useState('')
-  const [minInactiveDays, setMinInactiveDays] = useState('')
   const [visible, setVisible] = useState(50)
   const [selected, setSelected] = useState<DealAnalysisRow | null>(null)
 
   useEffect(() => {
     let cancelled = false
     apiClient.getDealAnalysisReport(query, scope)
-      .then((report) => { if (!cancelled) { setReportState({ requestKey, rows: report.rows, scopeStatus: report.currentScope.status, generatedAt: report.generatedAt }); setErrorState(null) } })
+      .then((report) => { if (!cancelled) { setReportState({ requestKey, rows: report.rows, scopeStatus: report.currentScope.status }); setErrorState(null) } })
       .catch((nextError: unknown) => { if (!cancelled) setErrorState({ requestKey, message: nextError instanceof Error ? nextError.message : 'Не удалось загрузить анализ сделок' }) })
     return () => { cancelled = true }
   }, [query, requestKey, scope])
 
   const rows = reportState?.requestKey === requestKey ? reportState.rows : null
   const scopeStatus = reportState?.requestKey === requestKey ? reportState.scopeStatus : null
-  const generatedAt = reportState?.requestKey === requestKey ? reportState.generatedAt : null
   const error = errorState?.requestKey === requestKey ? errorState.message : null
 
-  const stages = useMemo(() => Array.from(new Map((rows ?? []).map((row) => [row.stageId, row.stageName])).entries()), [rows])
-  const filtered = useMemo(() => (rows ?? []).filter((row) => {
-    const amount = Number(minAmount)
-    const inactiveDays = Number(minInactiveDays)
-    const lastActivityAt = row.lastActivityAt ?? row.dateCreate
-    const activityAgeDays = generatedAt && lastActivityAt
-      ? Math.max(0, Math.floor((Date.parse(generatedAt) - Date.parse(lastActivityAt)) / 86_400_000))
-      : 0
-    return (!search.trim() || row.dealId.includes(search.trim())) &&
-      (health === 'all' || row.healthBand === health) &&
-      (stage === 'all' || row.stageId === stage) &&
-      (nextAction === 'all' || row.nextAction.status === nextAction) &&
-      (!Number.isFinite(amount) || amount <= 0 || row.amount >= amount) &&
-      (!Number.isFinite(inactiveDays) || inactiveDays <= 0 || activityAgeDays >= inactiveDays)
-  }), [generatedAt, health, minAmount, minInactiveDays, nextAction, rows, search, stage])
+  const filteredRows = useMemo(
+    () => health === 'all' ? rows ?? [] : (rows ?? []).filter((row) => row.healthBand === health),
+    [health, rows],
+  )
   const cards = (['critical', 'risk', 'watch', 'healthy'] as DealHealthBand[]).map((band) => {
     const matches = (rows ?? []).filter((row) => row.healthBand === band)
     return { band, count: matches.length, amount: matches.reduce((sum, row) => sum + row.amount, 0) }
   })
 
   return (
-    <section className="space-y-5" data-proto-block-id="attraction-deal-analysis-summary">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div><p className="text-xs font-bold uppercase tracking-[0.14em] text-blue-600">Ежедневное управление</p><h1 className="mt-1 text-3xl font-bold text-slate-950">Анализ сделок</h1><p className="mt-1 text-sm text-slate-500">Какие сделки требуют вмешательства, почему и что проверить дальше.</p></div>
-        <div className="inline-flex rounded-xl border border-slate-200 bg-white p-1">
-          {([['open', 'В работе'], ['won', 'Выиграны'], ['lost', 'Проиграны']] as const).map(([id, label]) => <button key={id} type="button" onClick={() => { setScope(id); setHealth('all'); setVisible(50) }} className={`rounded-lg px-4 py-2 text-sm font-bold ${scope === id ? 'bg-slate-900 text-white' : 'text-slate-500 hover:text-slate-900'}`}>{label}</button>)}
+    <section className="grid min-w-0 gap-6" data-proto-block-id="attraction-deal-analysis-summary">
+      <div className="panel p-5">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div><p className="subtle-label">Ежедневное управление</p><h1 className="mt-1 text-3xl font-bold text-slate-900">Анализ сделок</h1><p className="mt-1 text-sm text-slate-600">Какие сделки требуют вмешательства, почему и что проверить дальше.</p><p className="mt-2 text-xs font-medium text-slate-500">Менеджеры, команды, заказчики и источники берутся из применённого среза выше; период ограничивает отображаемую активность.</p></div>
+          <div className="flex flex-wrap gap-2">
+            {([['open', 'В работе'], ['won', 'Выиграны'], ['lost', 'Проиграны']] as const).map(([id, label]) => <button key={id} type="button" onClick={() => { setScope(id); setHealth('all'); setVisible(50) }} className={cn('tab-chip', scope === id && 'tab-chip-active')}>{label}</button>)}
+          </div>
         </div>
+        {scopeStatus && scopeStatus !== 'ready' ? <div className="sync-notice sync-notice-warning mt-4">Последняя успешная синхронизация устарела. Показан последний полностью согласованный снимок сделок.</div> : null}
       </div>
-      {scopeStatus && scopeStatus !== 'ready' ? <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Последняя успешная синхронизация устарела. Показан последний полностью согласованный снимок сделок.</div> : null}
 
       {scope === 'open' ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {cards.map(({ band, count, amount }) => { const meta = healthMeta[band]!; return <button key={band} type="button" onClick={() => setHealth(health === band ? 'all' : band)} className={`rounded-2xl border p-4 text-left transition ${health === band ? 'border-slate-900 ring-1 ring-slate-900' : 'border-slate-200 hover:border-slate-300'} bg-white`}><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} /><span className="text-sm font-semibold text-slate-500">{meta.label}</span></div><div className="mt-3 flex items-end justify-between gap-3"><strong className="text-2xl text-slate-950">{formatInteger(count)}</strong><span className="text-sm font-semibold text-slate-500">{formatAmount(amount)}</span></div></button> })}
+        {cards.map(({ band, count, amount }) => { const meta = healthMeta[band]!; return <button key={band} type="button" onClick={() => setHealth(health === band ? 'all' : band)} className={cn('metric p-4 text-left transition', health === band && 'border-slate-500 ring-1 ring-slate-400')}><div className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${meta.dot}`} /><span className="text-sm font-semibold text-slate-500">{meta.label}</span></div><div className="mt-3 flex items-end justify-between gap-3"><strong className="text-2xl text-slate-900">{formatInteger(count)}</strong><span className="text-sm font-semibold text-slate-500">{formatAmount(amount)}</span></div></button> })}
       </div> : null}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap gap-3">
-          <label className="min-w-64 flex-1"><span className="sr-only">Поиск по ID сделки</span><input value={search} onChange={(event) => setSearch(event.target.value.replace(/\D/g, ''))} className="h-11 w-full rounded-xl border border-slate-200 px-4 text-sm outline-none focus:border-blue-500" placeholder="Поиск по ID сделки" /></label>
-          <select value={stage} onChange={(event) => setStage(event.target.value)} className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700"><option value="all">Все этапы</option>{stages.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
-          <button type="button" onClick={() => setMoreFilters(!moreFilters)} className="h-11 rounded-xl border border-slate-200 px-4 text-sm font-bold text-slate-700">+ Добавить фильтр</button>
-          <button type="button" onClick={() => { setSearch(''); setHealth('all'); setStage('all'); setNextAction('all'); setMinAmount(''); setMinInactiveDays('') }} className="h-11 px-3 text-sm font-semibold text-slate-500">Сбросить</button>
-        </div>
-        {moreFilters ? <div className="mt-3 flex flex-wrap gap-3 border-t border-slate-100 pt-3"><select aria-label="Следующее действие" value={nextAction} onChange={(event) => setNextAction(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="all">Любое следующее действие</option><option value="missing">Не назначено</option><option value="overdue">Просрочено</option><option value="today">Сегодня</option><option value="scheduled">Запланировано</option></select><select aria-label="Давность активности" value={minInactiveDays} onChange={(event) => setMinInactiveDays(event.target.value)} className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"><option value="">Любая давность активности</option><option value="7">Нет активности 7+ дней</option><option value="14">Нет активности 14+ дней</option><option value="30">Нет активности 30+ дней</option></select><input value={minAmount} onChange={(event) => setMinAmount(event.target.value.replace(/\D/g, ''))} className="h-10 rounded-xl border border-slate-200 px-3 text-sm" placeholder="Сумма от, ₽" inputMode="numeric" /></div> : null}
-      </div>
-
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white" data-proto-block-id="attraction-deal-analysis-table">
+      <div className="panel overflow-hidden" data-proto-block-id="attraction-deal-analysis-table">
         {error ? <div className="p-6 text-rose-700">{error}</div> : null}
         {!rows && !error ? <div className="p-6 text-slate-500">Загружаю текущие сделки…</div> : null}
-        {rows ? <div className="overflow-x-auto"><table className="w-full min-w-[1180px] border-collapse text-left"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-4">Сделка</th>{scope === 'open' ? <><th className="px-4 py-4">Оценка</th><th className="px-4 py-4">Риски</th></> : null}<th className="px-4 py-4">Менеджер</th><th className="px-4 py-4">Этап</th><th className="px-4 py-4">Активность</th><th className="px-4 py-4">След. действие</th><th className="px-5 py-4 text-right">Сумма</th></tr></thead><tbody className="divide-y divide-slate-100">{filtered.slice(0, visible).map((row) => <tr key={row.dealId} className="cursor-pointer hover:bg-blue-50/40" onClick={() => setSelected(row)}><td className="px-5 py-4"><button type="button" className="text-left"><strong className="block text-slate-950">#{row.dealId}</strong><span className="text-sm text-slate-500">{row.sourceLabel}</span></button></td>{scope === 'open' ? <><td className="px-4 py-4"><HealthBadge row={row} /></td><td className="px-4 py-4"><span className={row.risks.length ? 'font-bold text-orange-600' : 'text-slate-400'}>{row.risks.length || '—'}</span></td></> : null}<td className="px-4 py-4 text-sm font-semibold text-slate-700">{row.managerName}</td><td className="px-4 py-4"><strong className="block text-sm text-slate-900">{row.stageName}</strong><span className={`text-xs ${row.stageOverdueDays ? 'text-orange-600' : 'text-slate-400'}`}>{row.daysOnStage} дн. на этапе</span></td><td className="px-4 py-4"><ActivityDots row={row} /></td><td className="px-4 py-4"><span className={`text-sm font-semibold ${row.nextAction.status === 'missing' || row.nextAction.status === 'overdue' ? 'text-orange-600' : 'text-slate-700'}`}>{nextActionLabel(row)}</span></td><td className="px-5 py-4 text-right font-bold text-slate-900">{formatAmount(row.amount)}</td></tr>)}</tbody></table>{filtered.length === 0 ? <div className="border-t border-slate-100 p-8 text-center text-slate-500">По выбранным фильтрам сделок нет.</div> : null}</div> : null}
-        {filtered.length > visible ? <div className="border-t border-slate-100 p-4 text-center"><button type="button" onClick={() => setVisible((count) => count + 50)} className="rounded-xl border border-slate-200 px-5 py-2 text-sm font-bold text-slate-700">Показать ещё</button></div> : null}
+        {rows ? <div className="overflow-x-auto"><table className="w-full min-w-[1180px] border-collapse text-left"><thead className="bg-slate-50 text-xs font-bold uppercase tracking-wide text-slate-400"><tr><th className="px-5 py-4">Сделка</th>{scope === 'open' ? <><th className="px-4 py-4">Оценка</th><th className="px-4 py-4">Риски</th></> : null}<th className="px-4 py-4">Менеджер</th><th className="px-4 py-4">Этап</th><th className="px-4 py-4">Активность</th><th className="px-4 py-4">След. действие</th><th className="px-5 py-4 text-right">Сумма</th></tr></thead><tbody className="divide-y divide-slate-100">{filteredRows.slice(0, visible).map((row) => <tr key={row.dealId} className="cursor-pointer hover:bg-blue-50/40" onClick={() => setSelected(row)}><td className="px-5 py-4"><button type="button" className="text-left"><strong className="block text-slate-950">#{row.dealId}</strong><span className="text-sm text-slate-500">{row.sourceLabel}</span></button></td>{scope === 'open' ? <><td className="px-4 py-4"><HealthBadge row={row} /></td><td className="px-4 py-4"><span className={row.risks.length ? 'font-bold text-orange-600' : 'text-slate-400'}>{row.risks.length || '—'}</span></td></> : null}<td className="px-4 py-4 text-sm font-semibold text-slate-700">{row.managerName}</td><td className="px-4 py-4"><strong className="block text-sm text-slate-900">{row.stageName}</strong><span className={`text-xs ${row.stageOverdueDays ? 'text-orange-600' : 'text-slate-400'}`}>{row.daysOnStage} дн. на этапе</span></td><td className="px-4 py-4"><ActivityDots row={row} /></td><td className="px-4 py-4"><span className={`text-sm font-semibold ${row.nextAction.status === 'missing' || row.nextAction.status === 'overdue' ? 'text-orange-600' : 'text-slate-700'}`}>{nextActionLabel(row)}</span></td><td className="px-5 py-4 text-right font-bold text-slate-900">{formatAmount(row.amount)}</td></tr>)}</tbody></table>{filteredRows.length === 0 ? <div className="border-t border-slate-100 p-8 text-center text-slate-500">По выбранному состоянию сделок нет.</div> : null}</div> : null}
+        {filteredRows.length > visible ? <div className="border-t border-slate-100 p-4 text-center"><button type="button" onClick={() => setVisible((count) => count + 50)} className="btn btn-ghost">Показать ещё</button></div> : null}
       </div>
       {selected ? <DealDrawer row={selected} query={query} scope={scope} onClose={() => setSelected(null)} /> : null}
     </section>

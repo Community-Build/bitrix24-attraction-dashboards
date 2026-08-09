@@ -45,11 +45,8 @@ describe('DealAnalysisScene', () => {
 
     expect(await screen.findByText('#42')).toBeInTheDocument()
     expect(screen.getByText('35')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: '+ Добавить фильтр' }))
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Давность активности' }), '14')
-    expect(screen.queryByText('#42')).not.toBeInTheDocument()
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Давность активности' }), '7')
-    expect(screen.getByText('#42')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '+ Добавить фильтр' })).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Поиск по ID сделки')).not.toBeInTheDocument()
     await user.click(screen.getByText('#42'))
 
     expect(await screen.findByRole('dialog', { name: 'Сделка 42' })).toBeInTheDocument()
