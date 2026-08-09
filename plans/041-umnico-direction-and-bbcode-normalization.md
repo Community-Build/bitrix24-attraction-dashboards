@@ -1,6 +1,6 @@
 # Plan 041: Umnico direction and BBCode normalization
 
-> In progress for GitHub issue #145.
+> Completed through GitHub issue #145 and PR #146.
 
 ## Outcome
 
