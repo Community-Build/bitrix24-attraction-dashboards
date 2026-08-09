@@ -104,6 +104,9 @@ describe('MessengerMessageReader', () => {
       screen.getByRole('button', { name: /скачать вложение 1/i }),
     ).toBeInTheDocument()
     expect(screen.getByText(/Показаны последние 2 сообщения/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Для WAZZUP и Umnico исходящие определяются/i),
+    ).toBeInTheDocument()
     expect(apiMock.getDetails).toHaveBeenCalledWith({
       managerId: '7',
       from: '2026-04-01T00:00:00.000+03:00',

@@ -361,8 +361,10 @@ Privacy and module boundaries:
   download. Credential-bearing Bitrix URLs never enter the response.
 - `POST /api/messenger-messages/collect` remains a compatibility/server-side
   analysis boundary over the same SQLite snapshots and returns safe counts only.
-- WAZZUP `sent` / `received` uses its observed embedded outgoing marker;
-  unmarked WAZZUP rows are incoming. OLChat/Umnico remain unknown.
+- WAZZUP and Umnico `sent` / `received` use their separately observed embedded
+  outgoing markers; unmarked non-system connector rows are incoming. Umnico
+  service headers and bold BBCode tokens are removed from cleaned reader text
+  while exact raw text remains stored. OLChat remains unknown.
 
 ### Stage/loss-reason table
 

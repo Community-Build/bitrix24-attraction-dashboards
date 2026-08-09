@@ -67,9 +67,12 @@ through the existing validated, bounded proxy.
 - Manager totals may decrease compared with the original prototype because
   `Телефон` and other ambiguous authors are no longer credited to the current
   deal owner.
-- The current connector evidence still cannot determine OLChat/Umnico direction;
-  those rows remain visible under `unknown` until a provider-specific rule is
-  proven.
+- WAZZUP and Umnico direction use separate provider-specific embedded markers.
+  For either supported connector, a marked row is outgoing and an unmarked
+  non-system connector row is incoming. Umnico display text removes its service
+  prefix plus `[b]` / `[/b]` formatting tokens while preserving exact raw text.
+- The current connector evidence still cannot determine OLChat direction; those
+  rows remain visible under `unknown` until a provider-specific rule is proven.
 
 ## Revisit Conditions
 

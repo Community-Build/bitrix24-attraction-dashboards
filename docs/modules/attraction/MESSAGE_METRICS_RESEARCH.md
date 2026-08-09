@@ -136,8 +136,9 @@ By Open Lines activity responsible, the same period yielded:
   messages: `=== Исходящее сообщение ... ===`. The reader removes this service
   header and keeps its author label separately. An unmarked WAZZUP row is
   treated as incoming; `=== SYSTEM WZ ===` is excluded.
-- This evidence does not generalize to OLChat or Umnico. Their connector rows
-  remain `unknown` until a provider-specific direction field is verified.
+- This WAZZUP evidence does not generalize to other connector families. Umnico
+  received its own separately verified embedded-marker rule on 2026-08-09;
+  OLChat rows remain `unknown` until provider-specific evidence is verified.
 - If `im` scope is later added, `im.dialog.messages.get` can be tested as an
   alternate message-history source, but it must follow ADR 0006 and never
   persist raw provider payloads or structured contact data.
@@ -161,9 +162,10 @@ and plan 040. It remains here as implementation history.
   attachment-only count, channels, and sender-kind totals. It never returns raw
   text, `textlegacy`, attachments, user names, contact data, or raw payloads.
 - The collector does not write SQLite and does not log response bodies.
-- WAZZUP direction is parsed from its embedded marker. Unmarked WAZZUP rows are
-  incoming, operator-authored Bitrix rows are outgoing, and unsupported
-  connector families keep `direction = unknown`.
+- WAZZUP and Umnico direction are parsed from their separate embedded markers.
+  Unmarked non-system rows from either supported connector are incoming,
+  operator-authored Bitrix rows are outgoing, and unsupported connector families
+  keep `direction = unknown`.
 - No semantic scoring rubric or model provider is selected in this change. The
   implemented boundary supplies safe input for that next decision.
 
@@ -223,10 +225,30 @@ unsupported direction. No message body was printed or persisted.
 | `7538` / Мария Саличева | 27 | 35 | 0 | covered: WAZZUP |
 | `118` / Аделия Космасова | 0 | 0 | 0 | no messages in range |
 
-This table describes direction coverage, not text availability. Unsupported
-OLChat/Umnico message text is still available to the transient reader and an
-in-process analyzer, but it must not be counted as manager-sent until provider
-direction evidence exists.
+This table is the historical 2026-08-04 coverage snapshot, not current provider
+support. OLChat message text is still available to the reader and an in-process
+analyzer, but it must not be counted as manager-sent until provider direction
+evidence exists. Umnico received a verified rule on 2026-08-09 as recorded
+below.
+
+## Umnico Direction Correlation
+
+A de-identified production audit on 2026-08-09 found `105` non-system Umnico
+Telegram messages in `9` current-scope dialogs:
+
+- `67` contained the connector's `Outcoming message` service line and also
+  carried bold BBCode tokens; `42` started with it and `25` placed it after an
+  attachment/title prefix;
+- `38` had neither the outgoing marker nor bold BBCode;
+- all `9` dialogs contained both marked and unmarked business messages.
+
+A separate sanitized shape check for the affected dialog returned `13` business
+messages (`8` marked and `5` unmarked) plus `4` system events. Bitrix exposed no
+separate message-direction field: the available params were presentation and
+attachment metadata only. This establishes the provider-specific V1 rule:
+marked Umnico messages are outgoing and unmarked non-system Umnico connector
+messages are incoming. The reader removes the service prefix and `[b]` / `[/b]`
+tokens from cleaned author/body text; exact `raw_text` remains unchanged.
 
 ## Read-Only Production Coverage Audit
 

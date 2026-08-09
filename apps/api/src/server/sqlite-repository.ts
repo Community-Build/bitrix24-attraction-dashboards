@@ -1336,6 +1336,7 @@ export function createSqliteRepository(
       has_attachment INTEGER NOT NULL DEFAULT 0,
       is_system INTEGER NOT NULL DEFAULT 0,
       synced_at TEXT NOT NULL,
+      normalization_version INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (session_id, message_id),
       FOREIGN KEY (session_id)
         REFERENCES messenger_session_snapshots(session_id)
@@ -1915,6 +1916,12 @@ export function createSqliteRepository(
   ensureColumn(database, "sync_runs", "scope_key", "TEXT");
   ensureColumn(database, "sync_runs", "deal_breakdown_json", "TEXT");
   ensureColumn(database, "sync_runs", "diagnostics_json", "TEXT");
+  ensureColumn(
+    database,
+    "messenger_message_snapshots",
+    "normalization_version",
+    "INTEGER NOT NULL DEFAULT 0"
+  );
   ensureColumn(
     database,
     "proto_comments",

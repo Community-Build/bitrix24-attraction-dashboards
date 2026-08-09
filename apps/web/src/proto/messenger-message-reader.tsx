@@ -266,9 +266,9 @@ export function MessengerMessageReader({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-            Для WAZZUP исходящие определяются по служебной пометке, а сообщения без
-            неё — как входящие. Для других коннекторов направление может оставаться
-            неопределённым.
+            Для WAZZUP и Umnico исходящие определяются по служебной пометке, а
+            сообщения без неё — как входящие. Для других коннекторов направление
+            может оставаться неопределённым.
           </div>
 
           {attachmentError ? (
