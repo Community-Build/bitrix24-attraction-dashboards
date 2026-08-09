@@ -15,9 +15,16 @@ const DIRECTION_LABELS = {
   unknown: 'Направление не определено',
 }
 
-function messageDirectionLabel(message: MessengerMessageDetailItem) {
-  const direction = DIRECTION_LABELS[message.direction]
-  return message.authorLabel ? `${direction} · ${message.authorLabel}` : direction
+function messageDirectionLabel(
+  message: MessengerMessageDetailItem,
+  managerName: string,
+) {
+  if (message.direction === 'incoming') return 'Входящее · Клиент'
+  if (message.direction === 'unknown') return DIRECTION_LABELS.unknown
+
+  return message.authorConfirmed
+    ? `Исходящее · Автор: ${managerName}`
+    : `Исходящее · Ответственный: ${managerName}`
 }
 
 function formatDateTime(value: string) {
@@ -266,9 +273,10 @@ export function MessengerMessageReader({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-            Для WAZZUP и Umnico исходящие определяются по служебной пометке, а
-            сообщения без неё — как входящие. Для других коннекторов направление
-            может оставаться неопределённым.
+            Для WAZZUP и Umnico служебная пометка определяет исходящее сообщение,
+            а сообщение без неё — входящее от клиента. Если источник не называет
+            автора, показываем ответственного менеджера, не выдавая его за
+            физического отправителя.
           </div>
 
           {attachmentError ? (
@@ -372,7 +380,7 @@ export function MessengerMessageReader({
                           >
                             <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                               <span className="font-bold text-slate-600">
-                                {messageDirectionLabel(message)}
+                                {messageDirectionLabel(message, data.managerName)}
                               </span>
                               <time
                                 dateTime={message.occurredAt}

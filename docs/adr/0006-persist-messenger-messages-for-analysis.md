@@ -50,6 +50,13 @@ Attribution is asymmetric by design:
 - incoming and unsupported-direction messages use the current attraction deal
   owner for the operational manager row.
 
+The reader must keep authorship and operational responsibility visibly
+different. A resolved whitelist author is labelled as the author. An unresolved
+outgoing row can appear in the responsible deal manager's reader, but that
+manager is labelled as `Ответственный`, not as the physical author. A proven
+incoming WAZZUP/Umnico row is labelled as a client message without persisting or
+exposing client identity.
+
 The Activities messenger block reads SQLite automatically whenever the common
 date or manager filter changes. Aggregate responses never contain body text.
 The leader-only reader returns at most 500 stored messages for one manager and

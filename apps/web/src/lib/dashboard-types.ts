@@ -1512,6 +1512,7 @@ export interface MessengerMessageDetailItem {
   senderKind: MessengerSenderKind
   direction: MessengerMessageDirection
   authorLabel: string | null
+  authorConfirmed: boolean
   text: string | null
   attachments: Array<{ id: string }>
   hasAttachment: boolean

@@ -29,7 +29,7 @@ describe('MessengerMessageReader', () => {
       from: '2026-04-01T00:00:00.000+03:00',
       to: '2026-04-30T23:59:59.999+03:00',
       totalMessages: 700,
-      returnedMessages: 2,
+      returnedMessages: 4,
       truncated: true,
       directionAvailable: false,
       personalAuthorAvailable: false,
@@ -44,6 +44,7 @@ describe('MessengerMessageReader', () => {
           senderKind: 'connector',
           direction: 'outgoing',
           authorLabel: 'Битрикс24 (Анна Петрова)',
+          authorConfirmed: true,
           text: '<img src=x onerror=alert(1)>',
           attachments: [],
           hasAttachment: false,
@@ -58,9 +59,40 @@ describe('MessengerMessageReader', () => {
           senderKind: 'connector',
           direction: 'incoming',
           authorLabel: null,
+          authorConfirmed: false,
           text: null,
           attachments: [{ id: '77' }],
           hasAttachment: true,
+        },
+        {
+          id: '503',
+          sessionId: '441',
+          dealId: '1001',
+          dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
+          occurredAt: '2026-04-12T10:17:00+03:00',
+          channel: { key: 'wz_telegram', label: 'WAZZUP: Telegram' },
+          senderKind: 'connector',
+          direction: 'outgoing',
+          authorLabel: 'Телефон',
+          authorConfirmed: false,
+          text: 'Ответ без указанного автора',
+          attachments: [],
+          hasAttachment: false,
+        },
+        {
+          id: '504',
+          sessionId: '441',
+          dealId: '1001',
+          dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
+          occurredAt: '2026-04-12T10:18:00+03:00',
+          channel: { key: 'olchat_telegram', label: 'OLChat: Telegram' },
+          senderKind: 'connector',
+          direction: 'unknown',
+          authorLabel: null,
+          authorConfirmed: false,
+          text: 'Направление неизвестно',
+          attachments: [],
+          hasAttachment: false,
         },
       ],
     })
@@ -90,9 +122,14 @@ describe('MessengerMessageReader', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('Диалог #441')).toBeInTheDocument()
     expect(
-      screen.getByText('Исходящее · Битрикс24 (Анна Петрова)'),
+      screen.getByText('Исходящее · Автор: Анна Петрова'),
     ).toBeInTheDocument()
-    expect(screen.getByText('Входящее')).toBeInTheDocument()
+    expect(screen.getByText('Входящее · Клиент')).toBeInTheDocument()
+    expect(
+      screen.getByText('Исходящее · Ответственный: Анна Петрова'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Направление не определено')).toBeInTheDocument()
+    expect(screen.queryByText('Исходящее · Телефон')).not.toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: /открыть сделку 1001/i }),
     ).toHaveAttribute(
@@ -103,9 +140,9 @@ describe('MessengerMessageReader', () => {
     expect(
       screen.getByRole('button', { name: /скачать вложение 1/i }),
     ).toBeInTheDocument()
-    expect(screen.getByText(/Показаны последние 2 сообщения/i)).toBeInTheDocument()
+    expect(screen.getByText(/Показаны последние 4 сообщения/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/Для WAZZUP и Umnico исходящие определяются/i),
+      screen.getByText(/Для WAZZUP и Umnico служебная пометка определяет/i),
     ).toBeInTheDocument()
     expect(apiMock.getDetails).toHaveBeenCalledWith({
       managerId: '7',

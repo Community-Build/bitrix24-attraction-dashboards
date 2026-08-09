@@ -25,6 +25,23 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
+### Clarify messenger author versus responsible manager ([#149](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/149))
+- Area: activities, web, api
+- Problem: ambiguous WAZZUP author token `Телефон` is rendered next to an
+  outgoing direction inside a manager drawer, which makes a technical source
+  token look like a person and hides the difference between proven authorship
+  and operational responsibility for the deal.
+- Expected behavior: confirmed outgoing rows name the author; unresolved
+  outgoing rows name the responsible manager without claiming authorship;
+  supported-provider incoming rows are labelled as client messages.
+- Acceptance criteria:
+  - The reader contract exposes confirmed versus operational attribution.
+  - Summary copy and columns distinguish confirmed author from responsible
+    manager.
+  - Counts, stored author IDs, manager scope, leader-only access, and message
+    privacy boundaries do not change.
+  - Focused/full tests and production session `32984` verification pass.
+
 ### Show all telephony calls for Adelia and Maria ([#147](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/147))
 - Area: activities, api, data
 - Problem: the Activities dashboard applies `direct_only` to Maria Salicheva

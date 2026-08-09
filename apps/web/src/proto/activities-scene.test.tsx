@@ -426,6 +426,7 @@ describe('ActivitiesScene', () => {
           senderKind: 'connector',
           direction: 'outgoing',
           authorLabel: 'Битрикс24 (Анна Петрова)',
+          authorConfirmed: true,
           text: 'Полный текст сообщения в отдельном просмотрщике',
           attachments: [],
           hasAttachment: false,
@@ -473,7 +474,10 @@ describe('ActivitiesScene', () => {
     expect(screen.getByTestId('messenger-unknown-author-7')).toHaveTextContent('2')
     expect(screen.getByTestId('messenger-unknown-7')).toHaveTextContent('1')
     expect(
-      screen.getByRole('columnheader', { name: 'Автор подтверждён' }),
+      screen.getByRole('columnheader', { name: 'Подтверждённый автор' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('columnheader', { name: 'По ответственному' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('columnheader', { name: 'Не определено' }),

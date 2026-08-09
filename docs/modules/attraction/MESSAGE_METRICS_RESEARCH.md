@@ -93,6 +93,14 @@ whitelist-matching Bitrix sender ID for outgoing attribution. Incoming and
 unsupported-direction messages use the attraction deal owner. `Телефон` and
 other ambiguous outgoing authors remain a separate bucket.
 
+Reader presentation follows the same evidence boundary. A resolved manager is
+shown as `Автор`; an ambiguous outgoing row is shown under the operational
+manager as `Ответственный` and does not turn ownership into proof of physical
+authorship. Supported-provider incoming rows are shown as `Клиент`. Production
+session `32984` confirms why the distinction is necessary: activity responsible
+`13020` is known, but both incoming and outgoing WAZZUP rows use connector sender
+`14492`, while the outgoing author token is only `Телефон`.
+
 ## Read-Only Production Sample
 
 Period checked: `2026-05-17T00:00:00+03:00` through `2026-05-24T13:05`

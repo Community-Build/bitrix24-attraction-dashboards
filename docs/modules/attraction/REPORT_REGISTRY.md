@@ -367,8 +367,10 @@ Privacy and module boundaries:
 - `POST /api/messenger-messages/summary` returns all known-direction outgoing
   messages, unique Open Lines sessions and deals with outgoing messages, incoming
   messages, unknown direction, total coverage, excluded system events, and
-  per-manager/channel rows. Confirmed-author and unknown-author outgoing counts
-  remain separate; only confirmed rows are credited to the actual message author.
+  per-manager/channel rows. Confirmed-author and operationally attributed
+  outgoing counts remain separate; only confirmed rows are credited to the
+  actual message author. The reader labels unresolved outgoing rows by the
+  responsible manager and incoming supported-provider rows as client messages.
   `Unique dialogs` is not presented as unique people.
 - `POST /api/messenger-messages/read` is a leader-only, one-manager reader for
   at most 500 newest messages in the exact common dashboard range. It is
