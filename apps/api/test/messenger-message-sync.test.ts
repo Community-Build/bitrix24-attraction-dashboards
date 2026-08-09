@@ -211,16 +211,18 @@ describe("messenger message synchronization", () => {
     expect(
       classifyMessengerMessage({
         channelKey: "olchat_telegram",
+        senderId: "connector",
         senderKind: "connector",
         text: "[b]Направление всё ещё не доказано[/b]"
       })
     ).toMatchObject({
-      direction: "unknown",
+      direction: "incoming",
       text: "Направление всё ещё не доказано"
     });
     expect(
       classifyMessengerMessage({
         channelKey: "umnico_telegram",
+        senderId: "connector",
         senderKind: "connector",
         text: "Клиент процитировал ===Outcoming message. Source: Phone=== в тексте"
       })
@@ -228,6 +230,137 @@ describe("messenger message synchronization", () => {
       direction: "incoming",
       text: "Клиент процитировал ===Outcoming message. Source: Phone=== в тексте"
     });
+  });
+
+  it("classifies the full provider matrix without treating OLChat outgoing as system events", async () => {
+    const state = createRepository();
+    const olchatOutgoingRaw =
+      "[OLChat] Telegram:\n[B][Исходящее][/B]\nОтвет менеджера";
+    await synchronizeMessengerMessages({
+      repository: state.repository,
+      client: {
+        listOpenLineActivities: async () => [
+          {
+            ID: "303",
+            OWNER_ID: "1001",
+            LAST_UPDATED: "2026-08-03T11:00:00+03:00",
+            ORIGIN_ID: "IMOL_443"
+          }
+        ],
+        getOpenLineSessionHistory: async () => ({
+          sessionId: "443",
+          chat: {
+            id: "703",
+            entityId: "olchat_tg_connector",
+            entityType: "LINES"
+          },
+          users: [
+            { id: "connector", connector: true },
+            { id: "78", connector: false }
+          ],
+          messages: [
+            {
+              id: "701",
+              chatId: "703",
+              senderId: "0",
+              date: "2026-08-03T10:15:00+03:00",
+              text: olchatOutgoingRaw,
+              hasAttachment: false
+            },
+            {
+              id: "702",
+              chatId: "703",
+              senderId: "connector",
+              date: "2026-08-03T10:16:00+03:00",
+              text: "Ответ клиента",
+              hasAttachment: false
+            },
+            {
+              id: "703",
+              chatId: "703",
+              senderId: "0",
+              date: "2026-08-03T10:17:00+03:00",
+              text: "Служебное событие OLChat",
+              hasAttachment: false
+            },
+            {
+              id: "704",
+              chatId: "703",
+              senderId: "78",
+              date: "2026-08-03T10:18:00+03:00",
+              text: "Ответ из открытой линии",
+              hasAttachment: false
+            },
+            {
+              id: "705",
+              chatId: "703",
+              senderId: "connector",
+              date: "2026-08-03T10:19:00+03:00",
+              text: olchatOutgoingRaw,
+              hasAttachment: false
+            },
+            {
+              id: "706",
+              chatId: "703",
+              senderId: "connector",
+              date: "2026-08-03T10:20:00+03:00",
+              text:
+                "=== Исходящее сообщение, автор: Егоров Андрей ===\nЦитата другого провайдера",
+              hasAttachment: false
+            }
+          ]
+        })
+      },
+      now: () => "2026-08-04T00:00:00.000Z"
+    });
+
+    expect(state.stored[0]?.messages).toEqual([
+      expect.objectContaining({
+        id: "701",
+        direction: "outgoing",
+        system: false,
+        authorManagerId: null,
+        text: "Ответ менеджера",
+        rawText: olchatOutgoingRaw
+      }),
+      expect.objectContaining({
+        id: "702",
+        direction: "incoming",
+        system: false
+      }),
+      expect.objectContaining({
+        id: "703",
+        direction: "unknown",
+        system: true,
+        text: null
+      }),
+      expect.objectContaining({
+        id: "704",
+        direction: "outgoing",
+        system: false,
+        authorManagerId: "78"
+      }),
+      expect.objectContaining({
+        id: "705",
+        direction: "incoming",
+        system: false,
+        text: olchatOutgoingRaw.replaceAll("[B]", "").replaceAll("[/B]", "")
+      }),
+      expect.objectContaining({
+        id: "706",
+        direction: "incoming",
+        system: false
+      })
+    ]);
+
+    expect(
+      classifyMessengerMessage({
+        channelKey: "olchat_whatsapp",
+        senderId: "0",
+        senderKind: "unknown",
+        text: olchatOutgoingRaw
+      })
+    ).toMatchObject({ direction: "unknown", system: true, text: null });
   });
 
   it("keeps successful sessions but does not advance the cursor after a partial failure", async () => {

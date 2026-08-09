@@ -385,7 +385,10 @@ Privacy and module boundaries:
 - WAZZUP and Umnico `sent` / `received` use their separately observed embedded
   outgoing markers; unmarked non-system connector rows are incoming. Umnico
   service headers and bold BBCode tokens are removed from cleaned reader text
-  while exact raw text remains stored. OLChat remains unknown.
+  while exact raw text remains stored. OLChat Telegram uses its anchored
+  `[OLChat] Telegram` / `[Исходящее]` sender-zero marker; unmarked connector
+  rows are incoming and unmarked sender-zero rows remain excluded system
+  events.
 
 ### Stage/loss-reason table
 

@@ -145,8 +145,8 @@ By Open Lines activity responsible, the same period yielded:
   header and keeps its author label separately. An unmarked WAZZUP row is
   treated as incoming; `=== SYSTEM WZ ===` is excluded.
 - This WAZZUP evidence does not generalize to other connector families. Umnico
-  received its own separately verified embedded-marker rule on 2026-08-09;
-  OLChat rows remain `unknown` until provider-specific evidence is verified.
+  and OLChat Telegram received separately verified provider rules on
+  2026-08-09; see the correlation sections below.
 - If `im` scope is later added, `im.dialog.messages.get` can be tested as an
   alternate message-history source, but it must follow ADR 0006 and never
   persist raw provider payloads or structured contact data.
@@ -234,10 +234,8 @@ unsupported direction. No message body was printed or persisted.
 | `118` / Аделия Космасова | 0 | 0 | 0 | no messages in range |
 
 This table is the historical 2026-08-04 coverage snapshot, not current provider
-support. OLChat message text is still available to the reader and an in-process
-analyzer, but it must not be counted as manager-sent until provider direction
-evidence exists. Umnico received a verified rule on 2026-08-09 as recorded
-below.
+support. Umnico and OLChat Telegram received verified rules on 2026-08-09 as
+recorded below; the table must not be reused as current direction coverage.
 
 ## Umnico Direction Correlation
 
@@ -257,6 +255,35 @@ attachment metadata only. This establishes the provider-specific V1 rule:
 marked Umnico messages are outgoing and unmarked non-system Umnico connector
 messages are incoming. The reader removes the service prefix and `[b]` / `[/b]`
 tokens from cleaned author/body text; exact `raw_text` remains unchanged.
+
+## OLChat Direction Correlation
+
+A de-identified read-only production audit on 2026-08-09 found a provider
+shape that the original adapter had misclassified:
+
+- OLChat Telegram connector users produced `1,582` unmarked business messages;
+- `1,734` of `2,422` rows with `sender_id = 0` began with the exact service
+  shape `[OLChat] Telegram:` followed by `[B][Исходящее][/B]`;
+- the remaining `688` Telegram rows with `sender_id = 0` were service events;
+- two additional Telegram messages carried explicit Bitrix operator IDs;
+- OLChat WhatsApp instead exposed `438` connector messages, `52` explicit
+  operator messages, and `780` `sender_id = 0` service rows without the Telegram
+  marker.
+
+Message parameters contained presentation, attachment, edit, and provider
+message IDs but no separate direction field. The marker is therefore accepted
+only at the start of OLChat Telegram raw text and only when `sender_id = 0`.
+This establishes the deterministic rule: marked Telegram sender-zero rows are
+outgoing and non-system; other sender-zero rows are system; connector rows are
+incoming; explicit operators are outgoing. The prefix is removed from cleaned
+text while exact `raw_text` is retained. Because the prefix does not contain a
+person identity, marked outgoing rows remain unknown-author and are shown under
+the responsible manager without claiming physical authorship.
+
+For the reported Kuznetsova range `2026-07-01T00:00:00+03:00` through
+`2026-07-31T23:59:59.999+03:00`, the corrected rule yields `218` incoming and
+`205` outgoing business messages, zero unknown-direction messages, and `27`
+excluded system events across `14` dialogs.
 
 ## Read-Only Production Coverage Audit
 

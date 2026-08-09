@@ -31,8 +31,6 @@ describe('MessengerMessageReader', () => {
       totalMessages: 700,
       returnedMessages: 4,
       truncated: true,
-      directionAvailable: false,
-      personalAuthorAvailable: false,
       messages: [
         {
           id: '501',
@@ -70,10 +68,10 @@ describe('MessengerMessageReader', () => {
           dealId: '1001',
           dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
           occurredAt: '2026-04-12T10:17:00+03:00',
-          channel: { key: 'wz_telegram', label: 'WAZZUP: Telegram' },
-          senderKind: 'connector',
+          channel: { key: 'olchat_telegram', label: 'OLChat: Telegram' },
+          senderKind: 'unknown',
           direction: 'outgoing',
-          authorLabel: 'Телефон',
+          authorLabel: null,
           authorConfirmed: false,
           text: 'Ответ без указанного автора',
           attachments: [],
@@ -85,8 +83,8 @@ describe('MessengerMessageReader', () => {
           dealId: '1001',
           dealUrl: 'https://example.bitrix24.ru/crm/deal/details/1001/',
           occurredAt: '2026-04-12T10:18:00+03:00',
-          channel: { key: 'olchat_telegram', label: 'OLChat: Telegram' },
-          senderKind: 'connector',
+          channel: { key: 'unknown', label: 'Неизвестный канал' },
+          senderKind: 'unknown',
           direction: 'unknown',
           authorLabel: null,
           authorConfirmed: false,
@@ -142,7 +140,7 @@ describe('MessengerMessageReader', () => {
     ).toBeInTheDocument()
     expect(screen.getByText(/Показаны последние 4 сообщения/i)).toBeInTheDocument()
     expect(
-      screen.getByText(/Для WAZZUP и Umnico служебная пометка определяет/i),
+      screen.getByText(/Для WAZZUP, Umnico и OLChat Telegram направление/i),
     ).toBeInTheDocument()
     expect(apiMock.getDetails).toHaveBeenCalledWith({
       managerId: '7',

@@ -381,7 +381,6 @@ describe('ActivitiesScene', () => {
           from: '2026-04-01T00:00:00.000+03:00',
           to: '2026-04-30T23:59:59.999+03:00',
           currentDeals: 8,
-          sessions: 6,
           uniqueDialogs: 5,
           dealsWithMessages: 4,
           outgoingMessages: 8,
@@ -398,12 +397,8 @@ describe('ActivitiesScene', () => {
           channels: [
             { key: 'wz_telegram', label: 'WAZZUP: Telegram', messages: 12 },
           ],
-          directionAvailable: false,
-          personalAuthorAvailable: false,
         },
       ],
-      directionAvailable: false,
-      personalAuthorAvailable: false,
     })
     messengerApiMock.getDetails.mockResolvedValue({
       managerId: '7',
@@ -413,8 +408,6 @@ describe('ActivitiesScene', () => {
       totalMessages: 1,
       returnedMessages: 1,
       truncated: false,
-      directionAvailable: false,
-      personalAuthorAvailable: false,
       messages: [
         {
           id: '501',

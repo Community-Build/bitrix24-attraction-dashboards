@@ -521,8 +521,6 @@ vi.mock('@/lib/api-client', () => ({
       dealsWithMessages: 0,
       systemMessagesExcluded: 0,
       managerRows: [],
-      directionAvailable: false as const,
-      personalAuthorAvailable: false,
     })),
     getLeadgenActivitiesWorkloadReport: vi.fn(async () => ({
       range: { from: '2026-04-01T00:00:00.000+03:00', to: '2026-04-30T23:59:59.999+03:00' },

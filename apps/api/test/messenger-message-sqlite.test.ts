@@ -19,6 +19,7 @@ interface NormalizedMessengerRow {
   authorManagerId: string | null;
   text: string | null;
   rawText: string | null;
+  system: number;
   normalizationVersion: number;
 }
 
@@ -230,6 +231,7 @@ describe("messenger message SQLite cache", () => {
           author_manager_id AS authorManagerId,
           message_text AS text,
           raw_text AS rawText,
+          is_system AS system,
           normalization_version AS normalizationVersion
         FROM messenger_message_snapshots
         WHERE session_id = '442' AND message_id = '601'`
@@ -242,7 +244,8 @@ describe("messenger message SQLite cache", () => {
       authorManagerId: "78",
       text: "photo.jpg\n\nСообщение",
       rawText,
-      normalizationVersion: 1
+      system: 0,
+      normalizationVersion: 2
     });
 
     const disabledManagerDatabase = new Database(databasePath);
@@ -280,6 +283,7 @@ describe("messenger message SQLite cache", () => {
           author_manager_id AS authorManagerId,
           message_text AS text,
           raw_text AS rawText,
+          is_system AS system,
           normalization_version AS normalizationVersion
         FROM messenger_message_snapshots
         WHERE session_id = '442' AND message_id = '601'`
@@ -305,6 +309,7 @@ describe("messenger message SQLite cache", () => {
           author_manager_id AS authorManagerId,
           message_text AS text,
           raw_text AS rawText,
+          is_system AS system,
           normalization_version AS normalizationVersion
         FROM messenger_message_snapshots
         WHERE session_id = '442' AND message_id = '601'`
@@ -312,5 +317,146 @@ describe("messenger message SQLite cache", () => {
       .get() as NormalizedMessengerRow;
     idempotentDatabase.close();
     expect(idempotent).toEqual(reopened);
+  });
+
+  it("reclassifies stale OLChat Telegram outgoing rows and preserves real system events", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "messenger-olchat-normalization-"));
+    tempDirs.push(directory);
+    const databasePath = join(directory, "reporting.db");
+    const outgoingRawText =
+      "[OLChat] Telegram:\n[B][Исходящее][/B]\nОтвет менеджера";
+    let repository = createSqliteRepository({
+      databaseUrl: `file:${databasePath}`,
+      defaultWonStageIds: ["C10:WON"]
+    });
+    const baseMessage: Omit<MessengerMessageSnapshot, "id" | "senderId" | "senderKind" | "direction" | "text" | "rawText" | "system"> = {
+      sessionId: "443",
+      activityId: "303",
+      dealId: "1001",
+      dealManagerId: "6994",
+      occurredAt: "2026-07-01T20:17:58+03:00",
+      occurredAtMs: Date.parse("2026-07-01T20:17:58+03:00"),
+      channelKey: "olchat_telegram",
+      channelLabel: "OLChat: Telegram",
+      authorLabel: null,
+      authorManagerId: null,
+      attachmentFileIds: [],
+      hasAttachment: false,
+      syncedAt: "2026-08-04T00:00:00.000Z"
+    };
+    await repository.replaceMessengerSessions([
+      {
+        session: {
+          sessionId: "443",
+          activityId: "303",
+          dealId: "1001",
+          dealManagerId: "6994",
+          channelKey: "olchat_telegram",
+          channelLabel: "OLChat: Telegram",
+          activityUpdatedAt: "2026-08-03T11:00:00+03:00",
+          syncedAt: "2026-08-04T00:00:00.000Z"
+        },
+        messages: [
+          {
+            ...baseMessage,
+            id: "701",
+            senderId: "0",
+            senderKind: "unknown",
+            direction: "unknown",
+            text: outgoingRawText,
+            rawText: outgoingRawText,
+            system: true
+          },
+          {
+            ...baseMessage,
+            id: "702",
+            senderId: "connector",
+            senderKind: "connector",
+            direction: "unknown",
+            text: "Ответ клиента",
+            rawText: "Ответ клиента",
+            system: false
+          },
+          {
+            ...baseMessage,
+            id: "703",
+            senderId: "0",
+            senderKind: "unknown",
+            direction: "unknown",
+            text: "Служебное событие",
+            rawText: "Служебное событие",
+            system: true
+          }
+        ]
+      }
+    ]);
+    repository.close();
+
+    const staleDatabase = new Database(databasePath);
+    staleDatabase
+      .prepare(
+        `UPDATE messenger_message_snapshots
+         SET normalization_version = 1
+         WHERE session_id = '443'`
+      )
+      .run();
+    staleDatabase.close();
+
+    repository = createSqliteRepository({
+      databaseUrl: `file:${databasePath}`,
+      defaultWonStageIds: ["C10:WON"]
+    });
+    repository.close();
+
+    const normalizedDatabase = new Database(databasePath, { readonly: true });
+    const rows = normalizedDatabase
+      .prepare(
+        `SELECT
+          message_id AS id,
+          direction,
+          message_text AS text,
+          raw_text AS rawText,
+          is_system AS system,
+          normalization_version AS normalizationVersion
+         FROM messenger_message_snapshots
+         WHERE session_id = '443'
+         ORDER BY message_id`
+      )
+      .all() as Array<{
+        id: string;
+        direction: string;
+        text: string | null;
+        rawText: string | null;
+        system: number;
+        normalizationVersion: number;
+      }>;
+    normalizedDatabase.close();
+
+    expect(rows).toEqual([
+      {
+        id: "701",
+        direction: "outgoing",
+        text: "Ответ менеджера",
+        rawText: outgoingRawText,
+        system: 0,
+        normalizationVersion: 2
+      },
+      {
+        id: "702",
+        direction: "incoming",
+        text: "Ответ клиента",
+        rawText: "Ответ клиента",
+        system: 0,
+        normalizationVersion: 2
+      },
+      {
+        id: "703",
+        direction: "unknown",
+        text: null,
+        rawText: "Служебное событие",
+        system: 1,
+        normalizationVersion: 2
+      }
+    ]);
   });
 });

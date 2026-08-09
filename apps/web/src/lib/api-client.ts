@@ -3396,7 +3396,6 @@ function normalizeMessengerManagerSummary(
     from: asString(data.from),
     to: asString(data.to),
     currentDeals: asNumber(data.currentDeals),
-    sessions: asNumber(data.sessions),
     uniqueDialogs: asNumber(data.uniqueDialogs),
     dealsWithMessages: asNumber(data.dealsWithMessages),
     messages: asNumber(data.messages),
@@ -3424,8 +3423,6 @@ function normalizeMessengerManagerSummary(
         messages: asNumber(channel.messages),
       }
     }),
-    directionAvailable: false,
-    personalAuthorAvailable: asBoolean(data.personalAuthorAvailable),
   }
 }
 
@@ -3453,8 +3450,6 @@ function normalizeMessengerReportSummaryResponse(
     dealsWithMessages: asNumber(data.dealsWithMessages),
     systemMessagesExcluded: asNumber(data.systemMessagesExcluded),
     managerRows: asArray(data.managerRows, normalizeMessengerManagerSummary),
-    directionAvailable: false,
-    personalAuthorAvailable: asBoolean(data.personalAuthorAvailable),
   }
 }
 
@@ -3472,8 +3467,6 @@ function normalizeMessengerMessageDetailsResponse(
     totalMessages: asNumber(data.totalMessages),
     returnedMessages: asNumber(data.returnedMessages),
     truncated: asBoolean(data.truncated),
-    directionAvailable: false,
-    personalAuthorAvailable: asBoolean(data.personalAuthorAvailable),
     messages: asArray(data.messages, (value) => {
       const message = isRecord(value) ? value : {}
       const channel = isRecord(message.channel) ? message.channel : {}
