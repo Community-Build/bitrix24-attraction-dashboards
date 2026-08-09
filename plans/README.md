@@ -55,7 +55,7 @@ architectural issue found in the deep review.
 | [039](./039-messenger-direction-links-and-attachments.md) | Parse WAZZUP direction and add deal/attachment actions | P1 | L | 038 | DONE |
 | [040](./040-sqlite-messenger-reporting.md) | Persist messenger histories and auto-load Activities totals | P1 | L | 037, 038, 039 | DONE |
 | [041](./041-umnico-direction-and-bbcode-normalization.md) | Classify Umnico direction and clean messenger BBCode | P1 | S | 040 | DONE |
-| [042](./042-show-all-calls-for-adelia-and-maria.md) | Show all telephony calls for Adelia and Maria | P1 | S | 006, 014 | IN PROGRESS |
+| [042](./042-show-all-calls-for-adelia-and-maria.md) | Show all telephony calls for Adelia and Maria | P1 | S | 006, 014 | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale - finding fixed independently or approach

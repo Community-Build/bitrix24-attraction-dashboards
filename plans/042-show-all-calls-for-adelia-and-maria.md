@@ -1,6 +1,6 @@
 # Plan 042: Show all telephony calls for Adelia and Maria
 
-> Tracked by GitHub issue #147.
+> Delivery: GitHub issue #147 and PR #148.
 
 ## Outcome
 
