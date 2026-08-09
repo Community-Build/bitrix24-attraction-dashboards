@@ -146,8 +146,9 @@ export function ActivitiesMessengerSection({
               Сообщения в мессенджерах
             </h3>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              Автоматически показывает сообщения за период общего фильтра. Исходящие
-              засчитываются менеджеру только когда автор подтверждён данными сообщения.
+              Автоматически показывает сообщения за период общего фильтра. Для
+              исходящих отдельно видны подтверждённый автор и операционная
+              ответственность менеджера по сделке.
             </p>
           </div>
           {from && to ? (
@@ -158,9 +159,10 @@ export function ActivitiesMessengerSection({
         </div>
 
         <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950">
-          Для WAZZUP служебная пометка «Исходящее сообщение» определяет направление и
-          автора. Сообщение без такой пометки считается входящим. Исходящие с подписью
-          «Телефон» видны отдельно и не приписываются текущему ответственному сделки.
+          Для WAZZUP и Umnico служебная пометка определяет исходящее сообщение, а
+          сообщение без неё считается входящим от клиента. Если источник называет
+          только «Телефон», сообщение остаётся у ответственного менеджера, но это не
+          считается подтверждением физического автора.
         </div>
 
         {error ? (
@@ -176,7 +178,7 @@ export function ActivitiesMessengerSection({
                 'Всего отправлено',
                 summary.outgoingMessages + summary.outgoingUnknownAuthorMessages,
                 'messenger-outgoing-messages',
-                `${formatInteger(summary.outgoingMessages)} с подтверждённым автором · ${formatInteger(summary.outgoingUnknownAuthorMessages)} без автора`,
+                `${formatInteger(summary.outgoingMessages)} с подтверждённым автором · ${formatInteger(summary.outgoingUnknownAuthorMessages)} по ответственному`,
               )}
               {metricCard(
                 'Уникальных диалогов',
@@ -203,8 +205,8 @@ export function ActivitiesMessengerSection({
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-[0.1em] text-slate-500">
                     <th className="px-3 py-3">Менеджер</th>
-                    <th className="px-3 py-3 text-right">Автор подтверждён</th>
-                    <th className="px-3 py-3 text-right">Автор не определён</th>
+                    <th className="px-3 py-3 text-right">Подтверждённый автор</th>
+                    <th className="px-3 py-3 text-right">По ответственному</th>
                     <th className="px-3 py-3 text-right">Диалоги</th>
                     <th className="px-3 py-3 text-right">Сделки</th>
                     <th className="px-3 py-3 text-right">Входящие</th>

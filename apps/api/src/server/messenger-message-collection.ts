@@ -57,6 +57,7 @@ export interface MessengerAnalysisMessage {
   senderKind: MessengerSenderKind;
   direction: MessengerMessageDirection;
   authorLabel: string | null;
+  authorConfirmed: boolean;
   text: string | null;
   attachmentFileIds: string[];
   hasAttachment: boolean;
@@ -171,6 +172,7 @@ export interface MessengerMessageDetails {
     senderKind: MessengerSenderKind;
     direction: MessengerMessageDirection;
     authorLabel: string | null;
+    authorConfirmed: boolean;
     text: string | null;
     dealUrl: string | null;
     attachments: Array<{ id: string }>;
@@ -431,6 +433,8 @@ export function createMessengerMessageCollectionService(input: {
           senderKind: message.senderKind,
           direction: message.direction,
           authorLabel: message.authorLabel,
+          authorConfirmed:
+            message.direction === "outgoing" && message.authorManagerId !== null,
           text: message.text,
           attachmentFileIds: message.attachmentFileIds,
           hasAttachment: message.hasAttachment
@@ -556,7 +560,7 @@ export function createMessengerMessageCollectionService(input: {
         truncated: selectedMessages.length < batch.messages.length,
         directionAvailable: false,
         personalAuthorAvailable: batch.messages.some(
-          (message) => message.direction === "outgoing" && message.authorLabel
+          (message) => message.authorConfirmed
         ),
         messages: selectedMessages.map((message) => ({
           id: message.id,
@@ -567,6 +571,7 @@ export function createMessengerMessageCollectionService(input: {
           senderKind: message.senderKind,
           direction: message.direction,
           authorLabel: message.authorLabel,
+          authorConfirmed: message.authorConfirmed,
           text: message.text,
           dealUrl: buildDealUrl(input.portalHost, message.dealId),
           attachments: message.attachmentFileIds.map((id) => ({ id })),

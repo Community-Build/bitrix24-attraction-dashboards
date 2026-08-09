@@ -3490,6 +3490,7 @@ function normalizeMessengerMessageDetailsResponse(
         senderKind: normalizeMessengerSenderKind(message.senderKind),
         direction: normalizeMessengerMessageDirection(message.direction),
         authorLabel: asNullableString(message.authorLabel),
+        authorConfirmed: asBoolean(message.authorConfirmed),
         text: asNullableString(message.text),
         attachments: asArray(message.attachments, (value) => {
           const attachment = isRecord(value) ? value : {}

@@ -173,7 +173,19 @@ describe("cached messenger message reporting", () => {
         id: "inside",
         dealId: "1001",
         dealManagerId: "78",
+        direction: "outgoing",
+        authorLabel: "Битрикс24 (Егоров Андрей)",
+        authorManagerId: "78",
         text: "Внутри периода"
+      }),
+      message({
+        id: "unconfirmed",
+        dealId: "1001",
+        dealManagerId: "78",
+        direction: "outgoing",
+        authorLabel: "Телефон",
+        authorManagerId: null,
+        text: "Без автора"
       }),
       message({
         id: "outside",
@@ -196,11 +208,18 @@ describe("cached messenger message reporting", () => {
       limit: 500
     });
 
-    expect(details.totalMessages).toBe(1);
+    expect(details.totalMessages).toBe(2);
+    expect(details.personalAuthorAvailable).toBe(true);
     expect(details.messages[0]).toMatchObject({
       id: "inside",
+      authorConfirmed: true,
       text: "Внутри периода",
       dealUrl: "https://example.bitrix24.ru/crm/deal/details/1001/"
+    });
+    expect(details.messages[1]).toMatchObject({
+      id: "unconfirmed",
+      authorLabel: "Телефон",
+      authorConfirmed: false
     });
   });
 
