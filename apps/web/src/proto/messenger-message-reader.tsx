@@ -15,6 +15,26 @@ const DIRECTION_LABELS = {
   unknown: 'Направление не определено',
 }
 
+type AttachmentDownloadError = {
+  attachmentKey: string
+  message: string
+}
+
+function attachmentDownloadErrorMessage(error: unknown) {
+  const code = error instanceof Error ? error.message : null
+
+  switch (code) {
+    case 'ATTACHMENT_NOT_FOUND':
+      return 'Вложение больше недоступно в этом сообщении.'
+    case 'ATTACHMENT_TOO_LARGE':
+      return 'Вложение больше 20 МБ и не может быть скачано через дашборд.'
+    case 'ATTACHMENT_UNAVAILABLE':
+      return 'Bitrix24 не дал получить это вложение. Повторите позже; если ошибка сохранится, администратору нужно проверить доступ интеграции к файлам чата.'
+    default:
+      return 'Не удалось скачать вложение. Повторите попытку.'
+  }
+}
+
 function messageDirectionLabel(
   message: MessengerMessageDetailItem,
   managerName: string,
@@ -95,7 +115,8 @@ export function MessengerMessageReader({
   const [data, setData] = useState<MessengerMessageDetails | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [attachmentError, setAttachmentError] = useState<string | null>(null)
+  const [attachmentError, setAttachmentError] =
+    useState<AttachmentDownloadError | null>(null)
   const [downloadingAttachment, setDownloadingAttachment] = useState<string | null>(
     null,
   )
@@ -217,11 +238,10 @@ export function MessengerMessageReader({
         window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
       }
     } catch (downloadError) {
-      setAttachmentError(
-        downloadError instanceof Error
-          ? downloadError.message
-          : 'Не удалось скачать вложение.',
-      )
+      setAttachmentError({
+        attachmentKey,
+        message: attachmentDownloadErrorMessage(downloadError),
+      })
     } finally {
       setDownloadingAttachment(null)
     }
@@ -278,12 +298,6 @@ export function MessengerMessageReader({
             автора, показываем ответственного менеджера, не выдавая его за
             физического отправителя.
           </div>
-
-          {attachmentError ? (
-            <div className="mb-4 rounded-xl bg-rose-50 px-4 py-3 text-sm text-rose-900" role="alert">
-              {attachmentError}
-            </div>
-          ) : null}
 
           {loading ? (
             <div
@@ -406,21 +420,48 @@ export function MessengerMessageReader({
                                   const attachmentKey = `${message.sessionId}:${message.id}:${attachment.id}`
                                   const downloading =
                                     downloadingAttachment === attachmentKey
+                                  const failedAttachment =
+                                    attachmentError?.attachmentKey === attachmentKey
+                                  const attachmentErrorId = `messenger-attachment-error-${message.id}-${attachment.id}`
                                   return (
-                                    <button
+                                    <div
                                       key={attachment.id}
-                                      type="button"
-                                      disabled={downloadingAttachment !== null}
-                                      onClick={() =>
-                                        void downloadAttachment(message, attachment.id)
-                                      }
-                                      aria-label={`Скачать вложение ${index + 1}`}
-                                      className="inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-blue-700 outline-none transition-[border-color,background-color,box-shadow,transform] duration-150 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-[0.97] disabled:cursor-wait disabled:text-slate-400"
+                                      className="flex max-w-full flex-col items-start gap-1.5"
                                     >
-                                      {downloading
-                                        ? 'Скачиваю…'
-                                        : `Скачать вложение ${index + 1}`}
-                                    </button>
+                                      <button
+                                        type="button"
+                                        disabled={downloadingAttachment !== null}
+                                        onClick={() =>
+                                          void downloadAttachment(message, attachment.id)
+                                        }
+                                        aria-label={
+                                          failedAttachment
+                                            ? `Повторить скачивание вложения ${index + 1}`
+                                            : `Скачать вложение ${index + 1}`
+                                        }
+                                        aria-describedby={
+                                          failedAttachment
+                                            ? attachmentErrorId
+                                            : undefined
+                                        }
+                                        className="inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-blue-700 outline-none transition-[border-color,background-color,box-shadow,transform] duration-150 hover:border-blue-300 hover:bg-blue-50 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 active:scale-[0.97] disabled:cursor-wait disabled:text-slate-400"
+                                      >
+                                        {downloading
+                                          ? 'Скачиваю…'
+                                          : failedAttachment
+                                            ? `Повторить скачивание ${index + 1}`
+                                            : `Скачать вложение ${index + 1}`}
+                                      </button>
+                                      {failedAttachment ? (
+                                        <p
+                                          id={attachmentErrorId}
+                                          className="max-w-md rounded-lg bg-rose-50 px-3 py-2 text-xs leading-5 text-rose-900"
+                                          role="alert"
+                                        >
+                                          {attachmentError.message}
+                                        </p>
+                                      ) : null}
+                                    </div>
                                   )
                                 })}
                               </div>

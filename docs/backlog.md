@@ -25,6 +25,22 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 
 ## P1
 
+### Show messenger attachment download failures inline ([#151](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/151))
+- Area: activities, web
+- Problem: when the protected attachment endpoint fails, the long scrolled
+  reader shows the error only at its top, so the clicked button appears inert.
+- Expected behavior: show an actionable Russian error beside the exact
+  attachment and turn the same control into an explicit retry action.
+- Acceptance criteria:
+  - Known attachment error codes have clear operator-facing messages.
+  - Unknown failures have a safe generic retry message.
+  - Successful Blob downloads remain unchanged.
+  - Leader-only access, message/file scope validation, the 20 MiB cap, no-store
+    headers, aggregate values, and message privacy remain unchanged.
+- Data dependency: actual retrieval of files rejected by Bitrix with
+  `ACCESS_DENIED` requires a separately authorized integration-permission
+  change; issue #151 does not mutate credentials or permissions.
+
 ### Clarify messenger author versus responsible manager ([#149](https://github.com/Community-Build/bitrix24-attraction-dashboards/issues/149))
 - Area: activities, web, api
 - Problem: ambiguous WAZZUP author token `Телефон` is rendered next to an

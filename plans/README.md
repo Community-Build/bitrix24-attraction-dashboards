@@ -57,6 +57,7 @@ architectural issue found in the deep review.
 | [041](./041-umnico-direction-and-bbcode-normalization.md) | Classify Umnico direction and clean messenger BBCode | P1 | S | 040 | DONE |
 | [042](./042-show-all-calls-for-adelia-and-maria.md) | Show all telephony calls for Adelia and Maria | P1 | S | 006, 014 | DONE |
 | [043](./043-clarify-messenger-author-attribution.md) | Clarify messenger author versus responsible manager | P1 | S | 040, 041 | DONE |
+| [044](./044-handle-messenger-attachment-download-failures.md) | Show messenger attachment download failures inline | P1 | S | 039, 040 | IN PROGRESS |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (with one-line reason) |
 REJECTED (with one-line rationale - finding fixed independently or approach
