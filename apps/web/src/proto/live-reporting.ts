@@ -531,9 +531,22 @@ function resolveTocBottleneckRow(
 function resolveDisplayCallSummary(
   callRow: CallsWorkloadReportSnapshot['managerRows'][number] | null,
 ) {
-  return callRow?.callAttributionPolicy === 'direct_only'
-    ? (callRow.linkedDealCalls ?? null)
-    : callRow
+  if (!callRow) {
+    return null
+  }
+
+  if (callRow.callDisplayPolicy === 'all_calls') {
+    return callRow
+  }
+
+  if (
+    callRow.callDisplayPolicy === 'linked_deal_calls' ||
+    callRow.callAttributionPolicy === 'direct_only'
+  ) {
+    return callRow.linkedDealCalls ?? null
+  }
+
+  return callRow
 }
 
 function formatActivitySummaryValues(

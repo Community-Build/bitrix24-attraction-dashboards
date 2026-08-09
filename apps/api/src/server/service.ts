@@ -1472,11 +1472,14 @@ export function createReportingService(
         const current = optionsById.get(manager.id);
         const callAttributionPolicy =
           manager.callAttributionPolicy ?? current?.callAttributionPolicy;
+        const callDisplayPolicy =
+          manager.callDisplayPolicy ?? current?.callDisplayPolicy;
 
         optionsById.set(manager.id, {
           ...current,
           ...manager,
-          ...(callAttributionPolicy ? { callAttributionPolicy } : {})
+          ...(callAttributionPolicy ? { callAttributionPolicy } : {}),
+          ...(callDisplayPolicy ? { callDisplayPolicy } : {})
         });
       };
 

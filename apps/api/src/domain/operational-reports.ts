@@ -3941,6 +3941,15 @@ export function buildCallsWorkloadReport(
   };
   const resolveCallAttributionPolicy = (managerId: string) =>
     managerMetadata.get(managerId)?.callAttributionPolicy ?? "standard";
+  const resolveCallDisplayPolicy = (managerId: string) => {
+    const manager = managerMetadata.get(managerId);
+    return (
+      manager?.callDisplayPolicy ??
+      (manager?.callAttributionPolicy === "direct_only"
+        ? "linked_deal_calls"
+        : "all_calls")
+    );
+  };
   const toOptionalExcludedSummary = (accumulator: CallAccumulator) =>
     accumulator.totalCalls > 0 ? toCallPopulationSummary(accumulator) : undefined;
 
@@ -4035,11 +4044,12 @@ export function buildCallsWorkloadReport(
       const excluded =
         excludedByPolicyRows.get(managerId) ?? createAccumulator(managerId);
       const callAttributionPolicy = resolveCallAttributionPolicy(managerId);
+      const callDisplayPolicy = resolveCallDisplayPolicy(managerId);
       const stageBreakdown = buildCallsStageBreakdown(linked.stageItems, stageLookup);
       const allCalls = toCallPopulationSummary(summary);
       const excludedByPolicyCalls = toOptionalExcludedSummary(excluded);
       const displayedCallAccumulator =
-        callAttributionPolicy === "direct_only" ? linked : summary;
+        callDisplayPolicy === "linked_deal_calls" ? linked : summary;
       const linkedDealCalls = {
         ...toLinkedDealCallSummary(linked, stageBreakdown),
         ...(excludedByPolicyCalls ? { excludedByPolicyCalls } : {})
@@ -4064,6 +4074,9 @@ export function buildCallsWorkloadReport(
           summary.totalCalls
         ),
         ...(callAttributionPolicy === "direct_only" ? { callAttributionPolicy } : {}),
+        ...(managerMetadata.get(managerId)?.callDisplayPolicy
+          ? { callDisplayPolicy }
+          : {}),
         allCalls,
         linkedDealCalls,
         callsHourlyHeatmap: buildSegmentedHourlyWeekdayWorkloadHeatmap(

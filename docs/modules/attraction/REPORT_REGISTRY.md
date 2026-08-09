@@ -24,6 +24,25 @@ Stable dashboard anchors used by ontology report bindings:
 
 ## activities-calls
 
+- Module: `attraction`.
+- Report scene: `activities` / `Активности`.
+- Backend routes: `/api/reports/activities-workload` and
+  `/api/reports/calls-workload`.
+- Call populations: `allCalls` is every synchronized Bitrix telephony row for
+  the selected whitelisted managers and period; `linkedDealCalls` is the subset
+  attributable to Attraction deals.
+- Primary call counters and the outgoing-call heatmap use the manager's separate
+  display policy. Maria Salicheva (`7538`) and Adelia Kosmasova (`118`) use
+  `callDisplayPolicy: all_calls` as of 2026-08-09 while retaining
+  `callAttributionPolicy: direct_only` for deal linkage.
+- Deal count, calls-per-deal, and stage breakdown always use the linked-deal
+  population. A standalone or non-Attraction call must not acquire an
+  Attraction stage merely because its manager is in the whitelist.
+- Employee/team visibility, the attraction manager whitelist, funnel/SLA facts,
+  and call recording/analysis authorization are independent boundaries and do
+  not widen with the workload population.
+- Page rendering reads local SQLite snapshots and never calls Bitrix directly.
+
 ## operational-dashboard
 
 - Module: `attraction`.

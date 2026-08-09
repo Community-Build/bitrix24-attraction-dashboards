@@ -1,5 +1,11 @@
 # Plan 006: Define manager call attribution policy for shared attraction roles
 
+> The linked-only display behavior for manager IDs `7538` and `118` was
+> superseded on 2026-08-09 by [plan 042](./042-show-all-calls-for-adelia-and-maria.md)
+> and GitHub issue #147. Their `direct_only` deal-attribution policy remains;
+> only the workload display now uses all calls. This plan is retained as
+> historical rationale.
+
 > **Executor instructions**: Follow this plan step by step. Run every
 > verification command and confirm the expected result before moving to the
 > next step. If anything in the "STOP conditions" section occurs, stop and

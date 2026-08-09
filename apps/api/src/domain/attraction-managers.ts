@@ -18,12 +18,14 @@ export const ATTRACTION_MANAGER_CATALOG = [
   {
     id: "7538",
     name: "Мария Саличева",
-    callAttributionPolicy: "direct_only"
+    callAttributionPolicy: "direct_only",
+    callDisplayPolicy: "all_calls"
   },
   {
     id: "118",
     name: "Аделия Космасова",
-    callAttributionPolicy: "direct_only"
+    callAttributionPolicy: "direct_only",
+    callDisplayPolicy: "all_calls"
   }
 ] satisfies ManagerDirectoryEntry[];
 

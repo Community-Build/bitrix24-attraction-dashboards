@@ -354,7 +354,7 @@ describe('live-reporting', () => {
     })
   })
 
-  it('uses linked attraction calls for direct-only managers in dashboard call summary columns', () => {
+  it('uses all synchronized calls for Adelia in dashboard call summary columns', () => {
     const activities: ActivitiesWorkloadReport = {
       range: {
         from: '2026-06-15T00:00:00.000Z',
@@ -423,6 +423,7 @@ describe('live-reporting', () => {
           managerId: '118',
           managerName: 'Аделия Космасова',
           callAttributionPolicy: 'direct_only',
+          callDisplayPolicy: 'all_calls',
           dealCount: 0,
           totalCalls: 3,
           incomingCalls: 1,
@@ -473,18 +474,18 @@ describe('live-reporting', () => {
     expect(scene.summaryRows).toEqual([
       expect.objectContaining({
         manager: 'Аделия Космасова',
-        outgoing: '0',
-        successfulCalls: '0',
+        outgoing: '2',
+        successfulCalls: '1',
         otherOutgoing: '0',
-        noAnswer: '0',
+        noAnswer: '1',
         missedIncoming: '0',
-        incoming: '0',
+        incoming: '1',
       }),
     ])
     expect(scene.matrixRows).toEqual([
       expect.objectContaining({
         manager: 'Аделия Космасова',
-        totalCalls: '0',
+        totalCalls: '3',
         avgCalls: '0.0',
       }),
     ])

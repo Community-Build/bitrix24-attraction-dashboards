@@ -810,9 +810,11 @@ export interface ManagerDirectoryEntry {
   id: string;
   name: string;
   callAttributionPolicy?: CallAttributionPolicy;
+  callDisplayPolicy?: CallDisplayPolicy;
 }
 
 export type CallAttributionPolicy = "standard" | "direct_only";
+export type CallDisplayPolicy = "all_calls" | "linked_deal_calls";
 
 export interface ManagerWhitelistSetting {
   moduleKey: string;
@@ -2046,6 +2048,7 @@ export interface ManagerCallsWorkloadRow {
   averageCallsPerDeal: number;
   averageDurationSeconds: number;
   callAttributionPolicy?: CallAttributionPolicy;
+  callDisplayPolicy?: CallDisplayPolicy;
   allCalls: CallPopulationSummary;
   linkedDealCalls: LinkedDealCallPopulationSummary;
   callsHourlyHeatmap: HourlyWeekdayWorkloadHeatmap;
