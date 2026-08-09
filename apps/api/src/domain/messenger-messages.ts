@@ -62,14 +62,46 @@ export interface OpenLineSessionHistoryInput {
   }>;
 }
 
-const WAZZUP_OUTGOING_MARKER =
+const RUSSIAN_OUTGOING_MARKER =
   /^\s*===\s*Исходящее сообщение(?:,\s*автор:\s*(.+?))?\s*===\s*(?:\r?\n)?/iu;
+const UMNICO_OUTGOING_MARKER =
+  /^[^\S\r\n]*===\s*Out(?:coming|going)\s+message\.?\s*(?:Source:\s*(.+?))?\s*===[^\S\r\n]*(?=\r?$)/imu;
 const WAZZUP_SYSTEM_MARKER = /^\s*===\s*SYSTEM\s+WZ\s*===/iu;
+const BOLD_BBCODE_TOKEN = /\[\/?b\]/giu;
 const GENERIC_AUTHOR_TOKENS = new Set([
   "битрикс",
   "битрикс24",
-  "телефон"
+  "телефон",
+  "phone"
 ]);
+
+function normalizeMessengerDisplayText(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  return value.replace(BOLD_BBCODE_TOKEN, "").trim() || null;
+}
+
+function matchOutgoingMarker(channelKey: string, rawText: string) {
+  const russianMarker = RUSSIAN_OUTGOING_MARKER.exec(rawText);
+  if (russianMarker) {
+    return russianMarker;
+  }
+  if (channelKey.startsWith("umnico")) {
+    return UMNICO_OUTGOING_MARKER.exec(rawText);
+  }
+
+  return null;
+}
+
+function removeOutgoingMarker(rawText: string, match: RegExpExecArray) {
+  const beforeMarker = rawText.slice(0, match.index).trim();
+  const afterMarker = rawText.slice(match.index + match[0].length).trim();
+  return normalizeMessengerDisplayText(
+    [beforeMarker, afterMarker].filter(Boolean).join("\n\n")
+  );
+}
 
 export function extractOpenLineSessionId(originId: string | null) {
   return /^IMOL_(\d+)$/u.exec(originId ?? "")?.[1] ?? null;
@@ -186,13 +218,13 @@ export function classifyMessengerMessage(input: {
   }
 
   if (rawText) {
-    const outgoingMatch = WAZZUP_OUTGOING_MARKER.exec(rawText);
+    const outgoingMatch = matchOutgoingMarker(input.channelKey, rawText);
     if (outgoingMatch) {
       return {
         system: false,
         direction: "outgoing" as const,
-        authorLabel: outgoingMatch[1]?.trim() || null,
-        text: rawText.slice(outgoingMatch[0].length).trim() || null,
+        authorLabel: normalizeMessengerDisplayText(outgoingMatch[1] ?? null),
+        text: removeOutgoingMarker(rawText, outgoingMatch),
         rawText
       };
     }
@@ -203,17 +235,20 @@ export function classifyMessengerMessage(input: {
       system: false,
       direction: "outgoing" as const,
       authorLabel: null,
-      text: rawText,
+      text: normalizeMessengerDisplayText(rawText),
       rawText
     };
   }
 
-  if (input.channelKey.startsWith("wz_")) {
+  if (
+    input.channelKey.startsWith("wz_") ||
+    input.channelKey.startsWith("umnico")
+  ) {
     return {
       system: false,
       direction: "incoming" as const,
       authorLabel: null,
-      text: rawText,
+      text: normalizeMessengerDisplayText(rawText),
       rawText
     };
   }
@@ -222,7 +257,7 @@ export function classifyMessengerMessage(input: {
     system: false,
     direction: "unknown" as const,
     authorLabel: null,
-    text: rawText,
+    text: normalizeMessengerDisplayText(rawText),
     rawText
   };
 }

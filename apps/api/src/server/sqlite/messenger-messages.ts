@@ -1,7 +1,14 @@
 import type Database from "better-sqlite3";
 
-import type { MessengerMessageSnapshot } from "../../domain/messenger-messages.js";
+import {
+  classifyMessengerMessage,
+  resolveMessengerAuthorManagerId,
+  type MessengerManagerIdentity,
+  type MessengerMessageSnapshot
+} from "../../domain/messenger-messages.js";
 import type { SqliteRepository } from "../sqlite-repository.js";
+
+const MESSENGER_MESSAGE_NORMALIZATION_VERSION = 1;
 
 type MessengerMessageRepositoryMethods = Pick<
   SqliteRepository,
@@ -32,6 +39,20 @@ interface StoredMessengerMessageRow {
   hasAttachment: number;
   system: number;
   syncedAt: string;
+}
+
+interface StaleMessengerMessageRow {
+  sessionId: string;
+  messageId: string;
+  channelKey: string;
+  senderId: string;
+  senderKind: MessengerMessageSnapshot["senderKind"];
+  direction: MessengerMessageSnapshot["direction"];
+  authorLabel: string | null;
+  authorManagerId: string | null;
+  text: string | null;
+  rawText: string | null;
+  system: number;
 }
 
 function parseAttachmentFileIds(value: string) {
@@ -96,9 +117,93 @@ const MESSAGE_SELECT = `
     m.synced_at AS syncedAt
   FROM messenger_message_snapshots m`;
 
+function normalizeStoredMessengerMessages(database: Database.Database) {
+  const staleRows = database
+    .prepare(
+      `SELECT
+        session_id AS sessionId,
+        message_id AS messageId,
+        channel_key AS channelKey,
+        sender_id AS senderId,
+        sender_kind AS senderKind,
+        direction,
+        author_label AS authorLabel,
+        author_manager_id AS authorManagerId,
+        message_text AS text,
+        raw_text AS rawText,
+        is_system AS system
+      FROM messenger_message_snapshots
+      WHERE normalization_version < ?`
+    )
+    .all(MESSENGER_MESSAGE_NORMALIZATION_VERSION) as StaleMessengerMessageRow[];
+  if (staleRows.length === 0) {
+    return;
+  }
+
+  const managers = database
+    .prepare(
+      `SELECT
+        manager_id AS managerId,
+        manager_name AS managerName
+      FROM module_manager_whitelist_settings
+      WHERE module_key = 'attraction' AND enabled = 1`
+    )
+    .all() as MessengerManagerIdentity[];
+  const updateMessage = database.prepare(`
+    UPDATE messenger_message_snapshots
+    SET
+      direction = @direction,
+      author_label = @authorLabel,
+      author_manager_id = @authorManagerId,
+      message_text = @text,
+      normalization_version = @normalizationVersion
+    WHERE session_id = @sessionId AND message_id = @messageId
+  `);
+  const normalizeTransaction = database.transaction(
+    (rows: StaleMessengerMessageRow[]) => {
+      for (const row of rows) {
+        if (row.system === 1) {
+          updateMessage.run({
+            ...row,
+            normalizationVersion: MESSENGER_MESSAGE_NORMALIZATION_VERSION
+          });
+          continue;
+        }
+
+        const classification = classifyMessengerMessage({
+          channelKey: row.channelKey,
+          senderKind: row.senderKind,
+          text: row.rawText ?? row.text
+        });
+        const authorManagerId =
+          classification.direction === "outgoing"
+            ? resolveMessengerAuthorManagerId({
+                authorLabel: classification.authorLabel,
+                senderId: row.senderId,
+                senderKind: row.senderKind,
+                managers
+              })
+            : null;
+        updateMessage.run({
+          sessionId: row.sessionId,
+          messageId: row.messageId,
+          direction: classification.direction,
+          authorLabel: classification.authorLabel,
+          authorManagerId,
+          text: classification.text,
+          normalizationVersion: MESSENGER_MESSAGE_NORMALIZATION_VERSION
+        });
+      }
+    }
+  );
+  normalizeTransaction(staleRows);
+}
+
 export function createMessengerMessageRepositoryMethods(
   database: Database.Database
 ): MessengerMessageRepositoryMethods {
+  normalizeStoredMessengerMessages(database);
+
   const upsertSessionStatement = database.prepare(`
     INSERT INTO messenger_session_snapshots (
       session_id,
@@ -152,7 +257,8 @@ export function createMessengerMessageRepositoryMethods(
       attachment_file_ids_json,
       has_attachment,
       is_system,
-      synced_at
+      synced_at,
+      normalization_version
     ) VALUES (
       @sessionId,
       @id,
@@ -173,7 +279,8 @@ export function createMessengerMessageRepositoryMethods(
       @attachmentFileIdsJson,
       @hasAttachment,
       @system,
-      @syncedAt
+      @syncedAt,
+      @normalizationVersion
     )
   `);
   const replaceSessionsTransaction = database.transaction(
@@ -187,7 +294,8 @@ export function createMessengerMessageRepositoryMethods(
             ...message,
             attachmentFileIdsJson: JSON.stringify(message.attachmentFileIds),
             hasAttachment: message.hasAttachment ? 1 : 0,
-            system: message.system ? 1 : 0
+            system: message.system ? 1 : 0,
+            normalizationVersion: MESSENGER_MESSAGE_NORMALIZATION_VERSION
           });
           messageCount += 1;
         }

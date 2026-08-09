@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import Database from "better-sqlite3";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type {
@@ -11,6 +12,15 @@ import type {
 import { createSqliteRepository } from "../src/server/sqlite-repository";
 
 const tempDirs: string[] = [];
+
+interface NormalizedMessengerRow {
+  direction: string;
+  authorLabel: string | null;
+  authorManagerId: string | null;
+  text: string | null;
+  rawText: string | null;
+  normalizationVersion: number;
+}
 
 afterEach(() => {
   for (const directory of tempDirs.splice(0)) {
@@ -135,5 +145,172 @@ describe("messenger message SQLite cache", () => {
       repository.getMessengerMessage({ sessionId: "441", messageId: "501" })
     ).resolves.toBeNull();
     repository.close();
+  });
+
+  it("normalizes stale cached Umnico rows once while preserving raw text", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "messenger-normalization-"));
+    tempDirs.push(directory);
+    const databasePath = join(directory, "reporting.db");
+    const rawText =
+      "photo.jpg\n\n" +
+      "===Outcoming message. Source: Phone/[b]Андрей Егоров[/b]===\n" +
+      "Сообщение[B] [/B][B] [/B]";
+    let repository = createSqliteRepository({
+      databaseUrl: `file:${databasePath}`,
+      defaultWonStageIds: ["C10:WON"]
+    });
+    await repository.replaceMessengerSessions([
+      {
+        session: {
+          sessionId: "442",
+          activityId: "302",
+          dealId: "1001",
+          dealManagerId: "11234",
+          channelKey: "umnico_telegram",
+          channelLabel: "Umnico: Telegram",
+          activityUpdatedAt: "2026-08-03T11:00:00+03:00",
+          syncedAt: "2026-08-04T00:00:00.000Z"
+        },
+        messages: [
+          {
+            id: "601",
+            sessionId: "442",
+            activityId: "302",
+            dealId: "1001",
+            dealManagerId: "11234",
+            occurredAt: "2026-08-03T10:15:00+03:00",
+            occurredAtMs: Date.parse("2026-08-03T10:15:00+03:00"),
+            channelKey: "umnico_telegram",
+            channelLabel: "Umnico: Telegram",
+            senderId: "connector",
+            senderKind: "connector",
+            direction: "unknown",
+            authorLabel: null,
+            authorManagerId: null,
+            text: rawText,
+            rawText,
+            attachmentFileIds: [],
+            hasAttachment: false,
+            system: false,
+            syncedAt: "2026-08-04T00:00:00.000Z"
+          }
+        ]
+      }
+    ]);
+    repository.close();
+
+    const staleDatabase = new Database(databasePath);
+    const normalizationColumn = (
+      staleDatabase
+        .prepare("PRAGMA table_info(messenger_message_snapshots)")
+        .all() as Array<{ name: string; dflt_value: string | null }>
+    ).find((column) => column.name === "normalization_version");
+    expect(normalizationColumn?.dflt_value).toBe("0");
+    staleDatabase
+      .prepare(
+        `UPDATE messenger_message_snapshots
+        SET normalization_version = 0
+        WHERE session_id = '442' AND message_id = '601'`
+      )
+      .run();
+    staleDatabase.close();
+
+    repository = createSqliteRepository({
+      databaseUrl: `file:${databasePath}`,
+      defaultWonStageIds: ["C10:WON"]
+    });
+    repository.close();
+
+    const normalizedDatabase = new Database(databasePath, { readonly: true });
+    const normalized = normalizedDatabase
+      .prepare(
+        `SELECT
+          direction,
+          author_label AS authorLabel,
+          author_manager_id AS authorManagerId,
+          message_text AS text,
+          raw_text AS rawText,
+          normalization_version AS normalizationVersion
+        FROM messenger_message_snapshots
+        WHERE session_id = '442' AND message_id = '601'`
+      )
+      .get() as NormalizedMessengerRow;
+    normalizedDatabase.close();
+    expect(normalized).toEqual({
+      direction: "outgoing",
+      authorLabel: "Phone/Андрей Егоров",
+      authorManagerId: "78",
+      text: "photo.jpg\n\nСообщение",
+      rawText,
+      normalizationVersion: 1
+    });
+
+    const disabledManagerDatabase = new Database(databasePath);
+    disabledManagerDatabase
+      .prepare(
+        `UPDATE module_manager_whitelist_settings
+        SET enabled = 0
+        WHERE module_key = 'attraction' AND manager_id = '78'`
+      )
+      .run();
+    disabledManagerDatabase
+      .prepare(
+        `UPDATE messenger_message_snapshots
+        SET normalization_version = 0,
+            direction = 'unknown',
+            author_label = NULL,
+            author_manager_id = '78',
+            message_text = raw_text
+        WHERE session_id = '442' AND message_id = '601'`
+      )
+      .run();
+    disabledManagerDatabase.close();
+
+    repository = createSqliteRepository({
+      databaseUrl: `file:${databasePath}`,
+      defaultWonStageIds: ["C10:WON"]
+    });
+    repository.close();
+    const reopenedDatabase = new Database(databasePath, { readonly: true });
+    const reopened = reopenedDatabase
+      .prepare(
+        `SELECT
+          direction,
+          author_label AS authorLabel,
+          author_manager_id AS authorManagerId,
+          message_text AS text,
+          raw_text AS rawText,
+          normalization_version AS normalizationVersion
+        FROM messenger_message_snapshots
+        WHERE session_id = '442' AND message_id = '601'`
+      )
+      .get() as NormalizedMessengerRow;
+    reopenedDatabase.close();
+    expect(reopened).toEqual({
+      ...normalized,
+      authorManagerId: null
+    });
+
+    repository = createSqliteRepository({
+      databaseUrl: `file:${databasePath}`,
+      defaultWonStageIds: ["C10:WON"]
+    });
+    repository.close();
+    const idempotentDatabase = new Database(databasePath, { readonly: true });
+    const idempotent = idempotentDatabase
+      .prepare(
+        `SELECT
+          direction,
+          author_label AS authorLabel,
+          author_manager_id AS authorManagerId,
+          message_text AS text,
+          raw_text AS rawText,
+          normalization_version AS normalizationVersion
+        FROM messenger_message_snapshots
+        WHERE session_id = '442' AND message_id = '601'`
+      )
+      .get() as NormalizedMessengerRow;
+    idempotentDatabase.close();
+    expect(idempotent).toEqual(reopened);
   });
 });

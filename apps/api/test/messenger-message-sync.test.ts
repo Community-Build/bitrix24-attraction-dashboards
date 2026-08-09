@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type { ReplaceMessengerSessionInput } from "../src/server/sqlite-repository";
+import { classifyMessengerMessage } from "../src/domain/messenger-messages";
 import { synchronizeMessengerMessages } from "../src/server/messenger-message-sync";
 
 function createRepository(input?: { cursor?: string | null }) {
@@ -141,6 +142,92 @@ describe("messenger message synchronization", () => {
     });
     expect(messages[3]).toMatchObject({ system: true });
     expect(state.setSyncCursor).toHaveBeenCalledOnce();
+  });
+
+  it("classifies Umnico markers, treats unmarked rows as incoming, and removes bold BBCode", async () => {
+    const state = createRepository();
+    const outgoingRawText =
+      "===Outcoming message. Source: Phone/[b]Андрей Егоров[/b]===\n" +
+      "Здравствуйте![B] [/B][B] [/B]";
+    await synchronizeMessengerMessages({
+      repository: state.repository,
+      client: {
+        listOpenLineActivities: async () => [
+          {
+            ID: "302",
+            OWNER_ID: "1001",
+            LAST_UPDATED: "2026-08-03T11:00:00+03:00",
+            ORIGIN_ID: "IMOL_442"
+          }
+        ],
+        getOpenLineSessionHistory: async () => ({
+          sessionId: "442",
+          chat: {
+            id: "702",
+            entityId: "umnico_telegram_connector",
+            entityType: "LINES"
+          },
+          users: [{ id: "connector", connector: true }],
+          messages: [
+            {
+              id: "601",
+              chatId: "702",
+              senderId: "connector",
+              date: "2026-08-03T10:15:00+03:00",
+              text: outgoingRawText,
+              hasAttachment: false
+            },
+            {
+              id: "602",
+              chatId: "702",
+              senderId: "connector",
+              date: "2026-08-03T10:16:00+03:00",
+              text: "Приветствую, да, в силе",
+              hasAttachment: false
+            }
+          ]
+        })
+      },
+      now: () => "2026-08-04T00:00:00.000Z"
+    });
+
+    expect(state.stored[0]?.messages).toEqual([
+      expect.objectContaining({
+        id: "601",
+        direction: "outgoing",
+        authorLabel: "Phone/Андрей Егоров",
+        authorManagerId: "78",
+        text: "Здравствуйте!",
+        rawText: outgoingRawText
+      }),
+      expect.objectContaining({
+        id: "602",
+        direction: "incoming",
+        authorLabel: null,
+        authorManagerId: null,
+        text: "Приветствую, да, в силе"
+      })
+    ]);
+    expect(
+      classifyMessengerMessage({
+        channelKey: "olchat_telegram",
+        senderKind: "connector",
+        text: "[b]Направление всё ещё не доказано[/b]"
+      })
+    ).toMatchObject({
+      direction: "unknown",
+      text: "Направление всё ещё не доказано"
+    });
+    expect(
+      classifyMessengerMessage({
+        channelKey: "umnico_telegram",
+        senderKind: "connector",
+        text: "Клиент процитировал ===Outcoming message. Source: Phone=== в тексте"
+      })
+    ).toMatchObject({
+      direction: "incoming",
+      text: "Клиент процитировал ===Outcoming message. Source: Phone=== в тексте"
+    });
   });
 
   it("keeps successful sessions but does not advance the cursor after a partial failure", async () => {

@@ -48,9 +48,11 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
     SQLite tables. It never enters aggregates, logs, MCP, comments, notifications,
     or raw payload storage and is rendered as plain text rather than HTML.
   - WAZZUP rows use the embedded outgoing/system markers; unmarked WAZZUP rows
-    are incoming. OLChat/Umnico direction remains `unknown`.
-  - The reader strips WAZZUP service headers, links to the owning deal, and
-    downloads only validated message attachments through a bounded proxy.
+    are incoming. Umnico uses its embedded `Outcoming message` marker and treats
+    unmarked non-system rows as incoming. OLChat direction remains `unknown`.
+  - The reader strips WAZZUP/Umnico service headers and bold BBCode tokens,
+    links to the owning deal, and downloads only validated message attachments
+    through a bounded proxy.
   - Any valid common dashboard range is accepted, initial report rendering
     performs no Bitrix read, changing the range automatically reloads the block,
     and service/HTTP/client/UI tests cover the boundary.
