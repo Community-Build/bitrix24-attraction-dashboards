@@ -437,7 +437,7 @@ describe("BitrixClient pagination", () => {
     });
   });
 
-  it("fetches deal-owned CRM activities by id without selecting PII fields", async () => {
+  it("fetches deal-owned CRM activities by id with only approved timeline content", async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       createResponse({
         result: [
@@ -488,7 +488,9 @@ describe("BitrixClient pagination", () => {
         "DEADLINE",
         "LAST_UPDATED",
         "COMPLETED",
-        "COMPLETED_DATE"
+        "COMPLETED_DATE",
+        "SUBJECT",
+        "DESCRIPTION"
       ],
       start: 0
     });

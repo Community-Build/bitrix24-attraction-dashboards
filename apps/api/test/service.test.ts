@@ -182,6 +182,7 @@ function withReportingRepositoryDefaults(
     getUnitEconomicsCostFacts: async () => [],
     getCallAnalysisResult: async () => null,
     getLatestCallAnalysisRuns: async () => [],
+    listMessengerMessages: async () => [],
     getWonStageIds: async () => [],
     setWonStageIds: async () => undefined,
     getLastSyncSummary: async () => null

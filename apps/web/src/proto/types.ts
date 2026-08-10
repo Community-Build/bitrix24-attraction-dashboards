@@ -455,6 +455,7 @@ export interface SceneComponentProps {
     input: ConversionEventTypeSettingsInput,
   ) => Promise<void>
   onSceneNavigate?: (sceneId: string, blockId?: string) => void
+  onCallAnalysisNavigate?: (callId: string, startedAt: string) => void
 }
 
 export interface ProtoScene {

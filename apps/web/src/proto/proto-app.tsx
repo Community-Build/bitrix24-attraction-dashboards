@@ -80,6 +80,11 @@ import type {
   ProtoRuntimeData,
   SceneComponentProps,
 } from '@/proto/types'
+import {
+  buildCallAnalysisPath,
+  readCallAnalysisTarget,
+  type CallAnalysisTarget,
+} from '@/proto/call-analysis-route-target'
 import { useProtoComments } from '@/proto/use-proto-comments'
 
 const LazyCallAnalysisWorkspace = lazy(() =>
@@ -109,6 +114,9 @@ const LazyRevenueVelocityScene = lazy(() =>
 const LazyOperationsScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.OperationsScene })),
 )
+const LazyDealAnalysisScene = lazy(() =>
+  import('@/proto/deal-analysis-scene').then((module) => ({ default: module.DealAnalysisScene })),
+)
 const LazySourceCohortsScene = lazy(() =>
   import('@/proto/scenes').then((module) => ({ default: module.SourceCohortsScene })),
 )
@@ -127,6 +135,7 @@ const lazySceneComponents: Record<
   LazyExoticComponent<ComponentType<SceneComponentProps>>
 > = {
   operations: LazyOperationsScene,
+  'deal-analysis': LazyDealAnalysisScene,
   sales: LazySalesScene,
   'sales-plan': LazySalesPlanScene,
   'activities-calls': LazyActivitiesScene,
@@ -522,7 +531,7 @@ function readProtoRoute(): ProtoRoute {
   return 'dashboard'
 }
 
-function writeProtoRoute(route: ProtoRoute) {
+function writeProtoRoute(route: ProtoRoute, callTarget: CallAnalysisTarget | null = null) {
   if (typeof window === 'undefined') {
     return
   }
@@ -531,13 +540,13 @@ function writeProtoRoute(route: ProtoRoute) {
     route === 'account'
       ? '/account'
       : route === 'calls'
-        ? '/calls'
+        ? buildCallAnalysisPath(callTarget)
         : route === 'ontology'
           ? '/ontology'
           : route === 'playbook'
             ? '/playbook'
             : '/'
-  if (window.location.pathname !== nextPath) {
+  if (`${window.location.pathname}${window.location.search}` !== nextPath) {
     window.history.pushState({}, '', nextPath)
   }
 }
@@ -1851,6 +1860,11 @@ function LeadgenDashboard({
 export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
   const initialModuleId = currentUser?.modules[0]?.id ?? 'attraction'
   const [route, setRoute] = useState<ProtoRoute>(() => readProtoRoute())
+  const [callAnalysisTarget, setCallAnalysisTarget] = useState<CallAnalysisTarget | null>(() =>
+    typeof window !== 'undefined' && window.location.pathname === '/calls'
+      ? readCallAnalysisTarget(window.location.search)
+      : null,
+  )
   const [activeSceneId, setActiveSceneId] = useState(scenes[0]?.id ?? 'sales')
   const [pendingScrollTarget, setPendingScrollTarget] = useState<string | null>(null)
   const [commentMode, setCommentMode] = useState(false)
@@ -2020,7 +2034,11 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
 
   useEffect(() => {
     function handlePopState() {
-      setRoute(readProtoRoute())
+      const nextRoute = readProtoRoute()
+      setRoute(nextRoute)
+      setCallAnalysisTarget(
+        nextRoute === 'calls' ? readCallAnalysisTarget(window.location.search) : null,
+      )
     }
 
     window.addEventListener('popstate', handlePopState)
@@ -2333,7 +2351,18 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
   }
 
   function navigateToCalls() {
+    setCallAnalysisTarget(null)
     writeProtoRoute('calls')
+    setRoute('calls')
+    setCommentsOpen(false)
+    setCommentMode(false)
+    setDraftComment(null)
+  }
+
+  function navigateToSelectedCall(callId: string, startedAt: string) {
+    const target = { callId, startedAt }
+    setCallAnalysisTarget(target)
+    writeProtoRoute('calls', target)
     setRoute('calls')
     setCommentsOpen(false)
     setCommentMode(false)
@@ -4794,10 +4823,12 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
         {route === 'calls' ? (
           <Suspense fallback={<SceneLoadingFallback label="Загружаю анализ звонков" />}>
             <LazyCallAnalysisWorkspace
+              key={callAnalysisTarget ? `${callAnalysisTarget.callId}:${callAnalysisTarget.startedAt}` : 'queue'}
               moduleId={activeModuleId}
               managerOptions={visibleManagerOptions}
               sourceOptions={availableSourceOptions}
               stageOptions={runtimeData.stageOptions ?? []}
+              initialTarget={callAnalysisTarget}
             />
           </Suspense>
         ) : route === 'ontology' ? (
@@ -5109,6 +5140,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                   handleSaveOperationalThresholdSettings
                 }
                 onSceneNavigate={handleSceneNavigate}
+                onCallAnalysisNavigate={navigateToSelectedCall}
                 conversionEventTypeSettings={runtimeData.conversionEventTypeSettings}
                 conversionEventTypeSettingsLoading={conversionEventTypeSettingsLoading}
                 conversionEventTypeSettingsSaving={conversionEventTypeSettingsSaving}

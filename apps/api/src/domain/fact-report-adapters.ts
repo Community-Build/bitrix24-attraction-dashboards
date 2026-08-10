@@ -118,16 +118,22 @@ export function touchpointFactsToActivities(
           deadline: payloadString(payload, "deadline"),
           lastUpdated: fact.occurredAt,
           completed: false,
-          completedTime: null
+          completedTime: null,
+          subject: payloadString(payload, "subject"),
+          description: payloadString(payload, "description")
         } satisfies ActivitySnapshot);
 
       if (fact.kind === "task_created") {
         current.createdTime = fact.occurredAt;
         current.deadline = payloadString(payload, "deadline");
         current.providerId = payloadString(payload, "providerId");
+        current.subject = payloadString(payload, "subject");
+        current.description = payloadString(payload, "description");
       } else {
         current.completed = true;
         current.completedTime = fact.occurredAt;
+        current.subject ??= payloadString(payload, "subject");
+        current.description ??= payloadString(payload, "description");
       }
       current.lastUpdated =
         current.lastUpdated.localeCompare(fact.occurredAt) > 0
@@ -149,7 +155,11 @@ export function touchpointFactsToActivities(
         deadline: payloadString(payload, "scheduledAt"),
         lastUpdated: fact.occurredAt,
         completed: payloadBoolean(payload, "completed"),
-        completedTime: payloadBoolean(payload, "completed") ? fact.occurredAt : null
+        completedTime:
+          payloadString(payload, "completedTime") ??
+          (payloadBoolean(payload, "completed") ? fact.occurredAt : null),
+        subject: payloadString(payload, "subject"),
+        description: payloadString(payload, "description")
       });
     }
   }

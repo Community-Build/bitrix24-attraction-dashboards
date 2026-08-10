@@ -9,6 +9,10 @@ import type {
   ActivityRow,
   CallRow
 } from "../bitrix/client.js";
+import {
+  sanitizeActivityDescription,
+  sanitizeActivitySubject
+} from "../domain/activity-content.js";
 import type {
   QueueAutomaticCallAnalysisInput,
   QueueAutomaticCallAnalysisResult
@@ -172,7 +176,9 @@ function mapActivityRow(row: ActivityRow): ActivitySnapshot {
     deadline: row.DEADLINE ?? null,
     lastUpdated: row.LAST_UPDATED,
     completed,
-    completedTime: completed ? row.COMPLETED_DATE ?? row.LAST_UPDATED : null
+    completedTime: completed ? row.COMPLETED_DATE ?? row.LAST_UPDATED : null,
+    subject: sanitizeActivitySubject(row.SUBJECT),
+    description: sanitizeActivityDescription(row.DESCRIPTION)
   };
 }
 

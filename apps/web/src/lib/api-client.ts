@@ -37,6 +37,9 @@ import type {
   DashboardData,
   DashboardDataSnapshot,
   DealLifecycleCard,
+  DealAnalysisDetail,
+  DealAnalysisReport,
+  DealAnalysisScope,
   DealLifecycleStageTimelineEntry,
   DealPricingSettings,
   DealPricingSettingsInput,
@@ -1611,6 +1614,20 @@ function normalizeOperationalRiskRuleKey(value: unknown): OperationalRiskRuleKey
     value === 'no_recent_activity'
     ? value
     : 'stage_aging'
+}
+
+function normalizeDealAnalysisReport(value: unknown): DealAnalysisReport {
+  if (!isRecord(value) || !isRecord(value.range) || !isRecord(value.currentScope)) {
+    throw new Error('Invalid deal analysis report')
+  }
+  return value as unknown as DealAnalysisReport
+}
+
+function normalizeDealAnalysisDetail(value: unknown): DealAnalysisDetail {
+  if (!isRecord(value) || !isRecord(value.row) || !Array.isArray(value.timeline)) {
+    throw new Error('Invalid deal analysis detail')
+  }
+  return value as unknown as DealAnalysisDetail
 }
 
 function normalizeOperationalSeverity(value: unknown): 'risk' | 'critical' {
@@ -5432,6 +5449,30 @@ export const apiClient = {
       buildUrl('/api/reports/operational-dashboard', buildQueryParams(query)),
       { method: 'GET' },
       normalizeOperationalDashboardReport,
+    )
+  },
+  async getDealAnalysisReport(query: DashboardQuery, scope: DealAnalysisScope = 'open') {
+    return requestJson(
+      buildUrl('/api/reports/deal-analysis', {
+        ...buildQueryParams(query),
+        scope,
+      }),
+      { method: 'GET' },
+      normalizeDealAnalysisReport,
+    )
+  },
+  async getDealAnalysisDetail(
+    dealId: string,
+    query: DashboardQuery,
+    scope: DealAnalysisScope = 'open',
+  ) {
+    return requestJson(
+      buildUrl(`/api/reports/deal-analysis/${encodeURIComponent(dealId)}`, {
+        ...buildQueryParams(query),
+        scope,
+      }),
+      { method: 'GET' },
+      normalizeDealAnalysisDetail,
     )
   },
   async getActivitiesWorkloadReport(query: DashboardQuery) {

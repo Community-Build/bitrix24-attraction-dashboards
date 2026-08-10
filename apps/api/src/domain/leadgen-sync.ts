@@ -14,6 +14,11 @@ import type {
   SyncProgressPhase
 } from "@bitrix24-reporting/contracts";
 
+import {
+  sanitizeActivityDescription,
+  sanitizeActivitySubject
+} from "./activity-content.js";
+
 import type {
   ActivityBindingRow,
   ActivityRow,
@@ -314,7 +319,9 @@ function mapActivityRow(row: ActivityRow): ActivitySnapshot {
     deadline: row.DEADLINE ?? null,
     lastUpdated: row.LAST_UPDATED,
     completed,
-    completedTime: completed ? row.COMPLETED_DATE ?? row.LAST_UPDATED : null
+    completedTime: completed ? row.COMPLETED_DATE ?? row.LAST_UPDATED : null,
+    subject: sanitizeActivitySubject(row.SUBJECT),
+    description: sanitizeActivityDescription(row.DESCRIPTION)
   };
 }
 

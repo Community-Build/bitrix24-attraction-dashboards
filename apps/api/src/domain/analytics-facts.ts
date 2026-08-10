@@ -241,7 +241,10 @@ export function buildDealTouchpointFacts(input: {
         payloadJson: JSON.stringify({
           createdTime: activity.createdTime,
           scheduledAt: activity.deadline,
-          completed: activity.completed
+          completed: activity.completed,
+          completedTime: activity.completedTime,
+          subject: activity.subject ?? null,
+          description: activity.description ?? null
         })
       });
       continue;
@@ -270,7 +273,11 @@ export function buildDealTouchpointFacts(input: {
       payloadJson: JSON.stringify({
         deadline: activity.deadline,
         completed: activity.completed,
-        providerId: activity.providerId
+        completedTime: activity.completedTime,
+        createdTime: activity.createdTime,
+        providerId: activity.providerId,
+        subject: activity.subject ?? null,
+        description: activity.description ?? null
       })
     });
 
@@ -300,7 +307,11 @@ export function buildDealTouchpointFacts(input: {
       linkReason: resolution.reason,
       payloadJson: JSON.stringify({
         deadline: activity.deadline,
-        providerId: activity.providerId
+        createdTime: activity.createdTime,
+        completedTime: activity.completedTime,
+        providerId: activity.providerId,
+        subject: activity.subject ?? null,
+        description: activity.description ?? null
       })
     });
   }

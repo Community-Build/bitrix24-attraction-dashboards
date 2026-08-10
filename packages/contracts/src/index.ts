@@ -254,6 +254,138 @@ export interface OperationalDashboardReport {
   thresholdsUpdatedAt: string | null;
 }
 
+export type DealAnalysisScope = "open" | "won" | "lost";
+export type DealHealthBand = "healthy" | "watch" | "risk" | "critical";
+export type DealAnalysisRiskKey =
+  | "missing_next_action"
+  | "overdue_next_action"
+  | "stage_aging"
+  | "no_recent_activity"
+  | "no_recent_calls"
+  | "stalled_after_milestone";
+
+export interface DealAnalysisRisk {
+  key: DealAnalysisRiskKey;
+  label: string;
+  evidence: string;
+  recommendation: string;
+  deduction: number;
+  observedDays: number | null;
+  thresholdDays: number | null;
+}
+
+export type DealNextActionStatus =
+  | "missing"
+  | "overdue"
+  | "today"
+  | "scheduled";
+
+export interface DealNextAction {
+  status: DealNextActionStatus;
+  activityId: string | null;
+  deadline: string | null;
+  overdueDays: number;
+}
+
+export interface DealActivityMarker {
+  id: string;
+  kind:
+    | "call"
+    | "task_created"
+    | "task_completed"
+    | "meeting"
+    | "meeting_date_changed"
+    | "conversion_event_visit"
+    | "message_count";
+  occurredAt: string;
+  linkConfidence: AnalyticsLinkConfidence;
+}
+
+export interface DealAnalysisRow {
+  dealId: string;
+  dealUrl: string | null;
+  scope: DealAnalysisScope;
+  managerId: string;
+  managerName: string;
+  stageId: string;
+  stageName: string;
+  sourceKey: string;
+  sourceLabel: string;
+  amount: number;
+  dateCreate: string;
+  dateModify: string;
+  dateClosed: string | null;
+  currentStageEnteredAt: string;
+  daysOnStage: number;
+  stageMaxDays: number | null;
+  stageOverdueDays: number;
+  lastActivityAt: string | null;
+  lastCallAt: string | null;
+  nextAction: DealNextAction;
+  healthScore: number | null;
+  healthBand: DealHealthBand | null;
+  risks: DealAnalysisRisk[];
+  activityMarkers: DealActivityMarker[];
+  activityMarkerCount: number;
+}
+
+export interface DealAnalysisReport {
+  range: ReportRange;
+  generatedAt: string;
+  scope: DealAnalysisScope;
+  currentScope: OperationalCurrentScope;
+  rows: DealAnalysisRow[];
+  thresholdsUpdatedAt: string | null;
+}
+
+export interface DealAnalysisTimelineItem {
+  id: string;
+  sourceEntityId: string;
+  kind:
+    | "call"
+    | "task_created"
+    | "task_completed"
+    | "meeting"
+    | "meeting_date_changed"
+    | "conversion_event_visit"
+    | "message";
+  occurredAt: string;
+  title: string;
+  detail: string | null;
+  comment: string | null;
+  createdAt: string | null;
+  deadlineAt: string | null;
+  completedAt: string | null;
+  direction: "incoming" | "outgoing" | "unknown" | null;
+  durationSeconds: number | null;
+  stageName: string | null;
+}
+
+export interface DealAnalysisCallInsight {
+  callId: string;
+  status: CallAnalysisQueueStatus;
+  score: number | null;
+  summary: string | null;
+  risks: string[];
+  suggestedNextStep: string | null;
+  transcript: string | null;
+  analyzedAt: string | null;
+  errorMessage: string | null;
+}
+
+export interface DealAnalysisDetail {
+  row: DealAnalysisRow;
+  timeline: DealAnalysisTimelineItem[];
+  stageHistory: Array<{
+    id: string;
+    stageId: string;
+    stageName: string;
+    enteredAt: string;
+  }>;
+  callInsights: DealAnalysisCallInsight[] | null;
+  sensitiveContentAvailable: boolean;
+}
+
 export interface StageCatalogEntry {
   entityType: "deal" | "lead" | "source";
   categoryId: string | null;
@@ -426,6 +558,8 @@ export interface ActivitySnapshot {
   lastUpdated: string;
   completed: boolean;
   completedTime: string | null;
+  subject?: string | null;
+  description?: string | null;
 }
 
 export interface ActivityBindingSnapshot {

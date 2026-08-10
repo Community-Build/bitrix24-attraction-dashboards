@@ -22,7 +22,13 @@ import type {
   CallAnalysisResult,
 } from '@/lib/dashboard-types'
 import { cn } from '@/lib/utils'
+import {
+  formatCallAnalysisBusinessDate,
+  type CallAnalysisTarget,
+} from '@/proto/call-analysis-route-target'
 import type { PickerOption } from '@/proto/types'
+
+export type { CallAnalysisTarget } from '@/proto/call-analysis-route-target'
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 type AnalysisStatus = 'idle' | 'loading' | 'missing' | 'ready' | 'analyzing' | 'error'
@@ -51,6 +57,18 @@ export function createDefaultCallAnalysisFilters(today = new Date()): CallAnalys
     callType: '',
     analysisStatus: '',
   }
+}
+
+export function createCallAnalysisFiltersForTarget(
+  target: CallAnalysisTarget | null,
+  today = new Date(),
+): CallAnalysisFilters {
+  const filters = createDefaultCallAnalysisFilters(today)
+  if (!target) return filters
+
+  const targetDate = formatCallAnalysisBusinessDate(target.startedAt)
+  if (!targetDate) return filters
+  return { ...filters, rangeStart: targetDate, rangeEnd: targetDate }
 }
 
 const callTypeOptions: Array<{ value: '' | CallAnalysisQueueCallType; label: string }> = [
@@ -390,6 +408,7 @@ function CallQueueList({
             'grid w-full gap-1 px-4 py-3 text-left transition hover:bg-blue-50/60',
             selectedCallId === item.callId && 'bg-blue-50 ring-1 ring-inset ring-blue-300',
           )}
+          aria-pressed={selectedCallId === item.callId}
           onClick={() => onSelect(item.callId)}
         >
           <div className="flex items-start justify-between gap-3">
@@ -661,18 +680,20 @@ export function CallAnalysisWorkspace({
   managerOptions,
   sourceOptions,
   stageOptions,
+  initialTarget = null,
 }: {
   moduleId: string
   managerOptions: PickerOption[]
   sourceOptions: PickerOption[]
   stageOptions: PickerOption[]
+  initialTarget?: CallAnalysisTarget | null
 }) {
-  const [draftFilters, setDraftFilters] = useState<CallAnalysisFilters>(() => createDefaultCallAnalysisFilters())
-  const [appliedFilters, setAppliedFilters] = useState<CallAnalysisFilters>(() => createDefaultCallAnalysisFilters())
+  const [draftFilters, setDraftFilters] = useState<CallAnalysisFilters>(() => createCallAnalysisFiltersForTarget(initialTarget))
+  const [appliedFilters, setAppliedFilters] = useState<CallAnalysisFilters>(() => createCallAnalysisFiltersForTarget(initialTarget))
   const [queue, setQueue] = useState<CallAnalysisQueueResponse | null>(null)
   const [queueStatus, setQueueStatus] = useState<LoadStatus>('idle')
   const [queueError, setQueueError] = useState<string | null>(null)
-  const [selectedCallId, setSelectedCallId] = useState<string | null>(null)
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(initialTarget?.callId ?? null)
   const [analysisResult, setAnalysisResult] = useState<CallAnalysisResult | null>(null)
   const [analysisLoadStatus, setAnalysisLoadStatus] = useState<AnalysisStatus>('idle')
   const [analysisError, setAnalysisError] = useState<string | null>(null)

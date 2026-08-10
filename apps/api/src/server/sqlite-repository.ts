@@ -86,6 +86,7 @@ export interface MessengerMessageQuery {
   from: string;
   to: string;
   managerIds?: string[];
+  dealIds?: string[];
 }
 
 const DEFAULT_OPERATIONAL_STAGE_AGING_THRESHOLDS: OperationalStageAgingThreshold[] = [
@@ -618,6 +619,7 @@ export interface SqliteRepository {
     reconciledAt: string;
   }): Promise<void>;
   getActivitiesByIds(activityIds: string[]): Promise<ActivitySnapshot[]>;
+  getActivityIdsMissingContentBackfill(limit?: number): Promise<string[]>;
   getActivityBindingsByActivityIds(
     activityIds: string[]
   ): Promise<ActivityBindingSnapshot[]>;
@@ -1301,7 +1303,10 @@ export function createSqliteRepository(
       deadline TEXT,
       last_updated TEXT NOT NULL,
       completed INTEGER NOT NULL,
-      completed_time TEXT
+      completed_time TEXT,
+      subject TEXT,
+      description TEXT,
+      content_synced INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS messenger_session_snapshots (
@@ -1895,6 +1900,14 @@ export function createSqliteRepository(
   ensureColumn(database, "deal_snapshots", "conversion_event_value", "TEXT");
   ensureColumn(database, "deal_snapshots", "refusal_reason_value", "TEXT");
   ensureColumn(database, "deal_snapshots", "refusal_reason_detail", "TEXT");
+  ensureColumn(database, "activity_snapshots", "subject", "TEXT");
+  ensureColumn(database, "activity_snapshots", "description", "TEXT");
+  ensureColumn(
+    database,
+    "activity_snapshots",
+    "content_synced",
+    "INTEGER NOT NULL DEFAULT 0"
+  );
   ensureColumn(database, "module_manager_whitelist_settings", "team_id", "TEXT");
   ensureColumn(database, "module_manager_whitelist_settings", "team_name", "TEXT");
   ensureColumn(database, "conversion_event_visit_snapshots", "event_id", "TEXT");
@@ -2513,7 +2526,10 @@ export function createSqliteRepository(
       deadline,
       last_updated,
       completed,
-      completed_time
+      completed_time,
+      subject,
+      description,
+      content_synced
     ) VALUES (
       @id,
       @ownerTypeId,
@@ -2525,7 +2541,10 @@ export function createSqliteRepository(
       @deadline,
       @lastUpdated,
       @completed,
-      @completedTime
+      @completedTime,
+      @subject,
+      @description,
+      1
     )
     ON CONFLICT(id) DO UPDATE SET
       owner_type_id = excluded.owner_type_id,
@@ -2537,7 +2556,10 @@ export function createSqliteRepository(
       deadline = excluded.deadline,
       last_updated = excluded.last_updated,
       completed = excluded.completed,
-      completed_time = excluded.completed_time
+      completed_time = excluded.completed_time,
+      subject = excluded.subject,
+      description = excluded.description,
+      content_synced = 1
   `);
 
   const deleteActivityBindingsStatement = database.prepare(`
@@ -3946,7 +3968,9 @@ export function createSqliteRepository(
               deadline,
               last_updated AS lastUpdated,
               completed,
-              completed_time AS completedTime
+              completed_time AS completedTime,
+              subject,
+              description
             FROM activity_snapshots
             WHERE id IN (${placeholders})
             ORDER BY id ASC`
@@ -3959,6 +3983,28 @@ export function createSqliteRepository(
       });
 
       return mapActivityRows(rows);
+    },
+
+    async getActivityIdsMissingContentBackfill(limit = 5_000) {
+      const safeLimit = Number.isFinite(limit)
+        ? Math.max(0, Math.trunc(limit))
+        : 5_000;
+      const rows = database
+        .prepare(
+          `SELECT id AS activityId
+          FROM activity_snapshots
+          WHERE owner_type_id = '2'
+            AND content_synced = 0
+            AND owner_id IN (SELECT deal_id FROM attraction_current_deal_ids)
+            AND (
+              provider_id IN ('CRM_TODO', 'CRM_TASKS_TASK', 'CRM_MEETING')
+              OR type_id IN ('1', '6')
+            )
+          ORDER BY created_time DESC, id DESC
+          LIMIT ?`
+        )
+        .all(safeLimit) as Array<{ activityId: string }>;
+      return rows.map((row) => row.activityId);
     },
 
     async getCallById(callId) {
@@ -4349,7 +4395,9 @@ export function createSqliteRepository(
         for (const row of nextRows) {
           upsertActivityStatement.run({
             ...row,
-            completed: row.completed ? 1 : 0
+            completed: row.completed ? 1 : 0,
+            subject: row.subject ?? null,
+            description: row.description ?? null
           });
         }
       });
@@ -5159,7 +5207,9 @@ export function createSqliteRepository(
             deadline,
             last_updated AS lastUpdated,
             completed,
-            completed_time AS completedTime
+            completed_time AS completedTime,
+            subject,
+            description
           FROM activity_snapshots
           ORDER BY id ASC`
         )

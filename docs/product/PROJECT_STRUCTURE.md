@@ -29,14 +29,16 @@ Use this order when reconstructing how the project is built:
    Telegram intake and manual one-time Bitrix matching used by deal routing.
 8. `docs/adr/0006-persist-messenger-messages-for-analysis.md` - accepted
    messenger storage, attribution, sync, and access boundary.
-9. `docs/architecture/web-runtime.md` - one supported web shell and browser data
+9. `docs/adr/0007-leader-only-deal-activity-content.md` - bounded task content
+   and transcript access in the leader-only deal timeline.
+10. `docs/architecture/web-runtime.md` - one supported web shell and browser data
    access rule.
-10. `docs/architecture/module-capabilities.md` - manifest and agent-readable
+11. `docs/architecture/module-capabilities.md` - manifest and agent-readable
    report policy.
-11. `docs/architecture/agent-mcp.md` - read-only agent gateway.
-12. `docs/deploy-timeweb-vps.md` - production env and rollout controls.
-13. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
-14. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
+12. `docs/architecture/agent-mcp.md` - read-only agent gateway.
+13. `docs/deploy-timeweb-vps.md` - production env and rollout controls.
+14. `apps/web/src/proto/product-surfaces.ts` - UI surface registry skeleton.
+15. `apps/api/src/runtime/runtime-modules.ts` - backend runtime registry skeleton.
 
 ## Product Surfaces
 

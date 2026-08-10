@@ -341,6 +341,11 @@ export function createMessengerMessageRepositoryMethods(
               END
             ) IN (${managerIds.map(() => "?").join(", ")})`
           : "";
+      const dealIds = [...new Set(query.dealIds ?? [])];
+      const dealClause =
+        dealIds.length > 0
+          ? `AND m.deal_id IN (${dealIds.map(() => "?").join(", ")})`
+          : "";
       const rows = database
         .prepare(
           `${MESSAGE_SELECT}
@@ -348,9 +353,10 @@ export function createMessengerMessageRepositoryMethods(
             ON scope.deal_id = m.deal_id
           WHERE m.occurred_at_ms >= ? AND m.occurred_at_ms <= ?
           ${managerClause}
+          ${dealClause}
           ORDER BY m.occurred_at_ms ASC, m.session_id ASC, m.message_id ASC`
         )
-        .all(fromMs, toMs, ...managerIds) as StoredMessengerMessageRow[];
+        .all(fromMs, toMs, ...managerIds, ...dealIds) as StoredMessengerMessageRow[];
 
       return rows.map(mapStoredMessage);
     },

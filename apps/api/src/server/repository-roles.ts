@@ -187,6 +187,7 @@ export type ReportingRepository = SyncRepository &
     // Call analysis reads.
     | "getCallAnalysisResult"
     | "getLatestCallAnalysisRuns"
+    | "listMessengerMessages"
     // Module report settings.
     | "getModuleEventTypeSettings"
     | "replaceModuleEventTypeSettings"

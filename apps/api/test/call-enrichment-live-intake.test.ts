@@ -101,7 +101,9 @@ describe("createCallEnrichmentLiveIntakeQueue", () => {
         responsibleId: "13020",
         createdTime: "2026-07-02T15:48:32+03:00",
         deadline: null,
+        description: null,
         lastUpdated: "2026-07-02T15:49:37+03:00",
+        subject: null,
         completed: true,
         completedTime: "2026-07-02T15:49:37+03:00"
       }

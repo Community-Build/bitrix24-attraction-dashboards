@@ -70,6 +70,47 @@ Stable dashboard anchors used by ontology report bindings:
   marker advance only after a complete Bitrix inventory and snapshot refresh
   commit successfully. See [ADR 0004](../../adr/0004-current-attraction-scope-projection.md).
 
+## deal-analysis
+
+- Module: `attraction`.
+- Report scene: `deal-analysis` / `Анализ сделок`.
+- Privacy-safe summary route: `/api/reports/deal-analysis`; lazy per-deal route:
+  `/api/reports/deal-analysis/:dealId`.
+- Backend contracts: `DealAnalysisReport` and `DealAnalysisDetail`.
+- Unit of analysis: a retained deal that is also present in the atomically
+  reconciled `attraction_current_deal_ids` projection and matches the active
+  attraction manager/team access scope. Open, won and lost are separate views.
+- The selected period limits compact activity evidence only; it never removes
+  an old current open deal from the intervention queue.
+- Open-deal health is deterministic operational health, not win probability:
+  it starts at 100 and deducts for a missing or overdue dated next action,
+  configured stage aging, configured activity/call silence, and seven days
+  without stage movement after a trusted completed meeting or attended event.
+  Every deduction publishes evidence, threshold and a fixed recommendation.
+- Deal scope reuses the attraction outcome policy. In particular,
+  `C10:UC_XEEP0A` (`Отклонено потребителем`) remains a repairable deal in work
+  even though Bitrix exposes semantic `F`; it is not counted as a client loss.
+- Technical `IMOPENLINES_SESSION` tasks are excluded from next-action,
+  last-activity and activity-marker calculations as well as from the timeline.
+- The summary is agent-readable and never includes deal title, contact/company
+  identity, message body, call-analysis narrative, transcript or raw payload.
+- The detail route is not registered as agent-readable. Cleaned task subject and
+  description, message body, safe call-analysis summary/risks and the saved
+  transcript are returned only for a leader (or an explicitly auth-disabled
+  local runtime), after the query is constrained to one exact deal ID. Evidence
+  quotes, raw evaluation and raw Bitrix payloads are never returned. See ADR
+  0007.
+- Non-leader detail is an explicit safe projection: it retains event type,
+  dates, direction, duration and stage context, while task/meeting titles and
+  comments, messages and call-analysis narrative are removed.
+- Opening a call from the deal timeline writes the exact call ID and timestamp
+  to the `/calls` URL. The target therefore survives reload and browser
+  navigation; its queue day is resolved in the attraction business timezone.
+- Deal-field completeness, MEDDICC, predictive scoring and Bitrix writes are
+  intentionally outside V1.
+- Page rendering reads local SQLite snapshots and canonical facts only; it
+  never calls Bitrix directly.
+
 ## source-cohort-conversion
 
 - Module: `attraction`.

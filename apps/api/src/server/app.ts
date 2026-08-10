@@ -205,6 +205,16 @@ interface AppService {
   getOperationalDashboardReport(
     input: RangeRequest
   ): Promise<OperationalDashboardReport>;
+  getDealAnalysisReport?(
+    input: RangeRequest & { scope?: "open" | "won" | "lost" }
+  ): Promise<unknown>;
+  getDealAnalysisDetail?(
+    input: RangeRequest & {
+      dealId: string;
+      scope?: "open" | "won" | "lost";
+      includeSensitiveContent?: boolean;
+    }
+  ): Promise<unknown | null>;
   getAcquisitionOutcomesReport(
     input: RangeRequest
   ): Promise<AcquisitionOutcomesReport>;
@@ -3405,6 +3415,11 @@ export function createApp(
       getModuleService: (moduleId) => moduleServices.get(moduleId),
       authEnabled: Boolean(auth),
       denyIfMissingAttractionAccess,
+      canAccessAttractionLeaderContent: (response) => {
+        if (!auth) return true;
+        const access = requireModuleAccess(response, undefined, "attraction");
+        return Boolean(access && access.module.role === "leader");
+      },
       requireModuleAccess,
       parseRangeRequest,
       parseRevenueVelocityRequest,
