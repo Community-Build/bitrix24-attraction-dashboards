@@ -352,25 +352,13 @@ export interface DealAnalysisTimelineItem {
   occurredAt: string;
   title: string;
   detail: string | null;
-  subject: string | null;
   comment: string | null;
   createdAt: string | null;
   deadlineAt: string | null;
   completedAt: string | null;
-  eventName: string | null;
   direction: "incoming" | "outgoing" | "unknown" | null;
   durationSeconds: number | null;
-  successful: boolean | null;
-  stageId: string | null;
   stageName: string | null;
-}
-
-export interface DealAnalysisMessage {
-  id: string;
-  occurredAt: string;
-  channelLabel: string;
-  direction: "incoming" | "outgoing" | "unknown";
-  text: string | null;
 }
 
 export interface DealAnalysisCallInsight {
@@ -394,7 +382,6 @@ export interface DealAnalysisDetail {
     stageName: string;
     enteredAt: string;
   }>;
-  messages: DealAnalysisMessage[] | null;
   callInsights: DealAnalysisCallInsight[] | null;
   sensitiveContentAvailable: boolean;
 }

@@ -53,7 +53,7 @@ describe('DealAnalysisScene', () => {
   it('renders the intervention queue and opens the lazy deal drawer', async () => {
     api.report.mockResolvedValue(report)
     api.detail.mockResolvedValue({
-      row, timeline: [], stageHistory: [], messages: [], callInsights: [], sensitiveContentAvailable: true,
+      row, timeline: [], stageHistory: [], callInsights: [], sensitiveContentAvailable: true,
     })
     const user = userEvent.setup()
     render(<DealAnalysisScene filters={filters} commentMode={false} />)
@@ -87,11 +87,18 @@ describe('DealAnalysisScene', () => {
     expect(screen.getAllByRole('row')[1]).toHaveTextContent('#84')
     expect(screen.queryByRole('button', { name: '+ Добавить фильтр' })).not.toBeInTheDocument()
     expect(screen.queryByPlaceholderText('Поиск по ID сделки')).not.toBeInTheDocument()
-    await user.click(screen.getByText('#42'))
+    const dealTrigger = screen.getByRole('button', { name: 'Открыть сделку 42' })
+    await user.click(dealTrigger)
 
-    expect(await screen.findByRole('dialog', { name: 'Сделка 42' })).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: 'Сделка 42' })
+    expect(dialog).toBeInTheDocument()
     expect(screen.getByText('Нет следующего действия')).toBeInTheDocument()
     await waitFor(() => expect(api.detail).toHaveBeenCalledWith('42', expect.any(Object), 'open'))
+    await user.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Сделка 42' })).not.toBeInTheDocument()
+    expect(dealTrigger).toHaveFocus()
   })
 
   it('renders a concrete full timeline and connects a call to analysis', async () => {
@@ -102,34 +109,32 @@ describe('DealAnalysisScene', () => {
         {
           id: 'task:11', sourceEntityId: '11', kind: 'task_completed',
           occurredAt: '2026-06-18T14:00:00.000Z', title: 'Подготовить предложение',
-          detail: null, subject: 'Подготовить предложение', comment: 'Согласовать состав пакета',
+          detail: null, comment: 'Согласовать состав пакета',
           createdAt: '2026-06-17T09:00:00.000Z', deadlineAt: '2026-06-19T12:00:00.000Z',
-          completedAt: '2026-06-18T14:00:00.000Z', eventName: null, direction: null,
-          durationSeconds: null, successful: true, stageId: 'C10:NEW', stageName: 'Квалификация',
+          completedAt: '2026-06-18T14:00:00.000Z', direction: null,
+          durationSeconds: null, stageName: 'Квалификация',
         },
         {
           id: 'call:99', sourceEntityId: '99', kind: 'call',
           occurredAt: '2026-06-18T10:00:00.000Z', title: 'Звонок', detail: null,
-          subject: null, comment: null, createdAt: null, deadlineAt: null,
-          completedAt: null, eventName: null, direction: 'outgoing', durationSeconds: 999,
-          successful: true, stageId: 'C10:NEW', stageName: 'Квалификация',
+          comment: null, createdAt: null, deadlineAt: null,
+          completedAt: null, direction: 'outgoing', durationSeconds: 999,
+          stageName: 'Квалификация',
         },
         {
           id: 'message:7', sourceEntityId: '7', kind: 'message',
           occurredAt: '2026-06-18T09:00:00.000Z', title: 'WhatsApp', detail: 'Подтверждаю встречу',
-          subject: null, comment: null, createdAt: '2026-06-18T09:00:00.000Z', deadlineAt: null,
-          completedAt: null, eventName: null, direction: 'incoming', durationSeconds: null,
-          successful: null, stageId: null, stageName: null,
+          comment: null, createdAt: '2026-06-18T09:00:00.000Z', deadlineAt: null,
+          completedAt: null, direction: 'incoming', durationSeconds: null, stageName: null,
         },
         {
           id: 'event:4', sourceEntityId: '4', kind: 'conversion_event_visit',
           occurredAt: '2026-06-17T18:00:00.000Z', title: 'День открытых дверей', detail: 'invited',
-          subject: null, comment: null, createdAt: null, deadlineAt: null, completedAt: null,
-          eventName: 'День открытых дверей', direction: null, durationSeconds: null,
-          successful: null, stageId: 'C10:NEW', stageName: 'Квалификация',
+          comment: null, createdAt: null, deadlineAt: null, completedAt: null,
+          direction: null, durationSeconds: null, stageName: 'Квалификация',
         },
       ],
-      stageHistory: [], messages: [],
+      stageHistory: [],
       callInsights: [{ callId: '99', status: 'not_analyzed', score: null, summary: null, risks: [], suggestedNextStep: null, transcript: null, analyzedAt: null, errorMessage: null }],
       sensitiveContentAvailable: true,
     })

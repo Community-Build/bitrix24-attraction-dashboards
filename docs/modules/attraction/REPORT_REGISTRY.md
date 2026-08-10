@@ -87,6 +87,11 @@ Stable dashboard anchors used by ontology report bindings:
   configured stage aging, configured activity/call silence, and seven days
   without stage movement after a trusted completed meeting or attended event.
   Every deduction publishes evidence, threshold and a fixed recommendation.
+- Deal scope reuses the attraction outcome policy. In particular,
+  `C10:UC_XEEP0A` (`Отклонено потребителем`) remains a repairable deal in work
+  even though Bitrix exposes semantic `F`; it is not counted as a client loss.
+- Technical `IMOPENLINES_SESSION` tasks are excluded from next-action,
+  last-activity and activity-marker calculations as well as from the timeline.
 - The summary is agent-readable and never includes deal title, contact/company
   identity, message body, call-analysis narrative, transcript or raw payload.
 - The detail route is not registered as agent-readable. Cleaned task subject and
@@ -95,6 +100,12 @@ Stable dashboard anchors used by ontology report bindings:
   local runtime), after the query is constrained to one exact deal ID. Evidence
   quotes, raw evaluation and raw Bitrix payloads are never returned. See ADR
   0007.
+- Non-leader detail is an explicit safe projection: it retains event type,
+  dates, direction, duration and stage context, while task/meeting titles and
+  comments, messages and call-analysis narrative are removed.
+- Opening a call from the deal timeline writes the exact call ID and timestamp
+  to the `/calls` URL. The target therefore survives reload and browser
+  navigation; its queue day is resolved in the attraction business timezone.
 - Deal-field completeness, MEDDICC, predictive scoring and Bitrix writes are
   intentionally outside V1.
 - Page rendering reads local SQLite snapshots and canonical facts only; it

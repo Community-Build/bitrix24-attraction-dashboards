@@ -140,7 +140,7 @@ and open a lazy right-side deal drawer without writing to Bitrix.
      product surface descriptor if needed, new scene component and focused UI
      tests.
    - Output: top state switch, health cards, agreed filters, sortable/paged
-     table, clickable row, drawer tabs `Риски`, `Активность`, `Путь сделки`,
+     table, clickable row, drawer tabs `Риски`, `Активность`, `История этапов`,
      `Детали`, and separate CRM action.
    - Dependencies: packets 1-2 complete and API fixtures stable.
    - Verification: loading/error/empty states, keyboard-accessible row action,

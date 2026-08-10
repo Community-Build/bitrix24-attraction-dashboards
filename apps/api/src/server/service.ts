@@ -90,10 +90,11 @@ import {
   buildOperationalDashboardReport
 } from "../domain/operational-dashboard.js";
 import {
-  buildDealAnalysisMessages,
+  buildDealAnalysisMessageTimeline,
   buildDealAnalysisReport,
   buildDealAnalysisTimeline
 } from "../domain/deal-analysis.js";
+import { projectDealAnalysisTimeline } from "../domain/deal-analysis-detail.js";
 import {
   ATTRACTION_MANAGER_CATALOG,
   buildManagerTeams,
@@ -3134,9 +3135,9 @@ export function createReportingService(
             dealIds: [dealId]
           })
         : [];
-      const safeMessages = includeSensitiveContent
-        ? buildDealAnalysisMessages(messages)
-        : null;
+      const messageTimeline = includeSensitiveContent
+        ? buildDealAnalysisMessageTimeline(messages)
+        : [];
       const callIds = uniqueStrings(
         dealFacts.filter((fact) => fact.kind === "call").map((fact) => fact.sourceEntityId)
       );
@@ -3191,41 +3192,27 @@ export function createReportingService(
       for (const item of timeline) {
         const activity = activityById.get(item.sourceEntityId);
         if (!activity) continue;
-        item.subject ??= activity.subject ?? null;
-        item.comment ??= activity.description ?? null;
         item.createdAt ??= activity.createdTime;
         item.deadlineAt ??= activity.deadline;
         item.completedAt ??= activity.completedTime;
-        if (item.subject && (item.kind === "task_created" || item.kind === "task_completed")) {
-          item.title = item.subject;
+        if (includeSensitiveContent) {
+          item.comment ??= activity.description ?? null;
+          if (
+            activity.subject &&
+            (item.kind === "task_created" || item.kind === "task_completed")
+          ) {
+            item.title = activity.subject;
+          }
         }
       }
-      if (safeMessages) {
-        timeline.push(...safeMessages.map((message) => ({
-          id: `message:${message.id}`,
-          sourceEntityId: message.id,
-          kind: "message" as const,
-          occurredAt: message.occurredAt,
-          title: message.channelLabel,
-          detail: message.text,
-          subject: null,
-          comment: null,
-          createdAt: message.occurredAt,
-          deadlineAt: null,
-          completedAt: null,
-          eventName: null,
-          direction: message.direction,
-          durationSeconds: null,
-          successful: null,
-          stageId: null,
-          stageName: null
-        })));
+      if (messageTimeline.length > 0) {
+        timeline.push(...messageTimeline);
         timeline.sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
       }
 
       return {
         row,
-        timeline,
+        timeline: projectDealAnalysisTimeline({ timeline, includeSensitiveContent }),
         stageHistory: loaded.stageHistory
           .filter((entry) => entry.ownerId === dealId)
           .sort((left, right) => Date.parse(right.createdTime) - Date.parse(left.createdTime))
@@ -3235,7 +3222,6 @@ export function createReportingService(
             stageName: stageNames.get(entry.stageId) ?? entry.stageId,
             enteredAt: entry.createdTime
           })),
-        messages: safeMessages,
         callInsights,
         sensitiveContentAvailable: includeSensitiveContent
       };

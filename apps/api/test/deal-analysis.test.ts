@@ -2,15 +2,17 @@ import type {
   ActivitySnapshot,
   DealSnapshot,
   OperationalThresholdSettings,
-  StageCatalogEntry
+  StageCatalogEntry,
+  DealTouchpointFactSnapshot
 } from "@bitrix24-reporting/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
-  buildDealAnalysisMessages,
+  buildDealAnalysisMessageTimeline,
   buildDealAnalysisReport,
   buildDealAnalysisTimeline
 } from "../src/domain/deal-analysis";
+import { projectDealAnalysisTimeline } from "../src/domain/deal-analysis-detail";
 
 const now = "2026-06-20T12:00:00.000Z";
 const range = { from: "2026-05-20T00:00:00.000Z", to: "2026-06-20T23:59:59.999Z" };
@@ -62,15 +64,23 @@ function activity(overrides: Partial<ActivitySnapshot>): ActivitySnapshot {
   };
 }
 
-function build(input: { activities?: ActivitySnapshot[]; calls?: Parameters<typeof buildDealAnalysisReport>[0]["calls"] }) {
+function build(input: {
+  activities?: ActivitySnapshot[];
+  calls?: Parameters<typeof buildDealAnalysisReport>[0]["calls"];
+  touchpoints?: DealTouchpointFactSnapshot[];
+  dealOverride?: DealSnapshot;
+  scope?: "open" | "won" | "lost";
+  stageCatalog?: StageCatalogEntry[];
+}) {
+  const selectedDeal = input.dealOverride ?? deal;
   return buildDealAnalysisReport({
     range,
     now,
-    scope: "open",
-    deals: [deal],
-    currentDealIds: new Set(["42"]),
+    scope: input.scope ?? "open",
+    deals: [selectedDeal],
+    currentDealIds: new Set([selectedDeal.id]),
     currentScope: { status: "ready", reconciledAt: now, dealCount: 1 },
-    stageCatalog: stages,
+    stageCatalog: input.stageCatalog ?? stages,
     stageHistory: [{
       id: "s1",
       ownerId: "42",
@@ -82,7 +92,7 @@ function build(input: { activities?: ActivitySnapshot[]; calls?: Parameters<type
     }],
     activities: input.activities ?? [],
     calls: input.calls ?? [],
-    touchpoints: [],
+    touchpoints: input.touchpoints ?? [],
     managerDirectory: [{ id: "7", name: "Менеджер" }],
     thresholds,
     wonStageIds: ["C10:WON"]
@@ -182,6 +192,66 @@ describe("buildDealAnalysisReport", () => {
       expect.objectContaining({ key: "stalled_after_milestone", deduction: 20 })
     ]));
   });
+
+  it("keeps a repairable rejection in work even when Bitrix marks it failed", () => {
+    const repairable = {
+      ...deal,
+      stageId: "C10:UC_XEEP0A",
+      stageSemanticId: "F"
+    };
+    const report = build({
+      dealOverride: repairable,
+      stageCatalog: [
+        ...stages,
+        {
+          entityType: "deal",
+          categoryId: "10",
+          statusId: "C10:UC_XEEP0A",
+          name: "Отклонено потребителем",
+          semanticId: "F"
+        }
+      ]
+    });
+
+    expect(report.rows).toHaveLength(1);
+    expect(report.rows[0]?.scope).toBe("open");
+  });
+
+  it("ignores technical Open Lines tasks in score and activity markers", () => {
+    const technicalFact: DealTouchpointFactSnapshot = {
+      factId: "task-created:system",
+      kind: "task_created",
+      sourceSystem: "bitrix24",
+      sourceEntityType: "activity",
+      sourceEntityId: "system",
+      occurredAt: "2026-06-20T11:00:00.000Z",
+      dealId: "42",
+      contactId: null,
+      leadId: null,
+      managerId: "7",
+      sourceId: null,
+      stageIdAtEvent: "C10:NEW",
+      stageNameAtEvent: "Новая",
+      linkConfidence: "high",
+      linkReason: "direct",
+      payloadJson: JSON.stringify({ providerId: "IMOPENLINES_SESSION" })
+    };
+    const row = build({
+      activities: [activity({
+        id: "system",
+        providerId: "IMOPENLINES_SESSION",
+        createdTime: "2026-06-20T11:00:00.000Z",
+        lastUpdated: "2026-06-20T11:00:00.000Z",
+        deadline: "9999-12-31T00:00:00.000Z"
+      })],
+      touchpoints: [technicalFact]
+    }).rows[0]!;
+
+    expect(row.nextAction.status).toBe("missing");
+    expect(row.lastActivityAt).toBeNull();
+    expect(row.risks.map((risk) => risk.key)).toContain("no_recent_activity");
+    expect(row.activityMarkerCount).toBe(0);
+  });
 });
 
 describe("buildDealAnalysisTimeline", () => {
@@ -244,9 +314,9 @@ describe("buildDealAnalysisTimeline", () => {
   });
 });
 
-describe("buildDealAnalysisMessages", () => {
+describe("buildDealAnalysisMessageTimeline", () => {
   it("removes technical messenger events from the customer timeline", () => {
-    const messages = buildDealAnalysisMessages([
+    const messages = buildDealAnalysisMessageTimeline([
       {
         id: "system",
         occurredAt: "2026-08-06T16:05:01.000Z",
@@ -274,7 +344,62 @@ describe("buildDealAnalysisMessages", () => {
     ]);
 
     expect(messages).toEqual([
-      expect.objectContaining({ id: "customer", text: "Подтверждаю встречу" })
+      expect.objectContaining({
+        id: "message:customer",
+        sourceEntityId: "customer",
+        detail: "Подтверждаю встречу"
+      })
     ]);
+  });
+});
+
+describe("projectDealAnalysisTimeline", () => {
+  const privateTimeline = [
+    {
+      id: "task:1",
+      sourceEntityId: "1",
+      kind: "task_created" as const,
+      occurredAt: now,
+      title: "Позвонить директору Ивану",
+      detail: null,
+      comment: "Обсудить персональные условия",
+      createdAt: now,
+      deadlineAt: null,
+      completedAt: null,
+      direction: null,
+      durationSeconds: null,
+      stageName: "Новая"
+    },
+    {
+      id: "message:2",
+      sourceEntityId: "2",
+      kind: "message" as const,
+      occurredAt: now,
+      title: "Wazzup",
+      detail: "Личный текст клиента",
+      comment: null,
+      createdAt: now,
+      deadlineAt: null,
+      completedAt: null,
+      direction: "incoming" as const,
+      durationSeconds: null,
+      stageName: null
+    }
+  ];
+
+  it("removes leader-only narrative from employee detail", () => {
+    expect(projectDealAnalysisTimeline({
+      timeline: privateTimeline,
+      includeSensitiveContent: false
+    })).toEqual([
+      expect.objectContaining({ title: "Задача", comment: null })
+    ]);
+  });
+
+  it("keeps the complete timeline for the attraction leader", () => {
+    expect(projectDealAnalysisTimeline({
+      timeline: privateTimeline,
+      includeSensitiveContent: true
+    })).toBe(privateTimeline);
   });
 });

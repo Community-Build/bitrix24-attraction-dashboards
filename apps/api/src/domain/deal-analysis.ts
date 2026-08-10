@@ -2,7 +2,6 @@ import type {
   ActivitySnapshot,
   CallSnapshot,
   DealActivityMarker,
-  DealAnalysisMessage,
   DealAnalysisReport,
   DealAnalysisRisk,
   DealAnalysisRow,
@@ -20,7 +19,7 @@ import type {
 } from "@bitrix24-reporting/contracts";
 
 import type { MessengerMessageSnapshot } from "./messenger-messages.js";
-import { OPERATIONAL_LOST_STAGE_IDS } from "./operational-dashboard.js";
+import { resolveAttractionDealStageRoute } from "./attraction-deal-outcome.js";
 import {
   buildManagerDirectoryMap,
   buildSourceLabelMap,
@@ -59,12 +58,19 @@ function floorDays(from: number, to: number) {
   return Math.max(0, Math.floor((to - from) / MS_PER_DAY));
 }
 
-function dealScope(deal: DealSnapshot, wonStageIds: ReadonlySet<string>): DealAnalysisScope {
-  if (wonStageIds.has(deal.stageId) || deal.stageSemanticId === "S") return "won";
-  if (OPERATIONAL_LOST_STAGE_IDS.has(deal.stageId) || deal.stageSemanticId === "F") {
-    return "lost";
-  }
-  return "open";
+function dealScope(
+  deal: DealSnapshot,
+  stageName: string | null,
+  wonStageIds: ReadonlySet<string>
+): DealAnalysisScope {
+  const route = resolveAttractionDealStageRoute({
+    stageId: deal.stageId,
+    stageName,
+    stageSemanticId: deal.stageSemanticId,
+    isWonStage: wonStageIds.has(deal.stageId)
+  });
+  if (route === "won") return "won";
+  return route === "productive" ? "open" : "lost";
 }
 
 function healthBand(score: number): DealHealthBand {
@@ -88,6 +94,10 @@ function buildGroups<T>(rows: T[], key: (row: T) => string | null) {
 
 function isDealActivity(activity: ActivitySnapshot) {
   return activity.ownerTypeId === "2" || activity.ownerTypeId.toUpperCase() === "DEAL";
+}
+
+function isBusinessDealActivity(activity: ActivitySnapshot) {
+  return isDealActivity(activity) && activity.providerId !== "IMOPENLINES_SESSION";
 }
 
 function resolveCallsByDeal(calls: CallSnapshot[], activities: ActivitySnapshot[]) {
@@ -132,6 +142,11 @@ function numberValue(value: unknown) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function isTechnicalOpenLineFact(fact: DealTouchpointFactSnapshot) {
+  if (fact.kind !== "task_created" && fact.kind !== "task_completed") return false;
+  return textValue(payload(fact.payloadJson)?.providerId) === "IMOPENLINES_SESSION";
+}
+
 export function buildDealAnalysisTimeline(
   facts: DealTouchpointFactSnapshot[]
 ): DealAnalysisTimelineItem[] {
@@ -140,10 +155,7 @@ export function buildDealAnalysisTimeline(
       if (fact.kind === "message_count" || fact.kind === "comment_quality_signal") {
         return false;
       }
-      if (fact.kind === "task_created" || fact.kind === "task_completed") {
-        return textValue(payload(fact.payloadJson)?.providerId) !== "IMOPENLINES_SESSION";
-      }
-      return true;
+      return !isTechnicalOpenLineFact(fact);
     }
   );
   const taskFacts = buildGroups(
@@ -178,16 +190,12 @@ export function buildDealAnalysisTimeline(
         occurredAt: fact.occurredAt,
         title: subject ?? eventName ?? titles[fact.kind] ?? fact.kind,
         detail: textValue(data?.status),
-        subject,
         comment: textValue(data?.description),
         createdAt: textValue(data?.createdTime),
         deadlineAt: textValue(data?.deadline) ?? textValue(data?.scheduledAt),
         completedAt: textValue(data?.completedTime),
-        eventName,
         direction,
         durationSeconds: numberValue(data?.durationSeconds),
-        successful: typeof data?.connected === "boolean" ? data.connected : null,
-        stageId: fact.stageIdAtEvent,
         stageName: fact.stageNameAtEvent
       };
     });
@@ -222,16 +230,12 @@ export function buildDealAnalysisTimeline(
       occurredAt: completedAt ?? createdAt ?? latestFact.occurredAt,
       title: subject ?? "Задача",
       detail: null,
-      subject,
       comment,
       createdAt,
       deadlineAt,
       completedAt,
-      eventName: null,
       direction: null,
       durationSeconds: null,
-      successful: completedAt ? true : null,
-      stageId: latestFact.stageIdAtEvent,
       stageName: latestFact.stageNameAtEvent
     });
   }
@@ -241,23 +245,31 @@ export function buildDealAnalysisTimeline(
   );
 }
 
-export function buildDealAnalysisMessages(
+export function buildDealAnalysisMessageTimeline(
   messages: Array<
     Pick<
       MessengerMessageSnapshot,
       "id" | "occurredAt" | "channelLabel" | "direction" | "text" | "system"
     >
   >
-): DealAnalysisMessage[] {
+): DealAnalysisTimelineItem[] {
   return messages
     .filter((message) => !message.system && message.text !== null)
     .slice(-200)
     .map((message) => ({
-      id: message.id,
+      id: `message:${message.id}`,
+      sourceEntityId: message.id,
+      kind: "message" as const,
       occurredAt: message.occurredAt,
-      channelLabel: message.channelLabel,
+      title: message.channelLabel,
+      detail: message.text,
+      comment: null,
+      createdAt: message.occurredAt,
+      deadlineAt: null,
+      completedAt: null,
       direction: message.direction,
-      text: message.text
+      durationSeconds: null,
+      stageName: null
     }));
 }
 
@@ -285,7 +297,9 @@ function activityMarkers(
   const matching = rows
     .filter((row) => {
       const at = timestamp(row.occurredAt);
-      return allowed.has(row.kind as DealActivityMarker["kind"]) && at !== null && at >= from && at <= to;
+      return !isTechnicalOpenLineFact(row) &&
+        allowed.has(row.kind as DealActivityMarker["kind"]) &&
+        at !== null && at >= from && at <= to;
     })
     .sort((left, right) => Date.parse(right.occurredAt) - Date.parse(left.occurredAt));
   return {
@@ -313,14 +327,17 @@ export function buildDealAnalysisReport(input: BuildDealAnalysisReportInput): De
   );
   const wonStageIds = new Set(input.wonStageIds);
   const historyByDeal = buildGroups(input.stageHistory, (row) => row.ownerId);
-  const activitiesByDeal = buildGroups(input.activities.filter(isDealActivity), (row) => row.ownerId);
+  const activitiesByDeal = buildGroups(
+    input.activities.filter(isBusinessDealActivity),
+    (row) => row.ownerId
+  );
   const callsByDeal = resolveCallsByDeal(input.calls, input.activities);
   const touchpointsByDeal = buildGroups(input.touchpoints, (row) => row.dealId);
 
   const rows: DealAnalysisRow[] = [];
   for (const deal of input.deals) {
     if (!input.currentDealIds.has(deal.id)) continue;
-    const scope = dealScope(deal, wonStageIds);
+    const scope = dealScope(deal, stageLookup.get(deal.stageId) ?? null, wonStageIds);
     if (scope !== input.scope) continue;
 
     const history = [...(historyByDeal.get(deal.id) ?? [])].sort(

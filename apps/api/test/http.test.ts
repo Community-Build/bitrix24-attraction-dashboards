@@ -1649,7 +1649,7 @@ describe("createApp", () => {
       },
       getDealAnalysisDetail: async (input) => {
         detailInputs.push(input);
-        return { row: { dealId: input.dealId }, timeline: [], stageHistory: [], messages: [], callInsights: [], sensitiveContentAvailable: input.includeSensitiveContent };
+        return { row: { dealId: input.dealId }, timeline: [], stageHistory: [], callInsights: [], sensitiveContentAvailable: input.includeSensitiveContent };
       }
     });
 
@@ -1665,6 +1665,64 @@ describe("createApp", () => {
     expect(summaryInputs).toEqual([expect.objectContaining({ periodDays: 30, scope: "won" })]);
     expect(detailInputs).toEqual([
       expect.objectContaining({ dealId: "42", scope: "won", includeSensitiveContent: true })
+    ]);
+  });
+
+  it("passes sensitive deal detail access only for the attraction leader", async () => {
+    const employeeInputs: unknown[] = [];
+    const leaderInputs: unknown[] = [];
+    const makeDetail = (input: { dealId: string; includeSensitiveContent?: boolean }) => ({
+      row: { dealId: input.dealId },
+      timeline: [],
+      stageHistory: [],
+      callInsights: input.includeSensitiveContent ? [] : null,
+      sensitiveContentAvailable: input.includeSensitiveContent ?? false
+    });
+    const attractionModule = createAuthenticatedModule({
+      id: "attraction",
+      name: "Привлечение"
+    });
+    const employeeApp = createTestApp(
+      {
+        getDealAnalysisDetail: async (input) => {
+          employeeInputs.push(input);
+          return makeDetail(input);
+        }
+      },
+      {
+        auth: createStaticAuthService(createTestSession({ modules: [attractionModule] }))
+      }
+    );
+    const leaderApp = createTestApp(
+      {
+        getDealAnalysisDetail: async (input) => {
+          leaderInputs.push(input);
+          return makeDetail(input);
+        }
+      },
+      {
+        auth: createStaticAuthService(createTestSession({
+          modules: [{ ...attractionModule, role: "leader" }]
+        }))
+      }
+    );
+
+    await request(employeeApp)
+      .get("/api/reports/deal-analysis/42?periodDays=30")
+      .set("Cookie", "b24dash_session=valid-session")
+      .expect(200)
+      .expect(({ body }) => expect(body.sensitiveContentAvailable).toBe(false));
+    await request(leaderApp)
+      .get("/api/reports/deal-analysis/42?periodDays=30")
+      .set("Cookie", "b24dash_session=valid-session")
+      .expect(200)
+      .expect(({ body }) => expect(body.sensitiveContentAvailable).toBe(true));
+
+    expect(employeeInputs).toEqual([
+      expect.objectContaining({ includeSensitiveContent: false })
+    ]);
+    expect(leaderInputs).toEqual([
+      expect.objectContaining({ includeSensitiveContent: true })
     ]);
   });
 

@@ -332,11 +332,17 @@ function TimelineCard({
               {item.deadlineAt ? <span><strong className="text-slate-700">Выполнить до:</strong> {dateTime(item.deadlineAt)}</span> : null}
               {item.completedAt ? <span><strong className="text-slate-700">Завершена:</strong> {dateTime(item.completedAt)}</span> : null}
             </div>
-            {item.comment ? <p className="mt-4 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{activityComment(item.comment)}</p> : <p className="mt-3 text-sm text-slate-400">Комментарий к задаче не заполнен.</p>}
+            {item.comment ? (
+              <p className="mt-4 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{activityComment(item.comment)}</p>
+            ) : (
+              <p className="mt-3 text-sm text-slate-400">
+                {analysisAllowed ? 'Комментарий к задаче не заполнен.' : 'Содержание задачи доступно руководителю.'}
+              </p>
+            )}
           </>
         ) : null}
 
-        {isMessage ? <p className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{item.detail || 'Сообщение без текста или только с вложением.'}</p> : null}
+        {isMessage && item.detail ? <p className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{item.detail}</p> : null}
 
         {item.kind === 'meeting' && item.deadlineAt ? <p className="mt-3 text-sm text-slate-600"><strong>Встреча назначена:</strong> {dateTime(item.deadlineAt)}</p> : null}
         {item.kind === 'meeting' && item.comment ? <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{item.comment}</p> : null}
@@ -452,17 +458,57 @@ function DealDrawer({
   onClose(): void
   onOpenCallAnalysis(callId: string, startedAt: string): void
 }) {
+  const drawerRef = useRef<HTMLElement>(null)
   const closeRef = useRef<HTMLButtonElement>(null)
+  const onCloseRef = useRef(onClose)
   const [detail, setDetail] = useState<DealAnalysisDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<'risks' | 'activity' | 'path' | 'details'>(row.risks.length ? 'risks' : 'activity')
 
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
+
   useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     closeRef.current?.focus()
-    const onKey = (event: KeyboardEvent) => event.key === 'Escape' && onClose()
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onCloseRef.current()
+        return
+      }
+      if (event.key !== 'Tab' || !drawerRef.current) return
+
+      const focusable = Array.from(drawerRef.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => !element.hasAttribute('hidden'))
+      if (focusable.length === 0) {
+        event.preventDefault()
+        closeRef.current?.focus()
+        return
+      }
+
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      const active = document.activeElement
+      if (event.shiftKey && (active === first || !drawerRef.current.contains(active))) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && (active === last || !drawerRef.current.contains(active))) {
+        event.preventDefault()
+        first?.focus()
+      }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previousOverflow
+      if (previouslyFocused?.isConnected) previouslyFocused.focus()
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -485,7 +531,7 @@ function DealDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-slate-950/45 backdrop-blur-[1px]" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <aside className="flex h-full w-full max-w-[820px] flex-col bg-slate-50 shadow-2xl [overscroll-behavior:contain]" role="dialog" aria-modal="true" aria-label={`Сделка ${row.dealId}`}>
+      <aside ref={drawerRef} className="flex h-full w-full max-w-[820px] flex-col bg-slate-50 shadow-2xl [overscroll-behavior:contain]" role="dialog" aria-modal="true" aria-label={`Сделка ${row.dealId}`}>
         <header className="border-b border-slate-200 bg-white px-5 py-5 sm:px-7">
           <div className="flex items-start justify-between gap-5">
             <div className="min-w-0">

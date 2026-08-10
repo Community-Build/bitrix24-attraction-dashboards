@@ -30,6 +30,10 @@ message bodies, call-analysis conclusions and the saved call transcript are
 returned only by the lazy, leader-only detail route for one exact deal ID. The
 same access boundary applies to starting call analysis. None of this content may
 enter aggregate responses, MCP, dashboard comments, notifications or logs.
+The per-deal route also returns a role-safe timeline projection to non-leaders:
+event metadata remains useful, but work-object titles/comments, messenger rows
+and call-analysis narrative are removed before the response crosses the route
+boundary.
 
 The timeline excludes technical Open Lines activities and messenger system rows
 (`sender_id = 0` / system classification). Rows without a user-visible message
@@ -40,8 +44,10 @@ actual completion.
 The deal drawer is a read-only context view. It may preview an already saved call
 score, summary and transcript, but it does not start a second analysis flow.
 Every call action opens the existing call-analysis workspace with the exact call
-preselected and its date applied to the queue filters; manual analysis remains
-owned by that workspace.
+preselected and its date applied to the queue filters. The selection is encoded
+in the `/calls` URL and the calendar day is resolved in the attraction business
+timezone, so refresh and browser navigation preserve the target. Manual
+analysis remains owned by that workspace.
 
 ## Consequences
 

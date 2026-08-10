@@ -22,7 +22,13 @@ import type {
   CallAnalysisResult,
 } from '@/lib/dashboard-types'
 import { cn } from '@/lib/utils'
+import {
+  formatCallAnalysisBusinessDate,
+  type CallAnalysisTarget,
+} from '@/proto/call-analysis-route-target'
 import type { PickerOption } from '@/proto/types'
+
+export type { CallAnalysisTarget } from '@/proto/call-analysis-route-target'
 
 type LoadStatus = 'idle' | 'loading' | 'ready' | 'empty' | 'error'
 type AnalysisStatus = 'idle' | 'loading' | 'missing' | 'ready' | 'analyzing' | 'error'
@@ -35,11 +41,6 @@ interface CallAnalysisFilters {
   stageId: string
   callType: '' | CallAnalysisQueueCallType
   analysisStatus: '' | CallAnalysisQueueStatus
-}
-
-export interface CallAnalysisTarget {
-  callId: string
-  startedAt: string
 }
 
 export function createDefaultCallAnalysisFilters(today = new Date()): CallAnalysisFilters {
@@ -65,10 +66,8 @@ export function createCallAnalysisFiltersForTarget(
   const filters = createDefaultCallAnalysisFilters(today)
   if (!target) return filters
 
-  const startedAt = new Date(target.startedAt)
-  if (Number.isNaN(startedAt.getTime())) return filters
-
-  const targetDate = formatDateInputValue(startedAt)
+  const targetDate = formatCallAnalysisBusinessDate(target.startedAt)
+  if (!targetDate) return filters
   return { ...filters, rangeStart: targetDate, rangeEnd: targetDate }
 }
 
