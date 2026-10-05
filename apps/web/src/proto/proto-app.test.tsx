@@ -3541,6 +3541,10 @@ describe('ProtoApp', () => {
     expect(
       newDashboardCalls.some(([query]) => (query.managerIds ?? []).length === 0),
     ).toBe(true)
+    await userEvent.click(await screen.findByRole('button', { name: /^отчет активности$/i }))
+    expect(await screen.findByRole('heading', { name: 'Сообщения в мессенджерах' })).toBeInTheDocument()
+    await waitFor(() => expect(apiClient.getMessengerReportSummary).toHaveBeenCalled())
+
   })
 
   it('does not expose the global manager fallback to employees while whitelist settings load', async () => {
