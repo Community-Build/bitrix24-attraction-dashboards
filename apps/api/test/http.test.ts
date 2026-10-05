@@ -1435,7 +1435,70 @@ describe("createApp", () => {
     expect(JSON.stringify(response.headers)).not.toContain("bitrix24.ru/rest/");
   });
 
-  it("denies messenger summary, reader, and attachments to attraction employees", async () => {
+  it.each([
+    { requested: [], expected: ["78", "13020"], defaultManagerId: "78", whitelist: true },
+    { requested: ["78", "11234"], expected: ["78"], defaultManagerId: "78", whitelist: true },
+    { requested: ["11234"], expected: [NO_ATTRACTION_MANAGER_MATCH_ID], defaultManagerId: "78", whitelist: true },
+    { requested: [], expected: [NO_ATTRACTION_MANAGER_MATCH_ID], defaultManagerId: null, whitelist: true },
+    { requested: [], expected: [NO_ATTRACTION_MANAGER_MATCH_ID], defaultManagerId: "78", whitelist: false },
+    { requested: [], expected: [], defaultManagerId: null, whitelist: false, role: "leader" as const },
+    { requested: ["11234"], expected: ["11234"], defaultManagerId: null, whitelist: false, isSuperAdmin: true },
+  ])("scopes employee messenger summary ($requested, $defaultManagerId, whitelist=$whitelist)", async ({ requested, expected, defaultManagerId, whitelist, role = "employee" as const, isSuperAdmin = false }) => {
+    const module = { ...createAuthenticatedModule({ id: "attraction", name: "Привлечение" }), defaultManagerId, role };
+    const getMessengerReportSummary = vi.fn(async (input) => ({
+      from: input.from, to: input.to, totalMessages: 0, outgoingMessages: 0,
+      outgoingUnknownAuthorMessages: 0, incomingMessages: 0, unknownDirectionMessages: 0,
+      uniqueOutgoingDialogs: 0, dealsWithOutgoingMessages: 0, messagesWithText: 0,
+      attachmentOnlyMessages: 0, uniqueDialogs: 0, dealsWithMessages: 0,
+      systemMessagesExcluded: 0, managerRows: []
+    }));
+    const getManagerMessageDetails = vi.fn(async (input) => ({
+      managerId: input.managerId, managerName: "Менеджер", from: input.from, to: input.to,
+      totalMessages: 0, returnedMessages: 0, truncated: false, messages: []
+    }));
+    const getManagerMessageAttachment = vi.fn(async () => ({
+      bytes: Buffer.from("attachment"), fileId: "77", fileName: "test.bin"
+    }));
+    const app = createTestApp({
+      ...(whitelist ? { getManagerWhitelistSettings: async () => ({
+        options: [], teams: [], settings: ["78", "13020", "11234"].map((managerId) => ({
+          moduleKey: "attraction" as const, managerId, managerName: "Менеджер", enabled: true,
+          sortOrder: 0, updatedAt: "2026-08-01T00:00:00Z",
+          teamId: managerId === "11234" ? "other" : "attraction", teamName: "Команда"
+        }))
+      }) } : {})
+    }, {
+      auth: createStaticAuthService(createTestSession({ modules: [module], isSuperAdmin })),
+      messengerMessages: { enabled: true, service: {
+        getManagerMessageSummary: async () => { throw new Error("must not collect"); },
+        getMessengerReportSummary, getManagerMessageDetails, getManagerMessageAttachment
+      } }
+    });
+    const range = { from: "2026-08-01T00:00:00+03:00", to: "2026-08-03T23:59:59+03:00" };
+    const post = (path: string) => request(app).post(path)
+      .set("Cookie", "b24dash_session=valid-session").set("X-CSRF-Token", "csrf-token");
+    const hasSummaryScope = !expected.some((managerId) => managerId === NO_ATTRACTION_MANAGER_MATCH_ID);
+    await post("/api/messenger-messages/summary").send({ ...range, managerIds: requested })
+      .expect("Cache-Control", "no-store").expect(hasSummaryScope ? 200 : 403);
+    if (hasSummaryScope) {
+      expect(getMessengerReportSummary).toHaveBeenCalledWith({ ...range, managerIds: expected });
+    } else {
+      expect(getMessengerReportSummary).not.toHaveBeenCalled();
+    }
+    // Direct requests cannot escape the employee team even if client filters are tampered with.
+    for (const managerId of ["13020", "11234"]) {
+      const allowed = role === "leader" || isSuperAdmin || (whitelist && defaultManagerId !== null && managerId === "13020");
+      await post("/api/messenger-messages/read").send({ ...range, managerId })
+        .expect(allowed ? 200 : 403);
+      await post("/api/messenger-messages/attachment").send({ ...range, managerId,
+        sessionId: "441", messageId: "501", fileId: "77" }).expect(allowed ? 200 : 403);
+    }
+    const expectedReads = role === "leader" || isSuperAdmin ? 2 : whitelist && defaultManagerId ? 1 : 0;
+    expect(getManagerMessageDetails).toHaveBeenCalledTimes(expectedReads);
+    expect(getManagerMessageAttachment).toHaveBeenCalledTimes(expectedReads);
+  });
+
+  it("denies messenger reader and attachments to employees without a manager scope", async () => {
     let messageReads = 0;
     const auth = createStaticAuthService(
       createTestSession({
@@ -1477,14 +1540,6 @@ describe("createApp", () => {
         .set("Cookie", "b24dash_session=valid-session")
         .set("X-CSRF-Token", "csrf-token");
 
-    await authenticatedRequest("/api/messenger-messages/summary")
-      .send({
-        managerIds: ["78"],
-        from: "2026-08-01T00:00:00+03:00",
-        to: "2026-08-03T23:59:59+03:00"
-      })
-      .expect("Cache-Control", "no-store")
-      .expect(403, { error: "FORBIDDEN", code: "FORBIDDEN" });
     await authenticatedRequest("/api/messenger-messages/read")
       .send({
         managerId: "78",

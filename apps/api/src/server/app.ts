@@ -2295,6 +2295,20 @@ export function createApp(
     };
   }
 
+  async function denyIfMissingMessengerManagerAccess(
+    response: express.Response,
+    managerId: string
+  ) {
+    const scoped = await scopeAttractionRangeRequest(response, {
+      filters: { managerIds: [managerId] }
+    });
+    if (!scoped.filters.managerIds.includes(managerId)) {
+      response.status(403).json(createErrorResponse("FORBIDDEN"));
+      return true;
+    }
+    return false;
+  }
+
   async function resolveAttractionAccessManagerIds(response: express.Response) {
     if (!auth || !service.getManagerWhitelistSettings) {
       return null;
@@ -2873,15 +2887,25 @@ export function createApp(
         response.status(404).json(createErrorResponse("NOT_FOUND"));
         return;
       }
-      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+      if (denyIfMissingAttractionAccess(response)) {
         return;
       }
       try {
         const payload = messengerReportSummaryBodySchema.parse(request.body);
+        const scoped = await scopeAttractionRangeRequest(response, {
+          filters: { managerIds: payload.managerIds }
+        });
+        if (scoped.filters.managerIds.includes(NO_ATTRACTION_MANAGER_MATCH_ID)) {
+          response.status(403).json(createErrorResponse("FORBIDDEN"));
+          return;
+        }
         response.set("Cache-Control", "no-store");
         response.json({
           summary:
-            await messengerMessages.service.getMessengerReportSummary(payload)
+            await messengerMessages.service.getMessengerReportSummary({
+              ...payload,
+              managerIds: scoped.filters.managerIds
+            })
         });
       } catch (error) {
         next(error);
@@ -2896,11 +2920,14 @@ export function createApp(
         response.status(404).json(createErrorResponse("NOT_FOUND"));
         return;
       }
-      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+      if (denyIfMissingAttractionAccess(response)) {
         return;
       }
       try {
         const payload = messengerMessageReaderBodySchema.parse(request.body);
+        if (await denyIfMissingMessengerManagerAccess(response, payload.managerId)) {
+          return;
+        }
         response.set("Cache-Control", "no-store");
         response.json({
           details:
@@ -2924,11 +2951,14 @@ export function createApp(
         response.status(404).json(createErrorResponse("NOT_FOUND"));
         return;
       }
-      if (denyIfMissingAttractionAccess(response, { leaderOnly: true })) {
+      if (denyIfMissingAttractionAccess(response)) {
         return;
       }
       try {
         const payload = messengerMessageAttachmentBodySchema.parse(request.body);
+        if (await denyIfMissingMessengerManagerAccess(response, payload.managerId)) {
+          return;
+        }
         const attachment =
           await messengerMessages.service.getManagerMessageAttachment(payload);
         response.set("Cache-Control", "no-store");

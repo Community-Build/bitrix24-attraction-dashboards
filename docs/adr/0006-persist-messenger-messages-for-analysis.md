@@ -59,9 +59,18 @@ persisting or exposing client identity.
 
 The Activities messenger block reads SQLite automatically whenever the common
 date or manager filter changes. Aggregate responses never contain body text.
-The leader-only reader returns at most 500 stored messages for one manager and
+The reader returns at most 500 stored messages for one manager and
 the exact selected range. Attachment bytes remain transient and are fetched
 through the existing validated, bounded proxy.
+
+### Employee access (2026-10-05)
+
+The Activities messenger summary, reader and attachment proxy are available to
+attraction employees within the same enabled manager-team scope as other
+attraction reports. The server intersects summary filters with that scope and
+rejects reader/attachment requests for managers outside it. Missing manager
+assignment or whitelist configuration grants no message access. Leaders and
+super admins retain their existing scope; collection remains leader-only.
 
 ## Consequences
 
@@ -91,4 +100,4 @@ through the existing validated, bounded proxy.
 
 Revisit this decision if retention periods become legally required, message
 volume makes the primary SQLite database operationally unsuitable, provider
-APIs expose stronger author/direction identity, or non-leader roles need access.
+APIs expose stronger author/direction identity, or employee scope needs to change.

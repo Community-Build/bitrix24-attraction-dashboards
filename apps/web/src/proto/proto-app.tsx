@@ -5116,8 +5116,7 @@ export function ProtoApp({ currentUser }: ProtoAppProps = {}) {
                 filters={appliedFilters}
                 runtimeData={activeRuntimeData}
                 canReadMessengerMessages={
-                  activeModuleSlug === 'attraction' &&
-                  canSeeAllManagerTeams(accountUser, activeModuleId)
+                  activeModuleSlug === 'attraction'
                 }
                 salesPlanQuarter={salesPlanQuarter}
                 salesPlanLoading={salesPlanLoading}

@@ -280,3 +280,12 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 ### SLA color rules
 - Confirm exact coloring besides `late = 0` being gray.
 - Confirm whether the `±15%` deviation rule applies to SLA, plan, and action-outcome blocks equally.
+
+
+### Messenger employee access (2026-10-05)
+
+- Problem: employees cannot see the messenger section on Activities because UI and API require a leader role.
+- Expected: employees see summary, reader and attachments for their allowed manager team; leaders retain existing access.
+- Acceptance: empty filters use the employee team; tampered filters cannot expose other teams; missing assignment/configuration grants no access; collection stays leader-only.
+- Data dependencies: existing attraction manager whitelist/team settings and SQLite messenger snapshot.
+- Verification: targeted messenger HTTP tests and employee Activities navigation test.
