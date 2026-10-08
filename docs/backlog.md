@@ -248,6 +248,17 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
   - Marks stability by rank retention and conversion threshold.
   - Links the finding to bottleneck/queue context.
 
+### Attraction analytical data MCP (2026-10-08)
+
+- Area: infra, data
+- Problem: fixed report tools cannot answer arbitrary questions or provide a complete scoped list of deal IDs.
+- Expected: schema discovery and parameterized read-only SQLite queries over existing attraction facts, with joins, grouping, window functions, individual deal IDs and Bitrix links.
+- Acceptance: current manager/category scope; no secrets, raw payloads or private text; source database remains immutable; bounded rows/bytes, deadline and concurrency; HTTP/stdio compatibility.
+- Data dependencies: existing SQLite snapshots/facts and manager whitelist; lead names and initial-delivery history are not part of this stage.
+- Verification: focused analytical-SQL and MCP transport tests; API typecheck and independent review.
+- Plan: [Attraction data MCP](./plans/2026-10-08-attraction-data-mcp.md).
+- State: verified local candidate on `codex/attraction-data-mcp`; 33 focused tests and three independent reviews passed. Production rollout and representative-load acceptance are pending.
+
 ## Needs Clarification
 
 ### Bitrix access for conversion events and call recordings

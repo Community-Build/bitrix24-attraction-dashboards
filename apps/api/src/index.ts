@@ -2,6 +2,7 @@ import { BitrixClient } from "./bitrix/client.js";
 import { createMessengerMessageCollectionService } from "./server/messenger-message-collection.js";
 import { readEnv } from "./config/env.js";
 import { createAttractionAgentGateway } from "./agent/attraction-agent-gateway.js";
+import { createAttractionDataReader } from "./agent/attraction-data.js";
 import { createPlaybookReader } from "./agent/playbook-reader.js";
 import { createPasswordAuthService, createSqliteAuthStore } from "./server/auth.js";
 import { createApp } from "./server/app.js";
@@ -378,6 +379,11 @@ const telegramActivityReportSender =
     : undefined;
 const attractionAgentGateway = env.MCP_ACCESS_TOKEN
   ? createAttractionAgentGateway({
+      data: createAttractionDataReader({
+        databaseUrl: env.attractionDatabaseUrl,
+        categoryIds: env.bitrixDealCategoryIds,
+        portalHost: env.BITRIX24_PORTAL_HOST
+      }),
       manifest: createAttractionCapabilityManifest(),
       service,
       ontology: {
