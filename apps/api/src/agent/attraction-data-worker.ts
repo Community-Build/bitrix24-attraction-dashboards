@@ -14,7 +14,7 @@ const tables = [
   ["manager_directory", "Manager names (employees, not leads)", "id,name", `id ${managerScope}`],
   ["deal_snapshots", "Cached deals; assigned_by_id and quality_value are current values; bitrix_url opens the deal", "id,contact_id,lead_id,category_id,stage_id,stage_semantic_id,opportunity,assigned_by_id,source_id,quality_value,business_club_value,target_group_value,meeting_type_value,meeting_date_value,tariff_value,conversion_event_value,refusal_reason_value,date_create,date_modify,date_closed,CAST(bitrix_deal_url(id) AS TEXT) AS bitrix_url", `assigned_by_id ${managerScope} AND category_id IN (SELECT value FROM json_each(:categories))`],
   ["attraction_current_deal_ids", "Membership in the last reconciled current scope; cached history may contain additional deals", "deal_id", `deal_id ${dealScope}`],
-  ["stage_catalog", "CRM stage dictionary for configured deal categories", "entity_type,category_id,status_id,name,semantic_id,sort_order", "category_id IN (SELECT value FROM json_each(:categories))"],
+  ["stage_catalog", "CRM stages for configured deal categories and the shared source dictionary", "entity_type,category_id,status_id,name,semantic_id,sort_order", "entity_type = 'source' OR category_id IN (SELECT value FROM json_each(:categories))"],
   ["stage_history_snapshots", "Stage transitions of scoped deals", "id,owner_id,category_id,stage_id,stage_semantic_id,type_id,created_time", `owner_id ${dealScope}`],
   ["activity_snapshots", "Activity metadata; excludes text and clears owner identifiers outside scoped deals", `id,CASE WHEN owner_type_id IN ('2','DEAL') AND owner_id ${dealScope} THEN owner_type_id END AS owner_type_id,CASE WHEN owner_type_id IN ('2','DEAL') AND owner_id ${dealScope} THEN owner_id END AS owner_id,type_id,provider_id,responsible_id,created_time,deadline,last_updated,completed,completed_time`, `(owner_type_id IN ('2','DEAL') AND owner_id ${dealScope}) OR id IN (SELECT activity_id FROM source.activity_binding_snapshots WHERE owner_type_id IN ('2','DEAL') AND owner_id ${dealScope})`],
   ["activity_binding_snapshots", "Activity bindings to scoped deals only", "activity_id,owner_type_id,owner_id", `activity_id ${activityScope} AND owner_type_id IN ('2','DEAL') AND owner_id ${dealScope}`],
@@ -89,7 +89,9 @@ function readData(request: Request): AttractionDataSchema | AttractionDataResult
     database.prepare("ATTACH DATABASE ? AS source").run(sourceUrl.href);
     database.exec("BEGIN");
     for (const [name, , columns, scope] of tables) {
-      const statement = database.prepare(`CREATE TABLE main.${name} AS SELECT ${columns} FROM source.${name} WHERE ${scope}${request.operation === "schema" ? " LIMIT 0" : ""}`);
+      // The binding composite index makes SQLite probe the cross product of both IN lists.
+      const scanHint = name === "activity_binding_snapshots" ? " NOT INDEXED" : "";
+      const statement = database.prepare(`CREATE TABLE main.${name} AS SELECT ${columns} FROM source.${name}${scanHint} WHERE ${scope}${request.operation === "schema" ? " LIMIT 0" : ""}`);
       statement.setAllowUnknownNamedParameters(true);
       statement.run({ categories: JSON.stringify(request.categoryIds) });
     }

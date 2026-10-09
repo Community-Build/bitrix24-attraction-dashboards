@@ -89,6 +89,26 @@ describe("Attraction analytical SQL", () => {
     expect((await reader.query({ sql: "SELECT count(*) AS n FROM deal_snapshots" })).rows).toEqual([{ n: 0 }]);
   });
 
+  it("prepares a production-sized activity/binding population within the request deadline", async () => {
+    database.exec(`
+      WITH RECURSIVE n(v) AS (SELECT 1 UNION ALL SELECT v+1 FROM n WHERE v<3800)
+      INSERT INTO deal_snapshots (id,category_id,stage_id,assigned_by_id,date_create,date_modify)
+        SELECT printf('bulk-deal-%06d',v),'10','NEW','78','2026-09-01','2026-10-08' FROM n;
+      WITH RECURSIVE n(v) AS (SELECT 1 UNION ALL SELECT v+1 FROM n WHERE v<65000)
+      INSERT INTO activity_snapshots (id,owner_type_id,owner_id,created_time,last_updated,completed)
+        SELECT printf('bulk-activity-%06d',v),'2',printf('bulk-deal-%06d',1+(v%3800)),'2026-09-01','2026-10-08',0 FROM n;
+      INSERT INTO activity_binding_snapshots (activity_id,owner_type_id,owner_id)
+        SELECT id,owner_type_id,owner_id FROM activity_snapshots WHERE id LIKE 'bulk-%' ORDER BY id LIMIT 12000;
+    `);
+    expect((await reader.query({ sql: "SELECT count(*) AS bindings FROM activity_binding_snapshots" })).rows).toEqual([{ bindings: 12001 }]);
+  }, 10_000);
+
+  it("exposes the source dictionary while excluding other-category CRM stages", async () => {
+    database.exec("INSERT INTO stage_catalog VALUES ('source',NULL,'8','Лидген УС',NULL,1),('deal','28','C28:NEW','Foreign stage','P',1)");
+    expect((await reader.query({ sql: "SELECT name FROM stage_catalog WHERE entity_type='source' AND status_id='8'" })).rows).toEqual([{ name: "Лидген УС" }]);
+    expect((await reader.query({ sql: "SELECT count(*) AS n FROM stage_catalog WHERE category_id='28'" })).rows).toEqual([{ n: 0 }]);
+  });
+
   it.each([
     "UPDATE deal_snapshots SET quality_value = 'evil'",
     "DELETE FROM deal_snapshots",

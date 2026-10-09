@@ -95,6 +95,11 @@ event visits, messenger metadata, plans, pricing, operational thresholds and
 expense primitives. Existing `run_report` policy is unchanged; SQL is a separate
 owner-authorized analytical capability, including expense primitives.
 
+`stage_catalog` includes CRM stages for the configured categories and the shared
+SOURCE dictionary (`entity_type='source'`). Resolve source names with both
+`entity_type='source'` and `status_id=deal_snapshots.source_id`; status IDs alone
+are not unique across dictionary types.
+
 `query_sql` accepts `sql`, optional scalar named `parameters`, and optional
 `maxRows` (default 200, maximum 1,000). It supports one SQLite SELECT/CTE, JOIN,
 GROUP BY, recursive CTEs, JSON functions and window functions. Use unique column

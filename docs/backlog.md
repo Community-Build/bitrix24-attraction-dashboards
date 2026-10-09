@@ -257,7 +257,7 @@ This file mirrors the GitHub Issues backlog. GitHub Issues are the source of tru
 - Data dependencies: existing SQLite snapshots/facts and manager whitelist; lead names and initial-delivery history are not part of this stage.
 - Verification: focused analytical-SQL and MCP transport tests; API typecheck and independent review.
 - Plan: [Attraction data MCP](./plans/2026-10-08-attraction-data-mcp.md).
-- State: verified local candidate on `codex/attraction-data-mcp`; 33 focused tests and three independent reviews passed. Production rollout and representative-load acceptance are pending.
+- State: verified local candidate on `codex/attraction-data-mcp`; initial 33 focused tests and three reviews passed. On 2026-10-09, ten read-only live business queries and six guard checks passed after correcting projection preparation; 28 focused tests, API build/lint and two fresh delta reviews passed. Production still exposes six legacy tools; SQL rollout, CI and concurrent-sync acceptance are pending. Details and measured limits are in the plan.
 
 ## Needs Clarification
 

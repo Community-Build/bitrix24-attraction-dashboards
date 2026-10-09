@@ -34,10 +34,44 @@ Individual deal IDs and links to Bitrix are included by the owner's follow-up.
   `9af5cd01e8424a9e6e66a41e9f14e170b28f8f7fc6f62eae58b337b9a95f95b0`.
 - CRG: `get_minimal_context_tool`, `detect_changes_tool`; the exact worktree graph
   is empty, so source and focused diff checks supplied the evidence.
-- Full suites, CI, production rollout and live data/load/concurrent-sync checks
-  were not run. Before rollout verify Node >=24.10 inside the actual image and
-  measure projection preparation on a representative snapshot: copying all
-  projected tables shares the five-second deadline and 128 MiB SQLite heap cap.
+- At the initial handoff, full suites, CI, production rollout and live
+  data/load/concurrent-sync checks had not run. The live acceptance below
+  subsequently verified the runtime and representative projection volume.
+
+## Live read-only acceptance (2026-10-09)
+
+- Production remains at `a037ca5`; its public endpoint exposes the original six
+  tools. Node v24.21.0 and the mounted attraction SQLite database were verified.
+  The compiled candidate ran through the MCP SDK in-memory transport inside an
+  ephemeral server process. Only the worker loading location was adapted; query,
+  scope and resource limits were retained. No deployed files or business data
+  changed. This proves candidate execution, not public SQL-tool availability.
+- Ten business questions passed without errors or truncation, covering freshness,
+  population, current manager/quality, deal IDs/URLs, sources, stages, activity
+  coverage, calls and identifier completeness. Schema took 44 ms; SQL took
+  667–991 ms. Independent read-only source counts and cohort totals agreed.
+- Six live guard checks confirmed write/private-text/source-CTE rejection, scope
+  isolation, cancellation at the five-second deadline and recovery afterwards.
+- Исправление конкретного случая: source binding copying exhausted the deadline
+  because SQLite probed the cross product of two IN lists through its composite
+  index. `NOT INDEXED` on this copy alone preserves both scope predicates and
+  reduced total projection preparation from 18.23 s to 0.67 s. Also include the
+  existing shared SOURCE dictionary while retaining category scope for CRM stages.
+- Предотвращение повторения: two regression cases failed before the fixes and
+  passed afterwards. The load fixture uses 65,000 activities, 3,800 deals and
+  12,000 bindings under the unchanged reader deadline; the dictionary case also
+  denies another category. All 28 cases in `attraction-data.test.ts` and
+  `agent-mcp-server.test.ts`, API compiled build and owned-file lint passed.
+- Two fresh independent reviews found no material delta defects in patch
+  `e2326ee4f3e2cc80fe7f5fb32bb21f07477d5d38fb1412f868df5514d94b3652`.
+- `pnpm session:preflight --allow-dirty` passed after inspecting this task's diff.
+  CRG: `get_minimal_context_tool`, `detect_changes_tool`; graph stale relative to
+  the candidate, so exact source/diff and execution supplied the evidence.
+- Public rollout, CI/full suites and concurrent-sync acceptance remain unchecked.
+  Scan cost at larger future volumes or different SQLite versions is unmeasured;
+  preparation still shares the five-second deadline and 128 MiB SQLite heap cap.
+  Raw acceptance responses remain outside Git; no snapshots or identifiers are
+  committed as evidence.
 
 Source isolation: copy explicitly selected analytical columns and scoped rows
 from a read-only source transaction into a disposable in-memory database in a
