@@ -79,7 +79,8 @@ child process. Detach the source before any caller SQL runs. SQLite authorizatio
 row/byte limits, native heap limit, a deadline and bounded concurrency protect the
 query process and the API. No SQL regex is an access-control boundary.
 
-Deploy, credential changes and production writes are outside this local task.
+The owner authorized public SQL publication on 2026-10-12. Deploy is now in
+scope; credential changes and business-data writes remain outside scope.
 Rollback is removing the two new data tools; existing report and knowledge tools
 remain available. No production schema migration or data backfill is needed.
 
@@ -97,3 +98,24 @@ lead names must stay absent rather than be reconstructed as confirmed data.
 - Предотвращение повторения: deny unprojected tables/columns by construction and
   test scope bypasses, writes, CTE shadowing, unknown columns, limits and timeout.
   Existing predefined-report handler/filter defects are not repaired by this task.
+
+## Public publication (2026-10-12, in progress)
+
+- Outcome: existing recipient token discovers schema and executes scoped SQL
+  on the public MCP endpoint; update the private combined Codex instruction
+  only after real public queries pass.
+- Fresh session preflight passed, branch is based on current `origin/main`.
+  All 35 focused API cases passed again. Existing feature reviews are reused.
+- Restrict this exact MCP file packet to four API test files and focused release
+  script tests in CI; preserve the default checks for unrelated changes.
+- Build one Docker release image on the existing VPS deployment path, activate
+  it by immutable image ID and run public SQL acceptance on those same bytes.
+  Retain and restore the prior image without rebuilding; no DB migration.
+- Paired platform record: reconcile the current source-runtime observation and
+  document the read-only analytical MCP contract; no migration or ingress change.
+- Исправление конкретного случая: publish the missing SQL tools through PR,
+  green checks, main and Deploy Production; verify schema, joins and deal URLs.
+- Предотвращение повторения: recipient readiness depends on an actual public
+  schema/query call; CI scope and immutable rollback get focused regressions.
+- Remaining steps: independent release delta review; commit/push/PR; green CI and
+  deploy; live auth/scope/query checks and private prompt update.

@@ -196,9 +196,28 @@ wait_for_http_code() {
   return 1
 }
 
+start_compose_image() {
+  local image="$1"
+  local override
+  local start_status=0
+
+  [[ "$image" =~ ^sha256:[a-f0-9]{64}$ ]] || return 1
+  override="$(mktemp)" || return 1
+  if ! printf 'services:\n  app:\n    image: "%s"\n' "$image" > "$override"; then
+    rm -f "$override"
+    return 1
+  fi
+  docker compose -p "$COMPOSE_PROJECT" -f docker-compose.yml -f "$override" \
+    up -d --no-build --remove-orphans app || start_status=$?
+  rm -f "$override"
+  return "$start_status"
+}
+
 build_compose_project() {
   local ref="$1"
   local build_status=0
+  local image_name
+  local image
 
   printf '%s\n' "$ref" > .docker-source-revision
   docker compose -p "$COMPOSE_PROJECT" build \
@@ -210,7 +229,24 @@ build_compose_project() {
     return "$build_status"
   fi
 
-  docker compose -p "$COMPOSE_PROJECT" up -d --remove-orphans app
+  image_name="$(docker compose -p "$COMPOSE_PROJECT" config --images)" || return 1
+  image="$(docker image inspect "$image_name" --format '{{.Id}}')" || return 1
+  log "Release image $image for $ref"
+  if ! docker run --rm --network none --entrypoint node "$image" -e \
+    'const [major, minor] = process.versions.node.split(".").map(Number); if (major !== 24 || minor < 10) process.exit(1);'; then
+    return 1
+  fi
+  start_compose_image "$image"
+}
+
+restore_previous_release() {
+  local ref="$1"
+  local image="$2"
+
+  git reset --hard "$ref"
+  git clean -fdx -e .env.production
+  log "Restoring immutable image $image for $ref"
+  start_compose_image "$image"
 }
 
 verify_image_revision() {
@@ -345,7 +381,15 @@ main() {
   chmod 600 .env.production
 
   local previous_ref=""
+  local previous_image=""
+  local previous_container=""
   previous_ref="$(git rev-parse HEAD 2>/dev/null || true)"
+  previous_container="$(docker compose -p "$COMPOSE_PROJECT" ps -q app)"
+  if [ -n "$previous_container" ]; then
+    previous_image="$(docker inspect "$previous_container" --format '{{.Image}}')" || return 1
+    docker image tag "$previous_image" "$COMPOSE_PROJECT:rollback-${previous_ref:0:12}" || return 1
+    log "Retained rollback image $previous_image for $previous_ref"
+  fi
 
   log "Fetching $DEPLOY_REF"
   git fetch --prune origin
@@ -360,21 +404,17 @@ main() {
 
   log "Building and starting compose project"
   if ! build_compose_project "$DEPLOY_REF"; then
-    if [ -n "$previous_ref" ]; then
+    if [ -n "$previous_ref" ] && [ -n "$previous_image" ]; then
       log "Build/start failed, rolling back to $previous_ref"
-      git reset --hard "$previous_ref"
-      git clean -fdx -e .env.production
-      build_compose_project "$previous_ref"
+      restore_previous_release "$previous_ref" "$previous_image"
     fi
     exit 1
   fi
 
   if ! verify_runtime "$DEPLOY_REF"; then
-    if [ -n "$previous_ref" ]; then
+    if [ -n "$previous_ref" ] && [ -n "$previous_image" ]; then
       log "Runtime verification failed, rolling back to $previous_ref"
-      git reset --hard "$previous_ref"
-      git clean -fdx -e .env.production
-      build_compose_project "$previous_ref"
+      restore_previous_release "$previous_ref" "$previous_image"
       verify_runtime "$previous_ref" true
     fi
     exit 1
