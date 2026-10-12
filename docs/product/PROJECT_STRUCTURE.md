@@ -55,7 +55,7 @@ map that future refactors should preserve.
 | KI playbook | attraction | `PlaybookScene`, `PlaybookReader`, MCP resources | `docs/modules/attraction/playbook/playbook-ki.html` | Operational knowledge surface, not a report. |
 | Comments and Paperclip | platform | dashboard comment mode, `/api/proto-comments`, Paperclip routes | comments SQLite tables, `ops/paperclip/*` | Product feedback and implementation loop. Not part of business ontology. |
 | Account and settings | platform | account/admin panels, settings routes | auth store, module users, report settings tables | Platform surface around attraction operations. |
-| Agent MCP | platform | `/api/mcp`, stdio MCP tool | `docs/architecture/agent-mcp.md`, capability manifest | Read-only. Must not expose Bitrix clients, SQLite handles, Telegram, Paperclip, sync, or writeback. |
+| Agent MCP | platform | `/api/mcp`, stdio MCP tool | `docs/architecture/agent-mcp.md`, capability manifest, ADR 0008 | Read-only reports and SQL over an explicit scoped analytical projection. No Bitrix clients, source SQLite handles, private text, Telegram, Paperclip, sync, or writeback. |
 
 ## Runtime Modules
 
@@ -86,7 +86,7 @@ call enrichment -> Telegram approval -> approved narrow Bitrix writeback
 Telegram /start -> SQLite identity -> manual Bitrix match -> n8n notification recipient
 SQLite snapshot -> activity/call workload reports -> Telegram activity summary
 docs/modules/attraction -> ontology/playbook readers -> web knowledge surfaces
-docs/modules/attraction + reports -> MCP read-only agent gateway
+docs/modules/attraction + reports + scoped analytical SQL -> MCP read-only agent gateway
 dashboard comments -> local comments -> Paperclip workflow
 ```
 
@@ -103,7 +103,8 @@ dashboard comments -> local comments -> Paperclip workflow
 - New destructive write paths require an ADR, field allowlist, audit behavior,
   and approval flow. ADR 0002 is the current example.
 - MCP remains read-only. Do not add sync, writeback, Paperclip, Telegram,
-  arbitrary SQLite, raw Bitrix, or secret access to the agent gateway.
+  private physical SQLite, raw Bitrix, or secret access to the agent gateway.
+  Analytical SQL must use the explicit scoped projection defined in ADR 0008.
 - Leadgen-related code should be treated as legacy during new work. Do not add
   features to it unless the task is the explicit leadgen removal migration.
 

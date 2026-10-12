@@ -22,11 +22,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v6
         with:
           node-version: 24
+
+      - name: Select test scope
+        id: test-scope
+        env:
+          TEST_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/ci-test-scope.mjs
 
       - name: Enable Corepack
         run: corepack enable
@@ -40,10 +48,18 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: MCP release tests
+        if: steps.test-scope.outputs.scope == 'mcp'
+        run: |
+          node --test scripts/ci-test-scope.test.mjs scripts/deploy-production.test.mjs
+          pnpm --filter @bitrix24-reporting/api exec vitest run test/attraction-data.test.ts test/agent-mcp-server.test.ts test/agent-mcp-http.test.ts test/attraction-agent-gateway.test.ts
+
       - name: Test
+        if: steps.test-scope.outputs.scope != 'mcp'
         run: pnpm test
 
       - name: Build
+        if: steps.test-scope.outputs.scope != 'mcp'
         run: pnpm build
 
   deploy:

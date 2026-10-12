@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { BitrixClient } from "../bitrix/client.js";
 import { readEnv } from "../config/env.js";
 import { createAttractionAgentGateway } from "../agent/attraction-agent-gateway.js";
+import { createAttractionDataReader } from "../agent/attraction-data.js";
 import { createAttractionMcpServer } from "../agent/mcp-server.js";
 import { createPlaybookReader } from "../agent/playbook-reader.js";
 import { createAttractionCapabilityManifest } from "../server/module-capabilities.js";
@@ -61,6 +62,11 @@ async function main() {
     bootstrapLookbackDays: env.BITRIX24_BOOTSTRAP_LOOKBACK_DAYS
   });
   const gateway = createAttractionAgentGateway({
+    data: createAttractionDataReader({
+      databaseUrl: env.attractionDatabaseUrl,
+      categoryIds: env.bitrixDealCategoryIds,
+      portalHost: env.BITRIX24_PORTAL_HOST
+    }),
     manifest: createAttractionCapabilityManifest(),
     service,
     ontology: {

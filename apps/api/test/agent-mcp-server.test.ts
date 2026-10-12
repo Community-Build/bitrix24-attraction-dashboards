@@ -3,6 +3,10 @@ import type {
   OntologySourceDocumentResponse
 } from "@bitrix24-reporting/contracts";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import Database from "better-sqlite3";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
 
@@ -10,6 +14,8 @@ import {
   createAttractionMcpServer,
   type AttractionMcpGateway
 } from "../src/agent/mcp-server";
+import { createAttractionDataReader } from "../src/agent/attraction-data";
+import { createSqliteRepository } from "../src/server/sqlite-repository";
 
 const ontology = {
   moduleKey: "attraction",
@@ -232,6 +238,29 @@ function resourceText(result: Awaited<ReturnType<Client["readResource"]>>) {
 }
 
 describe("attraction MCP server", () => {
+  it("exposes SQL schema and executes real SQLite through the MCP SDK", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "mcp-data-"));
+    const databaseUrl = `file:${join(directory, "snapshot.db")}`;
+    createSqliteRepository({ databaseUrl, defaultWonStageIds: [] }).close();
+    const database = new Database(databaseUrl.slice(5));
+    database.exec("DELETE FROM module_manager_whitelist_settings; INSERT INTO module_manager_whitelist_settings VALUES ('attraction','78','Manager',NULL,NULL,1,1,'2026-10-08'); INSERT INTO deal_snapshots (id,category_id,stage_id,assigned_by_id,quality_value,date_create,date_modify) VALUES ('101','10','NEW','78','good','2026-09-01','2026-10-08');");
+    database.close();
+    const data = createAttractionDataReader({ databaseUrl, categoryIds: ["10"], portalHost: "portal.bitrix24.ru" });
+    const { gateway } = createGatewayFixture();
+    try {
+      await withMcpClient({ ...gateway, getDataSchema: data.getSchema, queryData: data.query }, async (client) => {
+        expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(["get_data_schema", "query_sql", "run_report"]));
+        expect(JSON.parse(resourceText(await client.readResource({ uri: "attraction://data/schema" })))).toMatchObject({ schemaVersion: "attraction.analytics.v1" });
+        const result = await client.callTool({ name: "query_sql", arguments: { sql: "SELECT id,bitrix_url FROM deal_snapshots WHERE quality_value=:quality", parameters: { quality: "good" } } });
+        expect(structuredContent(result).result).toMatchObject({ rows: [{ id: "101", bitrix_url: "https://portal.bitrix24.ru/crm/deal/details/101/" }], truncated: false });
+        const denied = await client.callTool({ name: "query_sql", arguments: { sql: "SELECT title FROM deal_snapshots" } });
+        expect(structuredContent(denied).error).toMatchObject({ code: "SQL_REJECTED" });
+        expect(JSON.parse(resourceText(await client.readResource({ uri: "attraction://capabilities" })))).toMatchObject({ analyticalSqlAccess: true, arbitrarySqliteAccess: false });
+      });
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
   it("exposes documented read-only resources, templates, and tools", async () => {
     const { gateway } = createGatewayFixture();
 

@@ -11,6 +11,7 @@ import type {
 import { z } from "zod";
 
 import type { PlaybookReader } from "./playbook-reader.js";
+import type { AttractionDataReader } from "./attraction-data-contract.js";
 
 export interface ExtendedReportFilters {
   managerIds?: string[] | undefined;
@@ -106,6 +107,7 @@ export interface CreateAttractionAgentGatewayInput {
   service: AttractionAgentReportService;
   ontology: AttractionAgentOntologyReader;
   playbook: PlaybookReader;
+  data?: AttractionDataReader;
   defaultSearchLimit?: number;
   maxSearchLimit?: number;
   maxReportBytes?: number;
@@ -434,6 +436,10 @@ export function createAttractionAgentGateway(
     getOntologyOverview() {
       return input.ontology.getOverview();
     },
+    ...(input.data ? {
+      getDataSchema: () => input.data!.getSchema(),
+      queryData: (request: Parameters<AttractionDataReader["query"]>[0]) => input.data!.query(request)
+    } : {}),
     async listOntologySources() {
       return (await input.ontology.getOverview()).sources;
     },
